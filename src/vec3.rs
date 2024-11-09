@@ -1,14 +1,13 @@
 use std::{
-    io::Write,
     iter::Product,
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Vec3 {
-    x: f64,
-    y: f64,
-    z: f64,
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
 }
 
 impl Vec3 {
@@ -51,6 +50,21 @@ impl Vec3 {
     pub fn write_as_text_to_stream(vec: &Vec3, stream: &mut dyn std::io::Write) {
         stream
             .write(format!("{} {} {}\n", vec.x as i64, vec.y as i64, vec.z as i64).as_bytes())
+            .expect("Unable to write to stream");
+    }
+
+    pub fn write_rgb8_color_as_text_to_stream(vec: &Vec3, stream: &mut dyn std::io::Write) {
+        let normalized = vec.normalize();
+        let r = normalized.x;
+        let g = normalized.y;
+        let b = normalized.z;
+
+        let r_byte: u8 = (r * 255.999f64) as u8;
+        let g_byte: u8 = (g * 255.999f64) as u8;
+        let b_byte: u8 = (b * 255.999f64) as u8;
+
+        stream
+            .write(format!("{} {} {}\n", r_byte, g_byte, b_byte).as_bytes())
             .expect("Unable to write to stream");
     }
 
