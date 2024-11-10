@@ -1,18 +1,22 @@
 use std::cmp::max;
+use std::sync::Arc;
 
+use crate::material::Material;
 use crate::{hittable::HitRecord, interval::Interval, ray::Ray, vec3::Vec3};
 
 #[derive(Debug, Clone)]
 pub struct Sphere {
     center: Vec3,
     radius: f64,
+    material: Arc<Material>,
 }
 
 impl Sphere {
-    pub fn new(center: Vec3, radius: f64) -> Self {
+    pub fn new(center: Vec3, radius: f64, material: Arc<Material>) -> Self {
         Self {
             center,
             radius: f64::max(radius, 0f64),
+            material: material,
         }
     }
 
@@ -49,6 +53,7 @@ impl Sphere {
             normal: Vec3::default(),
             t,
             front_face: false,
+            material: self.material.clone(),
         };
 
         hit_record.set_face_normal(&ray, outward_normal);

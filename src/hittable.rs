@@ -1,12 +1,13 @@
-use std::str;
+use std::{str, sync::Arc};
 
-use crate::{interval::Interval, ray::Ray, sphere::Sphere, vec3::Vec3};
+use crate::{interval::Interval, material::Material, ray::Ray, sphere::Sphere, vec3::Vec3};
 #[derive(Debug, Default)]
 pub struct HitRecord {
     pub point: Vec3,
     pub normal: Vec3,
     pub t: f64,
     pub front_face: bool,
+    pub material: Arc<Material>,
 }
 
 impl HitRecord {
@@ -31,6 +32,7 @@ impl Hittable {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct HitList {
     pub objects: Vec<Hittable>,
 }

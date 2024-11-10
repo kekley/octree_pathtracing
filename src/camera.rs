@@ -4,15 +4,19 @@ use crate::{
     hittable::HitList,
     interval::Interval,
     ray::Ray,
-    util::{random_float, INFINITY},
+    util::{random_float, write_rgb8_color_as_text_to_stream, INFINITY},
     vec3::Vec3,
 };
+use ::futures::future;
+use tokio::task::{self, futures};
 
 #[derive(Debug)]
 pub struct Camera {
     pub aspect_ratio: f64,
     pub image_width: u64,
     pub samples_per_pixel: u64,
+    pub max_depth: i64,
+
     image_height: u64,
     center: Vec3,
     pixel00_loc: Vec3,
@@ -35,6 +39,7 @@ impl Camera {
             pixel_delta_u: Vec3::ZERO,
             pixel_delta_v: Vec3::ZERO,
             pixel_sample_scale: 0f64,
+            max_depth: 0,
         }
     }
     pub fn render(&mut self, world: &HitList) -> Vec<u8> {
@@ -43,14 +48,34 @@ impl Camera {
         buf.write(format!("P3\n{}\n{}\n255\n", self.image_width, self.image_height,).as_bytes())
             .unwrap();
         for y in 0..self.image_height {
-            for x in 0..self.image_width {
-                let mut pixel_color = Vec3::splat(0f64);
-                for _ in 0..self.samples_per_pixel {
+            let row_range = 0..self.image_width;
+            let handles: Vec<_> = row_range
+                .map(|x| {
                     let ray = self.get_ray(x, y);
-                    pixel_color += self.ray_color(&ray, world);
+
+                    let max_depth = self.max_depth;
+                    let pixel_sample_scale = self.pixel_sample_scale;
+                    let samples_per_pixel = self.samples_per_pixel;
+                    let copy_world = world.clone();
+                    tokio::spawn(async move {
+                        let mut pixel_color = Vec3::splat(0f64);
+                        for _ in 0..samples_per_pixel {
+                            pixel_color += Self::ray_color(&ray, max_depth, &copy_world);
+                        }
+                        pixel_color = pixel_color * pixel_sample_scale;
+                        pixel_color
+                    })
+                })
+                .collect();
+
+            let results = task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(future::join_all(handles))
+            });
+
+            for result in results {
+                if let Ok(color) = result {
+                    write_rgb8_color_as_text_to_stream(&color, &mut buf);
                 }
-                pixel_color = pixel_color * self.pixel_sample_scale;
-                Vec3::write_rgb8_color_as_text_to_stream(&pixel_color, &mut buf);
             }
         }
         buf
@@ -83,9 +108,16 @@ impl Camera {
         self.pixel00_loc = viewport_upper_left + 0.5f64 * (self.pixel_delta_u + self.pixel_delta_v);
     }
 
-    fn ray_color(&self, ray: &Ray, world: &HitList) -> Vec3 {
-        match world.hit(&ray, Interval::new(0f64, INFINITY)) {
-            Some(hit_record) => 0.5 * (hit_record.normal + Vec3::ONE),
+    fn ray_color(ray: &Ray, depth: i64, world: &HitList) -> Vec3 {
+        if depth <= 0 {
+            return Vec3::splat(0f64);
+        }
+
+        let color = match world.hit(&ray, Interval::new(0.001f64, INFINITY)) {
+            Some(hit_record) => match hit_record.material.scatter(ray, &hit_record) {
+                Some(scatter) => scatter.color * Self::ray_color(&scatter.ray, depth - 1, world),
+                None => Vec3::ZERO,
+            },
             None => {
                 let normalized_dir = ray.direction.normalize();
 
@@ -93,7 +125,8 @@ impl Camera {
 
                 (1.0 - a) * Vec3::ONE + a * Camera::SKY_COLOR
             }
-        }
+        };
+        color
     }
 
     fn get_ray(&self, x: u64, y: u64) -> Ray {

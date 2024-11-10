@@ -3,7 +3,10 @@ use std::{
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-use crate::interval::Interval;
+use crate::{
+    interval::Interval,
+    util::{random_float, random_float_in_range},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Vec3 {
@@ -36,11 +39,11 @@ impl Vec3 {
 
     /// All `f64::NEG_INFINITY`.
     pub const NEG_INFINITY: Self = Self::splat(f64::NEG_INFINITY);
-
+    #[inline]
     pub const fn new(x: f64, y: f64, z: f64) -> Self {
         Self { x, y, z }
     }
-
+    #[inline]
     pub const fn splat(val: f64) -> Self {
         Self {
             x: val,
@@ -55,34 +58,19 @@ impl Vec3 {
             .expect("Unable to write to stream");
     }
 
-    pub fn write_rgb8_color_as_text_to_stream(vec: &Vec3, stream: &mut dyn std::io::Write) {
-        let normalized = vec.normalize();
-        let r = normalized.x;
-        let g = normalized.y;
-        let b = normalized.z;
-
-        let intensity = Interval::new(0f64, 0.999f64);
-
-        let r_byte: u8 = (intensity.clamp(r) * 256f64) as u8;
-        let g_byte: u8 = (intensity.clamp(g) * 256f64) as u8;
-        let b_byte: u8 = (intensity.clamp(b) * 256f64) as u8;
-
-        stream
-            .write(format!("{} {} {}\n", r_byte, g_byte, b_byte).as_bytes())
-            .expect("Unable to write to stream");
-    }
-
+    #[inline]
     pub fn length(&self) -> f64 {
         f64::sqrt(self.length_squared())
     }
-
+    #[inline]
     pub fn length_squared(&self) -> f64 {
         self.dot(*self)
     }
+    #[inline]
     pub fn dot(self, rhs: Self) -> f64 {
         (self.x * rhs.x) + (self.y * rhs.y) + (self.z * rhs.z)
     }
-
+    #[inline]
     pub fn cross(self, rhs: Self) -> Self {
         Self {
             x: self.y * rhs.z - rhs.y * self.z,
@@ -90,9 +78,53 @@ impl Vec3 {
             z: self.x * rhs.y - rhs.x * self.y,
         }
     }
-
+    #[inline]
     pub fn normalize(&self) -> Self {
         self / self.length()
+    }
+
+    #[inline]
+    pub fn near_zero(&self) -> bool {
+        let s = 1e-8;
+        f64::abs(self.x) < s && f64::abs(self.y) < s && f64::abs(self.z) < s
+    }
+
+    #[inline]
+    pub fn reflect(&self, n: Vec3) -> Self {
+        self - 2f64 * self.dot(n) * n
+    }
+}
+
+impl Vec3 {
+    #[inline]
+    pub fn random() -> Self {
+        Vec3::new(random_float(), random_float(), random_float())
+    }
+    pub fn random_in_range(min: f64, max: f64) -> Self {
+        Vec3::new(
+            random_float_in_range(min, max),
+            random_float_in_range(min, max),
+            random_float_in_range(min, max),
+        )
+    }
+    pub fn random_unit_vec() -> Self {
+        loop {
+            let p = Vec3::random_in_range(-1f64, 1f64);
+            let len_sq = p.length_squared();
+
+            if 1e-160 < len_sq && len_sq <= 1f64 {
+                return p / f64::sqrt(len_sq);
+            }
+        }
+    }
+    #[inline]
+    pub fn random_on_hemisphere(normal: Vec3) -> Self {
+        let on_sphere = Vec3::random_unit_vec();
+        if on_sphere.dot(normal) > 0f64 {
+            return on_sphere;
+        } else {
+            return -on_sphere;
+        }
     }
 }
 impl Default for Vec3 {
