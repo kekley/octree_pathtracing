@@ -1,20 +1,22 @@
-use crate::{
-    hittable::{HitRecord, Hittable},
-    ray::Ray,
-    vec3::Vec3,
-};
+use std::cmp::max;
 
-struct Sphere {
+use crate::{hittable::HitRecord, interval::Interval, ray::Ray, vec3::Vec3};
+
+#[derive(Debug, Clone)]
+pub struct Sphere {
     center: Vec3,
     radius: f64,
 }
 
 impl Sphere {
-    pub fn new(center: Vec3, radius: f64) {}
-}
+    pub fn new(center: Vec3, radius: f64) -> Self {
+        Self {
+            center,
+            radius: f64::max(radius, 0f64),
+        }
+    }
 
-impl Hittable for Sphere {
-    fn hit(&self, ray: Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
+    pub fn hit(&self, ray: &Ray, ray_t: Interval) -> Option<HitRecord> {
         let origin_to_center = self.center - ray.origin;
         let a = ray.direction.length_squared();
         let h = ray.direction.dot(origin_to_center);
@@ -27,5 +29,30 @@ impl Hittable for Sphere {
         }
 
         let sqrt_discriminant = f64::sqrt(discriminant);
+
+        let mut root = (h - sqrt_discriminant) / a;
+
+        if !ray_t.surrounds(root) {
+            root = (h + sqrt_discriminant) / a;
+
+            if !ray_t.surrounds(root) {
+                return None;
+            }
+        }
+
+        let point = ray.at(root);
+        let t = root;
+        let outward_normal = (point - self.center) / self.radius;
+
+        let mut hit_record = HitRecord {
+            point,
+            normal: Vec3::default(),
+            t,
+            front_face: false,
+        };
+
+        hit_record.set_face_normal(&ray, outward_normal);
+
+        Some(hit_record)
     }
 }

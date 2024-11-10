@@ -1,6 +1,6 @@
 use std::{
     iter::Product,
-    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign},
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -586,5 +586,25 @@ impl Add<Vec3> for &f64 {
     #[inline]
     fn add(self, rhs: Vec3) -> Vec3 {
         (*self).add(rhs)
+    }
+}
+
+impl Neg for Vec3 {
+    type Output = Self;
+    #[inline]
+    fn neg(self) -> Self {
+        Self {
+            x: self.x.neg(),
+            y: self.y.neg(),
+            z: self.z.neg(),
+        }
+    }
+}
+
+impl Neg for &Vec3 {
+    type Output = Vec3;
+    #[inline]
+    fn neg(self) -> Vec3 {
+        (*self).neg()
     }
 }
