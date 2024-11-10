@@ -3,6 +3,8 @@ use std::{
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
+use crate::interval::Interval;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Vec3 {
     pub x: f64,
@@ -59,9 +61,11 @@ impl Vec3 {
         let g = normalized.y;
         let b = normalized.z;
 
-        let r_byte: u8 = (r * 255.999f64) as u8;
-        let g_byte: u8 = (g * 255.999f64) as u8;
-        let b_byte: u8 = (b * 255.999f64) as u8;
+        let intensity = Interval::new(0f64, 0.999f64);
+
+        let r_byte: u8 = (intensity.clamp(r) * 256f64) as u8;
+        let g_byte: u8 = (intensity.clamp(g) * 256f64) as u8;
+        let b_byte: u8 = (intensity.clamp(b) * 256f64) as u8;
 
         stream
             .write(format!("{} {} {}\n", r_byte, g_byte, b_byte).as_bytes())
