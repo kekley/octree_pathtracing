@@ -1,4 +1,5 @@
-use std::{cmp::max, io::Write};
+use rayon::prelude::*;
+use std::{borrow::Borrow, cmp::max, io::Write, sync::Arc};
 
 use crate::{
     hittable::HitList,
@@ -10,7 +11,7 @@ use crate::{
 use ::futures::future;
 use tokio::task::{self, futures};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Camera {
     pub aspect_ratio: f64,
     pub image_width: u64,
@@ -58,6 +59,46 @@ impl Camera {
                 write_rgb8_color_as_text_to_stream(&pixel_color, &mut buf);
             }
         }
+        buf
+    }
+    pub fn multi_threaded_render(mut self, world: &HitList) -> Vec<u8> {
+        self.initialize();
+        let mut buf = Vec::with_capacity((self.image_height * self.image_width * 11) as usize);
+        buf.write(format!("P3\n{}\n{}\n255\n", self.image_width, self.image_height).as_bytes())
+            .unwrap();
+
+        let camera_arc = Arc::new(self.clone());
+        let world_arc = Arc::new(world.clone());
+
+        // Collect pixel data in a nested Vec for each row
+        let row_pixel_colors: Vec<Vec<Vec3>> = (0..self.image_height)
+            .into_par_iter()
+            .map(|y| {
+                let camera_arc = Arc::clone(&camera_arc);
+                let world_arc = Arc::clone(&world_arc);
+
+                (0..self.image_width)
+                    .into_par_iter()
+                    .map(|x| {
+                        let mut pixel_color = Vec3::ZERO;
+                        for _ in 0..camera_arc.samples_per_pixel {
+                            let ray = camera_arc.get_ray(x, y);
+                            pixel_color +=
+                                Camera::ray_color(&ray, camera_arc.max_depth, &world_arc);
+                        }
+                        pixel_color * camera_arc.pixel_sample_scale
+                    })
+                    .collect()
+            })
+            .collect();
+
+        // Write pixel colors to buffer
+        for row in row_pixel_colors {
+            for color in row {
+                write_rgb8_color_as_text_to_stream(&color, &mut buf);
+            }
+        }
+
         buf
     }
 

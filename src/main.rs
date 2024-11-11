@@ -72,12 +72,12 @@ async fn main() {
         0.5,
         left_material.clone(),
     )));
-
+    /*
     world.add(Hittable::Sphere(Sphere::new(
         Vec3::new(-1.0, 0.0, -1.0),
         0.4,
         bubble_material.clone(),
-    )));
+    ))); */
 
     world.add(Hittable::Sphere(Sphere::new(
         Vec3::new(1.0, 0.0, -1.0),
@@ -85,13 +85,19 @@ async fn main() {
         right_material.clone(),
     )));
 
+    world.add(Hittable::Sphere(Sphere::new(
+        Vec3::new(-0.5, -0.3, -0.8),
+        0.2,
+        metal_material.clone(),
+    )));
+
     let mut camera = Camera::new();
     camera.aspect_ratio = ASPECT_RATIO;
-    camera.image_width = 400;
-    camera.samples_per_pixel = 100;
+    camera.image_width = 2160;
+    camera.samples_per_pixel = 500;
     camera.max_depth = 50;
 
-    let buf = camera.render(&world);
+    let buf = camera.multi_threaded_render(&world);
 
     //file to write to
     let mut file = File::create("./output.ppm").unwrap();
