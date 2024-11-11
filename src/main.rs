@@ -73,7 +73,7 @@ async fn main() {
 
     let mut camera = Camera::new();
     camera.aspect_ratio = ASPECT_RATIO;
-    camera.image_width = 1600;
+    camera.image_width = 2160;
     camera.samples_per_pixel = 100;
     camera.max_depth = 50;
 

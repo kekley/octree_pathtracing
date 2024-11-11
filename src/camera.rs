@@ -52,16 +52,20 @@ impl Camera {
             let handles: Vec<_> = row_range
                 .map(|x| {
                     let ray = self.get_ray(x, y);
-
                     let max_depth = self.max_depth;
                     let pixel_sample_scale = self.pixel_sample_scale;
                     let samples_per_pixel = self.samples_per_pixel;
                     let copy_world = world.clone();
-                    tokio::spawn(async move {
-                        let mut pixel_color = Vec3::splat(0f64);
-                        for _ in 0..samples_per_pixel {
-                            pixel_color += Self::ray_color(&ray, max_depth, &copy_world);
-                        }
+                    tokio::task::spawn(async move {
+                        let mut pixel_color = tokio::task::spawn_blocking(move || {
+                            let mut thread_color = Vec3::splat(0.0);
+                            for _ in 0..samples_per_pixel {
+                                thread_color += Self::ray_color(&ray, max_depth, &copy_world);
+                            }
+                            thread_color
+                        })
+                        .await
+                        .expect("task failed");
                         pixel_color = pixel_color * pixel_sample_scale;
                         pixel_color
                     })
