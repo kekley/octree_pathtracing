@@ -30,21 +30,29 @@ async fn main() {
     let mut world = HitList::new();
 
     let ground_material = Arc::new(Material::Lambertian {
-        albedo: Vec3::new(0.8, 0.8, 0.0),
+        albedo: Vec3::new(0.5, 0.5, 0.5),
     });
 
     let center_material = Arc::new(Material::Lambertian {
         albedo: Vec3::new(0.1, 0.2, 0.5),
     });
 
-    let left_material = Arc::new(Material::Metal {
-        albedo: Vec3::new(0.8, 0.8, 0.8),
-        fuzz: 0.0,
+    let left_material = Arc::new(Material::Dielectric {
+        refraction_index: 1.5,
+    });
+
+    let bubble_material = Arc::new(Material::Dielectric {
+        refraction_index: 1.00 / 1.50,
     });
 
     let right_material = Arc::new(Material::Metal {
         albedo: Vec3::new(0.8, 0.6, 0.2),
         fuzz: 1.0,
+    });
+
+    let metal_material = Arc::new(Material::Metal {
+        albedo: Vec3::splat(0.8),
+        fuzz: 0.0,
     });
 
     world.add(Hittable::Sphere(Sphere::new(
@@ -66,6 +74,12 @@ async fn main() {
     )));
 
     world.add(Hittable::Sphere(Sphere::new(
+        Vec3::new(-1.0, 0.0, -1.0),
+        0.4,
+        bubble_material.clone(),
+    )));
+
+    world.add(Hittable::Sphere(Sphere::new(
         Vec3::new(1.0, 0.0, -1.0),
         0.5,
         right_material.clone(),
@@ -73,7 +87,7 @@ async fn main() {
 
     let mut camera = Camera::new();
     camera.aspect_ratio = ASPECT_RATIO;
-    camera.image_width = 2160;
+    camera.image_width = 400;
     camera.samples_per_pixel = 100;
     camera.max_depth = 50;
 

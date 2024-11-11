@@ -1,9 +1,10 @@
-use crate::{hittable::HitRecord, ray::Ray, vec3::Vec3};
+use crate::{hittable::HitRecord, ray::Ray, util::random_float, vec3::Vec3};
 
 #[derive(Debug, Clone)]
 pub enum Material {
     Lambertian { albedo: Vec3 }, // vec3:color
     Metal { albedo: Vec3, fuzz: f64 },
+    Dielectric { refraction_index: f64 },
 }
 
 #[derive(Debug, Default)]
@@ -45,7 +46,34 @@ impl Material {
                     None
                 }
             }
+            Material::Dielectric { refraction_index } => {
+                let attenuation = Vec3::ONE;
+                let ri = match hit_record.front_face {
+                    true => 1.0 / refraction_index,
+                    false => refraction_index.clone(),
+                };
+
+                let unit_dir = ray_in.direction.normalize();
+
+                let cos_theta = f64::min((-unit_dir).dot(hit_record.normal), 1.0);
+                let sin_theta = f64::sqrt(1.0 - cos_theta * cos_theta);
+
+                let cannot_refract = ri * sin_theta > 1.0;
+
+                let dir =
+                    match (cannot_refract || Self::reflectance(cos_theta, ri) > random_float()) {
+                        true => unit_dir.reflect(hit_record.normal),
+                        false => unit_dir.refract(hit_record.normal, ri),
+                    };
+
+                Some(Scatter::new(Ray::new(hit_record.point, dir), attenuation))
+            }
         }
+    }
+    fn reflectance(cosine: f64, refraction_index: f64) -> f64 {
+        let mut r0 = (1f64 - refraction_index) / (1f64 + refraction_index);
+        r0 = r0 * r0;
+        r0 + (1.0 - r0) * (1.0 - cosine).powi(5)
     }
 }
 
