@@ -48,38 +48,14 @@ impl Camera {
         buf.write(format!("P3\n{}\n{}\n255\n", self.image_width, self.image_height,).as_bytes())
             .unwrap();
         for y in 0..self.image_height {
-            let row_range = 0..self.image_width;
-            let handles: Vec<_> = row_range
-                .map(|x| {
+            for x in 0..self.image_width {
+                let mut pixel_color = Vec3::ZERO;
+                for _ in 0..self.samples_per_pixel {
                     let ray = self.get_ray(x, y);
-                    let max_depth = self.max_depth;
-                    let pixel_sample_scale = self.pixel_sample_scale;
-                    let samples_per_pixel = self.samples_per_pixel;
-                    let copy_world = world.clone();
-                    tokio::task::spawn(async move {
-                        let mut pixel_color = tokio::task::spawn_blocking(move || {
-                            let mut thread_color = Vec3::splat(0.0);
-                            for _ in 0..samples_per_pixel {
-                                thread_color += Self::ray_color(&ray, max_depth, &copy_world);
-                            }
-                            thread_color
-                        })
-                        .await
-                        .expect("task failed");
-                        pixel_color = pixel_color * pixel_sample_scale;
-                        pixel_color
-                    })
-                })
-                .collect();
-
-            let results = task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(future::join_all(handles))
-            });
-
-            for result in results {
-                if let Ok(color) = result {
-                    write_rgb8_color_as_text_to_stream(&color, &mut buf);
+                    pixel_color += Self::ray_color(&ray, self.max_depth, world);
                 }
+                pixel_color = pixel_color * self.pixel_sample_scale;
+                write_rgb8_color_as_text_to_stream(&pixel_color, &mut buf);
             }
         }
         buf
