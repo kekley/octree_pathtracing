@@ -91,14 +91,14 @@ impl Camera {
             .unwrap();
 
         // Collect pixel data in a nested Vec for each row
-        let row_pixel_colors: Vec<Vec<Vec3>> = (0..self.image_height)
+        let rows: Vec<Vec<Vec3>> = (0..self.image_height)
             .into_par_iter()
             .map(|y| {
+                let mut rng = Rng::new();
                 (0..self.image_width)
-                    .into_par_iter()
+                    .into_iter()
                     .map(|x| {
                         let mut pixel_color = Vec3::ZERO;
-                        let mut rng = Rng::new();
                         for _ in 0..self.samples_per_pixel {
                             let ray = Camera::thread_safe_get_ray(
                                 self.center,
@@ -121,8 +121,7 @@ impl Camera {
             })
             .collect();
 
-        // Write pixel colors to buffer
-        for row in row_pixel_colors {
+        for row in &rows {
             for color in row {
                 write_rgb8_color_as_text_to_stream(&color, &mut buf);
             }

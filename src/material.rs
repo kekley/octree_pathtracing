@@ -30,12 +30,12 @@ impl Material {
     pub fn scatter(&self, rng: &mut Rng, ray_in: &Ray, hit_record: &HitRecord) -> Option<Scatter> {
         match self {
             Material::Lambertian { albedo } => {
-                let scatter_direction = hit_record.normal + random_unit_vec(rng);
-                let scattered_ray = match scatter_direction.near_zero() {
-                    true => Ray::new(hit_record.point, hit_record.normal),
-                    false => Ray::new(hit_record.point, scatter_direction),
-                };
-
+                let mut scatter_direction = hit_record.normal + random_unit_vec(rng);
+                if scatter_direction.near_zero() {
+                    scatter_direction = hit_record.normal;
+                }
+                let scattered_ray =
+                    Ray::create_at(hit_record.point, scatter_direction, ray_in.time);
                 let color = *albedo;
 
                 Some(Scatter::new(scattered_ray, color))
@@ -44,7 +44,8 @@ impl Material {
                 let mut reflected_direction = ray_in.direction.reflect(hit_record.normal);
                 reflected_direction =
                     reflected_direction.normalize() + (fuzz * random_unit_vec(rng));
-                let scattered_ray = Ray::new(hit_record.point, reflected_direction);
+                let scattered_ray =
+                    Ray::create_at(hit_record.point, reflected_direction, ray_in.time);
                 let color = *albedo;
 
                 if scattered_ray.direction.dot(hit_record.normal) > 0f64 {
@@ -72,11 +73,12 @@ impl Material {
                         true => unit_dir.reflect(hit_record.normal),
                         false => unit_dir.refract(hit_record.normal, ri),
                     };
-
-                Some(Scatter::new(Ray::new(hit_record.point, dir), attenuation))
+                let scattered_ray = Ray::create_at(hit_record.point, dir, ray_in.time);
+                Some(Scatter::new(scattered_ray, attenuation))
             }
         }
     }
+    #[inline]
     fn reflectance(cosine: f64, refraction_index: f64) -> f64 {
         let mut r0 = (1f64 - refraction_index) / (1f64 + refraction_index);
         r0 = r0 * r0;

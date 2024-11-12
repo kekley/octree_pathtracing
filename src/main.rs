@@ -8,8 +8,9 @@ use sphere::Sphere;
 use util::{random_float, random_float_in_range, random_vec};
 use vec3::Vec3;
 
-pub const ASPECT_RATIO: f64 = 16f64 / 9f64;
+pub const ASPECT_RATIO: f64 = 1.5;
 
+mod aabb;
 mod camera;
 mod hittable;
 mod interval;
@@ -48,6 +49,8 @@ async fn main() {
                     _mat if choose_mat < 0.8 => {
                         let albedo = random_vec(&mut rng);
                         sphere_material = Material::Lambertian { albedo: albedo };
+                        //let center2 =
+                        //    center + Vec3::new(0.0, random_float_in_range(&mut rng, 0.0, 0.5), 0.0);
                         world.add(Hittable::Sphere(Sphere::new(center, 0.2, sphere_material)));
                     }
                     _mat if choose_mat < 0.95 => {
@@ -100,14 +103,14 @@ async fn main() {
 
     let mut camera = Camera::new();
     camera.aspect_ratio = ASPECT_RATIO;
-    camera.image_width = 400;
+    camera.image_width = 1200;
     camera.samples_per_pixel = 100;
     camera.max_depth = 50;
     camera.v_fov = 20.0;
     camera.look_from = Vec3::new(13.0, 2.0, 3.0);
     camera.look_at = Vec3::new(0.0, 0.0, 0.0);
     camera.v_up = Vec3::new(0.0, 1.0, 0.0);
-    camera.defocus_angle = 0.6;
+    camera.defocus_angle = 0.1;
     camera.focus_dist = 10.0;
 
     let buf = camera.multi_threaded_render(Box::new(world));

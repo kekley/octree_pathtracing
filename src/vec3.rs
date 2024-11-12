@@ -47,6 +47,16 @@ impl Vec3 {
         }
     }
 
+    #[inline]
+    pub fn get_axis(&self, n: u8) -> f64 {
+        if n == 1 {
+            return self.y;
+        }
+        if n == 2 {
+            return self.z;
+        }
+        self.x
+    }
     pub fn write_as_text_to_stream(vec: &Vec3, stream: &mut dyn std::io::Write) {
         stream
             .write(format!("{} {} {}\n", vec.x as i64, vec.y as i64, vec.z as i64).as_bytes())

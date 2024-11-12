@@ -1,4 +1,6 @@
-use crate::{interval::Interval, material::Material, ray::Ray, sphere::Sphere, vec3::Vec3};
+use crate::{
+    aabb::AABB, interval::Interval, material::Material, ray::Ray, sphere::Sphere, vec3::Vec3,
+};
 #[derive(Debug, Default)]
 pub struct HitRecord {
     pub point: Vec3,
@@ -17,9 +19,10 @@ impl HitRecord {
         }
     }
 }
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Hittable {
     Sphere(Sphere),
+    AABB(AABB),
 }
 
 impl Hittable {
@@ -27,27 +30,33 @@ impl Hittable {
     pub fn hit(&self, ray: &Ray, ray_t: Interval) -> Option<HitRecord> {
         match self {
             Hittable::Sphere(sphere) => sphere.hit(ray, ray_t),
+            Hittable::AABB(aabb) => todo!(),
+        }
+    }
+    pub fn get_bbox(&self) -> &AABB {
+        match self {
+            Hittable::Sphere(sphere) => &sphere.bbox,
+            Hittable::AABB(aabb) => &aabb,
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct HitList {
     pub objects: Vec<Hittable>,
+    bbox: AABB,
 }
 
 impl HitList {
     pub fn new() -> Self {
-        Self { objects: vec![] }
-    }
-
-    pub fn new_with(object: Hittable) -> Self {
         Self {
-            objects: vec![object],
+            objects: vec![],
+            bbox: AABB::default(),
         }
     }
 
     pub fn add(&mut self, object: Hittable) {
+        self.bbox = AABB::from_boxes(&self.bbox, object.get_bbox());
         self.objects.push(object);
     }
 
