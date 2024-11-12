@@ -1,8 +1,15 @@
-use crate::{hittable::HitRecord, ray::Ray, util::random_float, vec3::Vec3};
+use fastrand::Rng;
+
+use crate::{
+    hittable::HitRecord,
+    ray::Ray,
+    util::{random_float, random_unit_vec},
+    vec3::Vec3,
+};
 
 #[derive(Debug, Clone)]
 pub enum Material {
-    Lambertian { albedo: Vec3 }, // vec3:color
+    Lambertian { albedo: Vec3 },
     Metal { albedo: Vec3, fuzz: f64 },
     Dielectric { refraction_index: f64 },
 }
@@ -20,10 +27,10 @@ impl Scatter {
 }
 
 impl Material {
-    pub fn scatter(&self, ray_in: &Ray, hit_record: &HitRecord) -> Option<Scatter> {
+    pub fn scatter(&self, rng: &mut Rng, ray_in: &Ray, hit_record: &HitRecord) -> Option<Scatter> {
         match self {
             Material::Lambertian { albedo } => {
-                let scatter_direction = hit_record.normal + Vec3::random_unit_vec();
+                let scatter_direction = hit_record.normal + random_unit_vec(rng);
                 let scattered_ray = match scatter_direction.near_zero() {
                     true => Ray::new(hit_record.point, hit_record.normal),
                     false => Ray::new(hit_record.point, scatter_direction),
@@ -36,7 +43,7 @@ impl Material {
             Material::Metal { albedo, fuzz } => {
                 let mut reflected_direction = ray_in.direction.reflect(hit_record.normal);
                 reflected_direction =
-                    reflected_direction.normalize() + (fuzz * Vec3::random_unit_vec());
+                    reflected_direction.normalize() + (fuzz * random_unit_vec(rng));
                 let scattered_ray = Ray::new(hit_record.point, reflected_direction);
                 let color = *albedo;
 
@@ -61,7 +68,7 @@ impl Material {
                 let cannot_refract = ri * sin_theta > 1.0;
 
                 let dir =
-                    match (cannot_refract || Self::reflectance(cos_theta, ri) > random_float()) {
+                    match cannot_refract || Self::reflectance(cos_theta, ri) > random_float(rng) {
                         true => unit_dir.reflect(hit_record.normal),
                         false => unit_dir.refract(hit_record.normal, ri),
                     };

@@ -1,5 +1,3 @@
-use std::{str, sync::Arc};
-
 use crate::{interval::Interval, material::Material, ray::Ray, sphere::Sphere, vec3::Vec3};
 #[derive(Debug, Default)]
 pub struct HitRecord {
@@ -7,7 +5,7 @@ pub struct HitRecord {
     pub normal: Vec3,
     pub t: f64,
     pub front_face: bool,
-    pub material: Arc<Material>,
+    pub material: Material,
 }
 
 impl HitRecord {
@@ -25,6 +23,7 @@ pub enum Hittable {
 }
 
 impl Hittable {
+    #[inline]
     pub fn hit(&self, ray: &Ray, ray_t: Interval) -> Option<HitRecord> {
         match self {
             Hittable::Sphere(sphere) => sphere.hit(ray, ray_t),
@@ -55,7 +54,6 @@ impl HitList {
     pub fn clear(&mut self) {
         self.objects.clear();
     }
-
     pub fn hit(&self, ray: &Ray, ray_t: Interval) -> Option<HitRecord> {
         let mut temp_record = None;
         let mut closest_hit = ray_t.max;

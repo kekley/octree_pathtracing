@@ -3,11 +3,6 @@ use std::{
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-use crate::{
-    interval::Interval,
-    util::{random_float, random_float_in_range},
-};
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Vec3 {
     pub x: f64,
@@ -104,38 +99,6 @@ impl Vec3 {
     }
 }
 
-impl Vec3 {
-    #[inline]
-    pub fn random() -> Self {
-        Vec3::new(random_float(), random_float(), random_float())
-    }
-    pub fn random_in_range(min: f64, max: f64) -> Self {
-        Vec3::new(
-            random_float_in_range(min, max),
-            random_float_in_range(min, max),
-            random_float_in_range(min, max),
-        )
-    }
-    pub fn random_unit_vec() -> Self {
-        loop {
-            let p = Vec3::random_in_range(-1f64, 1f64);
-            let len_sq = p.length_squared();
-
-            if 1e-160 < len_sq && len_sq <= 1f64 {
-                return p / f64::sqrt(len_sq);
-            }
-        }
-    }
-    #[inline]
-    pub fn random_on_hemisphere(normal: Vec3) -> Self {
-        let on_sphere = Vec3::random_unit_vec();
-        if on_sphere.dot(normal) > 0f64 {
-            return on_sphere;
-        } else {
-            return -on_sphere;
-        }
-    }
-}
 impl Default for Vec3 {
     #[inline(always)]
     fn default() -> Self {

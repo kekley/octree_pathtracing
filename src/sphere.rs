@@ -1,27 +1,32 @@
-use std::cmp::max;
-use std::sync::Arc;
-
 use crate::material::Material;
 use crate::{hittable::HitRecord, interval::Interval, ray::Ray, vec3::Vec3};
 
 #[derive(Debug, Clone)]
 pub struct Sphere {
-    center: Vec3,
+    center: Ray,
     radius: f64,
-    material: Arc<Material>,
+    material: Material,
 }
 
 impl Sphere {
-    pub fn new(center: Vec3, radius: f64, material: Arc<Material>) -> Self {
+    pub fn new(center: Vec3, radius: f64, material: Material) -> Self {
         Self {
-            center,
+            center: Ray::new(center, Vec3::ZERO),
             radius: f64::max(radius, 0f64),
+            material,
+        }
+    }
+    pub fn new_moving(center1: Vec3, center2: Vec3, radius: f64, material: Material) -> Self {
+        Self {
+            center: Ray::new(center1, center2 - center1),
+            radius: radius.max(0.0),
             material: material,
         }
     }
-
+    #[inline]
     pub fn hit(&self, ray: &Ray, ray_t: Interval) -> Option<HitRecord> {
-        let origin_to_center = self.center - ray.origin;
+        let current_center = self.center.at(ray.time);
+        let origin_to_center = current_center - ray.origin;
         let a = ray.direction.length_squared();
         let h = ray.direction.dot(origin_to_center);
         let c = origin_to_center.length_squared() - self.radius * self.radius;
@@ -32,7 +37,7 @@ impl Sphere {
             return None;
         }
 
-        let sqrt_discriminant = f64::sqrt(discriminant);
+        let sqrt_discriminant = discriminant.sqrt();
 
         let mut root = (h - sqrt_discriminant) / a;
 
@@ -46,7 +51,7 @@ impl Sphere {
 
         let point = ray.at(root);
         let t = root;
-        let outward_normal = (point - self.center) / self.radius;
+        let outward_normal = (point - current_center) / self.radius;
 
         let mut hit_record = HitRecord {
             point,

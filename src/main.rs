@@ -1,17 +1,11 @@
-use std::{
-    fs::File,
-    io::Write,
-    sync::Arc,
-    time::{self, Duration, Instant},
-};
+use std::{fs::File, io::Write, time::Instant};
 
 use camera::Camera;
+use fastrand::Rng;
 use hittable::{HitList, Hittable};
-use interval::Interval;
 use material::Material;
-use ray::Ray;
 use sphere::Sphere;
-use util::INFINITY;
+use util::{random_float, random_float_in_range, random_vec};
 use vec3::Vec3;
 
 pub const ASPECT_RATIO: f64 = 16f64 / 9f64;
@@ -26,78 +20,97 @@ mod util;
 mod vec3;
 #[tokio::main]
 async fn main() {
-    let start = time::Instant::now();
+    let start = Instant::now();
     let mut world = HitList::new();
 
-    let ground_material = Arc::new(Material::Lambertian {
+    let ground_material = Material::Lambertian {
         albedo: Vec3::new(0.5, 0.5, 0.5),
-    });
-
-    let center_material = Arc::new(Material::Lambertian {
-        albedo: Vec3::new(0.1, 0.2, 0.5),
-    });
-
-    let left_material = Arc::new(Material::Dielectric {
-        refraction_index: 1.5,
-    });
-
-    let bubble_material = Arc::new(Material::Dielectric {
-        refraction_index: 1.00 / 1.50,
-    });
-
-    let right_material = Arc::new(Material::Metal {
-        albedo: Vec3::new(0.8, 0.6, 0.2),
-        fuzz: 1.0,
-    });
-
-    let metal_material = Arc::new(Material::Metal {
-        albedo: Vec3::splat(0.8),
-        fuzz: 0.0,
-    });
+    };
 
     world.add(Hittable::Sphere(Sphere::new(
-        Vec3::new(0f64, -100.5f64, -1f64),
-        100f64,
+        Vec3::new(0.0, -1000.0, 0.0),
+        1000.0,
         ground_material.clone(),
     )));
+    let mut rng = Rng::new();
+    for a in -11..11 {
+        for b in -11..11 {
+            let choose_mat = random_float(&mut rng);
+            let center = Vec3::new(
+                a as f64 + 0.9 * random_float(&mut rng),
+                0.2,
+                b as f64 + 0.9 * random_float(&mut rng),
+            );
+            if (center - Vec3::new(4.0, 0.2, 0.0)).length() > 0.9 {
+                let sphere_material: Material;
+                match choose_mat {
+                    //diffuse
+                    _mat if choose_mat < 0.8 => {
+                        let albedo = random_vec(&mut rng);
+                        sphere_material = Material::Lambertian { albedo: albedo };
+                        world.add(Hittable::Sphere(Sphere::new(center, 0.2, sphere_material)));
+                    }
+                    _mat if choose_mat < 0.95 => {
+                        let albedo = random_vec(&mut rng);
+                        let fuzz = random_float_in_range(&mut rng, 0.0, 0.5);
+                        sphere_material = Material::Metal {
+                            albedo: albedo,
+                            fuzz: fuzz,
+                        };
+                        world.add(Hittable::Sphere(Sphere::new(center, 0.2, sphere_material)));
+                    }
+                    _ => {
+                        sphere_material = Material::Dielectric {
+                            refraction_index: 1.5,
+                        };
+                        world.add(Hittable::Sphere(Sphere::new(center, 0.2, sphere_material)));
+                    }
+                }
+            }
+        }
+    }
 
+    let material1 = Material::Dielectric {
+        refraction_index: 1.5,
+    };
     world.add(Hittable::Sphere(Sphere::new(
-        Vec3::new(0.0, 0.0, -1.2),
-        0.5,
-        center_material.clone(),
+        Vec3::new(0.0, 1.0, 0.0),
+        1.0,
+        material1,
     )));
 
+    let material2 = Material::Lambertian {
+        albedo: Vec3::new(0.4, 0.2, 0.1),
+    };
     world.add(Hittable::Sphere(Sphere::new(
-        Vec3::new(-1.0, 0.0, -1.0),
-        0.5,
-        left_material.clone(),
-    )));
-    /*
-    world.add(Hittable::Sphere(Sphere::new(
-        Vec3::new(-1.0, 0.0, -1.0),
-        0.4,
-        bubble_material.clone(),
-    ))); */
-
-    world.add(Hittable::Sphere(Sphere::new(
-        Vec3::new(1.0, 0.0, -1.0),
-        0.5,
-        right_material.clone(),
+        Vec3::new(-4.0, 1.0, 0.0),
+        1.0,
+        material2,
     )));
 
+    let material3 = Material::Metal {
+        albedo: Vec3::new(0.7, 0.6, 0.5),
+        fuzz: 0.0,
+    };
     world.add(Hittable::Sphere(Sphere::new(
-        Vec3::new(-0.5, -0.3, -0.8),
-        0.2,
-        metal_material.clone(),
+        Vec3::new(4.0, 1.0, 0.0),
+        1.0,
+        material3,
     )));
 
     let mut camera = Camera::new();
     camera.aspect_ratio = ASPECT_RATIO;
-    camera.image_width = 2160;
-    camera.samples_per_pixel = 500;
+    camera.image_width = 400;
+    camera.samples_per_pixel = 100;
     camera.max_depth = 50;
+    camera.v_fov = 20.0;
+    camera.look_from = Vec3::new(13.0, 2.0, 3.0);
+    camera.look_at = Vec3::new(0.0, 0.0, 0.0);
+    camera.v_up = Vec3::new(0.0, 1.0, 0.0);
+    camera.defocus_angle = 0.6;
+    camera.focus_dist = 10.0;
 
-    let buf = camera.multi_threaded_render(&world);
+    let buf = camera.multi_threaded_render(Box::new(world));
 
     //file to write to
     let mut file = File::create("./output.ppm").unwrap();
