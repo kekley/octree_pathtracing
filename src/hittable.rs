@@ -44,7 +44,7 @@ impl Hittable {
 #[derive(Debug)]
 pub struct HitList {
     pub objects: Vec<Hittable>,
-    bbox: AABB,
+    pub bbox: AABB,
 }
 
 impl HitList {
