@@ -56,10 +56,6 @@ pub fn random_unit_vec(rng: &mut Rng) -> Vec3 {
     }
 }
 #[inline]
-pub fn new_rand_unit_vec(rng: &mut Rng) -> Vec3 {
-    random_vec(rng).normalize()
-}
-#[inline]
 pub fn random_on_hemisphere(rng: &mut Rng, normal: Vec3) -> Vec3 {
     let on_sphere = random_unit_vec(rng);
     if on_sphere.dot(normal) > 0f64 {

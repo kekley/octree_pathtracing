@@ -11,6 +11,7 @@ use vec3::Vec3;
 pub const ASPECT_RATIO: f64 = 1.5;
 
 mod aabb;
+mod bvh;
 mod camera;
 mod hittable;
 mod interval;
@@ -19,8 +20,7 @@ mod ray;
 mod sphere;
 mod util;
 mod vec3;
-#[tokio::main]
-async fn main() {
+fn main() {
     let start = Instant::now();
     let mut world = HitList::new();
 
@@ -31,8 +31,10 @@ async fn main() {
     world.add(Hittable::Sphere(Sphere::new(
         Vec3::new(0.0, -1000.0, 0.0),
         1000.0,
-        ground_material.clone(),
+        &ground_material,
     )));
+
+    let mut materials: Vec<(Material, Vec3)> = vec![];
     let mut rng = Rng::new();
     for a in -11..11 {
         for b in -11..11 {
@@ -49,9 +51,6 @@ async fn main() {
                     _mat if choose_mat < 0.8 => {
                         let albedo = random_vec(&mut rng);
                         sphere_material = Material::Lambertian { albedo: albedo };
-                        //let center2 =
-                        //    center + Vec3::new(0.0, random_float_in_range(&mut rng, 0.0, 0.5), 0.0);
-                        world.add(Hittable::Sphere(Sphere::new(center, 0.2, sphere_material)));
                     }
                     _mat if choose_mat < 0.95 => {
                         let albedo = random_vec(&mut rng);
@@ -60,18 +59,25 @@ async fn main() {
                             albedo: albedo,
                             fuzz: fuzz,
                         };
-                        world.add(Hittable::Sphere(Sphere::new(center, 0.2, sphere_material)));
                     }
                     _ => {
                         sphere_material = Material::Dielectric {
                             refraction_index: 1.5,
                         };
-                        world.add(Hittable::Sphere(Sphere::new(center, 0.2, sphere_material)));
                     }
                 }
+                materials.push((sphere_material, center));
             }
         }
     }
+
+    materials.iter().for_each(|sphere_data| {
+        world.add(Hittable::Sphere(Sphere::new(
+            sphere_data.1,
+            0.2,
+            &sphere_data.0,
+        )));
+    });
 
     let material1 = Material::Dielectric {
         refraction_index: 1.5,
@@ -79,7 +85,7 @@ async fn main() {
     world.add(Hittable::Sphere(Sphere::new(
         Vec3::new(0.0, 1.0, 0.0),
         1.0,
-        material1,
+        &material1,
     )));
 
     let material2 = Material::Lambertian {
@@ -88,7 +94,7 @@ async fn main() {
     world.add(Hittable::Sphere(Sphere::new(
         Vec3::new(-4.0, 1.0, 0.0),
         1.0,
-        material2,
+        &material2,
     )));
 
     let material3 = Material::Metal {
@@ -98,7 +104,7 @@ async fn main() {
     world.add(Hittable::Sphere(Sphere::new(
         Vec3::new(4.0, 1.0, 0.0),
         1.0,
-        material3,
+        &material3,
     )));
 
     let mut camera = Camera::new();
