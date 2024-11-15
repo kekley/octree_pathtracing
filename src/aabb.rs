@@ -1,15 +1,53 @@
-use crate::{interval::Interval, ray::Ray, vec3::Vec3};
+use std::f32::INFINITY;
 
-#[derive(Debug, Default)]
+use fastrand::Rng;
+
+use crate::{
+    hittable::HitRecord,
+    interval::{self, Interval},
+    ray::Ray,
+    util::random_float,
+    vec3::Vec3,
+};
+
+#[derive(Debug, Clone)]
 pub struct AABB {
     pub x_interval: Interval,
     pub y_interval: Interval,
     pub z_interval: Interval,
 }
 
+impl Default for AABB {
+    fn default() -> Self {
+        AABB {
+            x_interval: Interval::EMPTY,
+            y_interval: Interval::EMPTY,
+            z_interval: Interval::EMPTY,
+        }
+    }
+}
+
 impl AABB {
+    pub const EMPTY: AABB = AABB::new(Interval::EMPTY, Interval::EMPTY, Interval::EMPTY);
+    pub const UNIVERSE: AABB =
+        AABB::new(Interval::UNIVERSE, Interval::UNIVERSE, Interval::UNIVERSE);
+    pub fn longest_axis(&self) -> u8 {
+        if self.x_interval.size() > self.y_interval.size() {
+            if self.x_interval.size() > self.z_interval.size() {
+                return 0;
+            } else {
+                return 2;
+            }
+        } else {
+            if self.y_interval.size() > self.z_interval.size() {
+                return 1;
+            } else {
+                return 2;
+            }
+        }
+    }
     #[inline]
-    pub fn new(interval_x: Interval, interval_y: Interval, interval_z: Interval) -> Self {
+    pub const fn new(interval_x: Interval, interval_y: Interval, interval_z: Interval) -> Self {
         Self {
             x_interval: interval_x,
             y_interval: interval_y,
@@ -19,7 +57,7 @@ impl AABB {
     pub fn from_boxes(a: &AABB, b: &AABB) -> Self {
         let x = Interval::from_intervals(&a.x_interval, &b.x_interval);
         let y = Interval::from_intervals(&a.y_interval, &b.y_interval);
-        let z = Interval::from_intervals(&a.y_interval, &b.y_interval);
+        let z = Interval::from_intervals(&a.z_interval, &b.z_interval);
         Self {
             x_interval: x,
             y_interval: y,
@@ -27,21 +65,9 @@ impl AABB {
         }
     }
     pub fn from_points(a: Vec3, b: Vec3) -> Self {
-        let x_interval = if a.x <= b.x {
-            Interval::new(a.x, b.x)
-        } else {
-            Interval::new(b.x, a.x)
-        };
-        let y_interval = if a.y <= b.y {
-            Interval::new(a.y, b.y)
-        } else {
-            Interval::new(b.y, a.y)
-        };
-        let z_interval = if a.z <= b.z {
-            Interval::new(a.z, b.z)
-        } else {
-            Interval::new(b.z, a.z)
-        };
+        let x_interval = Interval::new(f64::min(a.x, b.x), f64::max(a.x, b.x));
+        let y_interval = Interval::new(f64::min(a.y, b.y), f64::max(a.y, b.y));
+        let z_interval = Interval::new(f64::min(a.z, b.z), f64::max(a.z, b.z));
 
         Self {
             x_interval,
@@ -61,7 +87,7 @@ impl AABB {
         return &self.x_interval;
     }
 
-    pub fn hit(&self, ray: &Ray, mut ray_t: Interval) -> bool {
+    pub fn hit(&self, ray: &Ray, mut ray_t: Interval) -> Option<HitRecord> {
         let ray_origin: &Vec3 = &ray.origin;
         let ray_dir: &Vec3 = &ray.direction;
         for axis in 0..3 {
@@ -81,9 +107,19 @@ impl AABB {
                 ray_t.max = t0.min(ray_t.max);
             }
             if ray_t.max <= ray_t.min {
-                return false;
+                return None;
             }
         }
-        return true;
+        let mut rng = Rng::new();
+        let mut rec = HitRecord {
+            point: ray.at(ray_t.min),
+            normal: Vec3::splat(1.0),
+            t: ray_t.min,
+            front_face: true,
+            material: crate::material::Material::Lambertian {
+                albedo: Vec3::splat(random_float(&mut rng)),
+            },
+        };
+        return Some(rec);
     }
 }

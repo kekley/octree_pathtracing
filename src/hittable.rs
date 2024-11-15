@@ -1,5 +1,10 @@
 use crate::{
-    aabb::AABB, bvh::BVH, interval::Interval, material::Material, ray::Ray, sphere::Sphere,
+    aabb::AABB,
+    bvh::{BVHNode, BVHTree},
+    interval::Interval,
+    material::Material,
+    ray::Ray,
+    sphere::Sphere,
     vec3::Vec3,
 };
 #[derive(Debug, Default)]
@@ -20,38 +25,38 @@ impl HitRecord {
         }
     }
 }
-#[derive(Debug)]
-pub enum Hittable<'a> {
-    Sphere(Sphere<'a>),
+#[derive(Debug, Clone)]
+pub enum Hittable {
+    Sphere(Sphere),
     AABB(AABB),
-    BVH(BVH),
+    BVH(BVHTree),
 }
 
-impl<'a> Hittable<'a> {
+impl Hittable {
     #[inline]
     pub fn hit(&self, ray: &Ray, ray_t: Interval) -> Option<HitRecord> {
         match self {
             Hittable::Sphere(sphere) => sphere.hit(ray, ray_t),
-            Hittable::AABB(aabb) => todo!(),
-            Hittable::BVH(bvh) => todo!(),
+            Hittable::AABB(aabb) => aabb.hit(ray, ray_t),
+            Hittable::BVH(bvh) => bvh.stack_hit(ray, ray_t, 0),
         }
     }
     pub fn get_bbox(&self) -> &AABB {
         match self {
             Hittable::Sphere(sphere) => &sphere.bbox,
             Hittable::AABB(aabb) => &aabb,
-            Hittable::BVH(bvh) => todo!(),
+            Hittable::BVH(bvh) => &bvh.bbox(),
         }
     }
 }
 
 #[derive(Debug)]
-pub struct HitList<'a> {
-    pub objects: Vec<Hittable<'a>>,
+pub struct HitList {
+    pub objects: Vec<Hittable>,
     pub bbox: AABB,
 }
 
-impl<'a> HitList<'a> {
+impl HitList {
     pub fn new() -> Self {
         Self {
             objects: vec![],
@@ -59,7 +64,7 @@ impl<'a> HitList<'a> {
         }
     }
 
-    pub fn add(&mut self, object: Hittable<'a>) {
+    pub fn add(&mut self, object: Hittable) {
         self.bbox = AABB::from_boxes(&self.bbox, object.get_bbox());
         self.objects.push(object);
     }

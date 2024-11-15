@@ -1,5 +1,6 @@
 use std::{fs::File, io::Write, time::Instant};
 
+use bvh::BVHTree;
 use camera::Camera;
 use fastrand::Rng;
 use hittable::{HitList, Hittable};
@@ -31,13 +32,13 @@ fn main() {
     world.add(Hittable::Sphere(Sphere::new(
         Vec3::new(0.0, -1000.0, 0.0),
         1000.0,
-        &ground_material,
+        ground_material,
     )));
 
     let mut materials: Vec<(Material, Vec3)> = vec![];
     let mut rng = Rng::new();
-    for a in -11..11 {
-        for b in -11..11 {
+    for a in 0..1 {
+        for b in 0..1 {
             let choose_mat = random_float(&mut rng);
             let center = Vec3::new(
                 a as f64 + 0.9 * random_float(&mut rng),
@@ -75,7 +76,7 @@ fn main() {
         world.add(Hittable::Sphere(Sphere::new(
             sphere_data.1,
             0.2,
-            &sphere_data.0,
+            sphere_data.0.clone(),
         )));
     });
 
@@ -85,7 +86,7 @@ fn main() {
     world.add(Hittable::Sphere(Sphere::new(
         Vec3::new(0.0, 1.0, 0.0),
         1.0,
-        &material1,
+        material1,
     )));
 
     let material2 = Material::Lambertian {
@@ -94,7 +95,7 @@ fn main() {
     world.add(Hittable::Sphere(Sphere::new(
         Vec3::new(-4.0, 1.0, 0.0),
         1.0,
-        &material2,
+        material2,
     )));
 
     let material3 = Material::Metal {
@@ -104,22 +105,24 @@ fn main() {
     world.add(Hittable::Sphere(Sphere::new(
         Vec3::new(4.0, 1.0, 0.0),
         1.0,
-        &material3,
+        material3,
     )));
+
+    let world = BVHTree::from_hit_list(&world);
 
     let mut camera = Camera::new();
     camera.aspect_ratio = ASPECT_RATIO;
     camera.image_width = 1200;
     camera.samples_per_pixel = 100;
     camera.max_depth = 50;
-    camera.v_fov = 20.0;
+    camera.v_fov = 30.0;
     camera.look_from = Vec3::new(13.0, 2.0, 3.0);
     camera.look_at = Vec3::new(0.0, 0.0, 0.0);
     camera.v_up = Vec3::new(0.0, 1.0, 0.0);
     camera.defocus_angle = 0.1;
     camera.focus_dist = 10.0;
 
-    let buf = camera.multi_threaded_render(Box::new(world));
+    let buf = camera.multi_threaded_render(Box::new(Hittable::BVH(world)));
 
     //file to write to
     let mut file = File::create("./output.ppm").unwrap();

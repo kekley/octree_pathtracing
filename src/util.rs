@@ -18,6 +18,11 @@ pub fn random_float(rng: &mut Rng) -> f64 {
 }
 
 #[inline]
+pub fn random_int(rng: &mut Rng, min: i64, max: i64) -> i64 {
+    random_float(rng) as i64
+}
+
+#[inline]
 pub fn random_float_in_range(rng: &mut Rng, min: f64, max: f64) -> f64 {
     return min + (max - min) * random_float(rng);
 }
