@@ -37,8 +37,8 @@ fn main() {
 
     let mut materials: Vec<(Material, Vec3)> = vec![];
     let mut rng = Rng::new();
-    for a in 0..1 {
-        for b in 0..1 {
+    for a in -11..11 {
+        for b in -11..11 {
             let choose_mat = random_float(&mut rng);
             let center = Vec3::new(
                 a as f64 + 0.9 * random_float(&mut rng),

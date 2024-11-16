@@ -1,6 +1,6 @@
 use fastrand::Rng;
 use rayon::prelude::*;
-use std::{cmp::max, io::Write};
+use std::{cmp::max, io::Write, sync::atomic::AtomicU32};
 
 use crate::{
     hittable::{HitList, Hittable},
@@ -65,7 +65,7 @@ impl Camera {
             defocus_disk_v: Vec3::ZERO,
         }
     }
-    pub fn render(&mut self, world: &Hittable) -> Vec<u8> {
+    pub fn render(&mut self, world: Box<Hittable>) -> Vec<u8> {
         self.initialize();
         let mut buf = Vec::with_capacity((self.image_height * self.image_height * 11) as usize);
         buf.write(format!("P3\n{}\n{}\n255\n", self.image_width, self.image_height,).as_bytes())
@@ -76,7 +76,7 @@ impl Camera {
                 let mut pixel_color = Vec3::ZERO;
                 for _ in 0..self.samples_per_pixel {
                     let ray = self.get_ray(&mut rng, x, y);
-                    pixel_color += Self::ray_color(&mut rng, &ray, self.max_depth, world);
+                    pixel_color += Self::ray_color(&mut rng, &ray, self.max_depth, &world);
                 }
                 pixel_color = pixel_color * self.pixel_sample_scale;
                 write_rgb8_color_as_text_to_stream(&pixel_color, &mut buf);
@@ -89,13 +89,13 @@ impl Camera {
         let mut buf = Vec::with_capacity((self.image_height * self.image_width * 11) as usize);
         buf.write(format!("P3\n{}\n{}\n255\n", self.image_width, self.image_height).as_bytes())
             .unwrap();
-
+        let rows_done = AtomicU32::new(0);
         // Collect pixel data in a nested Vec for each row
         let rows: Vec<Vec<Vec3>> = (0..self.image_height)
             .into_par_iter()
             .map(|y| {
                 let mut rng = Rng::new();
-                (0..self.image_width)
+                let res = (0..self.image_width)
                     .into_iter()
                     .map(|x| {
                         let mut pixel_color = Vec3::ZERO;
@@ -117,7 +117,9 @@ impl Camera {
                         }
                         pixel_color * self.pixel_sample_scale
                     })
-                    .collect()
+                    .collect();
+                rows_done.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                res
             })
             .collect();
 

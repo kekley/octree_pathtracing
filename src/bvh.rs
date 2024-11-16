@@ -48,20 +48,14 @@ impl BVHTree {
             objects: &Vec<Hittable>,
             indices: &mut Vec<u32>,
         ) {
-            let mut rng = Rng::new();
+            let axis = nodes[node_idx].bbox.longest_axis();
 
-            let split = nodes.split_at_mut(node_idx + 1 as usize);
-            let current_node: &mut BVHNode = split.0.last_mut().unwrap();
-            let axis = current_node.bbox.longest_axis();
-
-            let uninit_nodes: &mut [BVHNode] = split.1;
-            if current_node.hittable_count <= 2 {
+            if nodes[node_idx].hittable_count <= 2 {
                 return;
             }
 
-            let mut i = current_node.first_hittable_idx as usize;
-            let mut j =
-                (current_node.first_hittable_idx + current_node.hittable_count - 1) as usize;
+            let mut i = nodes[node_idx].first_hittable_idx as usize;
+            let mut j = (i as u32 + nodes[node_idx].hittable_count - 1) as usize;
 
             while i <= j {
                 match box_compare(
@@ -79,9 +73,9 @@ impl BVHTree {
                 }
             }
 
-            let left_count = i - current_node.first_hittable_idx as usize;
+            let left_count = i - nodes[node_idx].first_hittable_idx as usize;
 
-            if left_count == 0 || left_count == current_node.hittable_count as usize {
+            if left_count == 0 || left_count == nodes[node_idx].hittable_count as usize {
                 return;
             }
 
@@ -91,32 +85,32 @@ impl BVHTree {
             let right_child_idx: usize = *nodes_used as usize;
             *nodes_used += 1;
 
-            let left_node = uninit_nodes.get_mut(0).unwrap();
-
-            left_node.first_hittable_idx = current_node.first_hittable_idx;
-            left_node.hittable_count = left_count as u32;
-            for i in left_node.first_hittable_idx
-                ..left_node.first_hittable_idx + left_node.hittable_count
+            nodes[left_child_idx].first_hittable_idx = nodes[node_idx].first_hittable_idx;
+            nodes[left_child_idx].hittable_count = left_count as u32;
+            for i in nodes[left_child_idx].first_hittable_idx
+                ..nodes[left_child_idx].first_hittable_idx + nodes[left_child_idx].hittable_count
             {
                 let obj_index = indices[i as usize];
-                left_node.bbox =
-                    AABB::from_boxes(&left_node.bbox, objects[obj_index as usize].get_bbox());
+                nodes[left_child_idx].bbox = AABB::from_boxes(
+                    &nodes[left_child_idx].bbox,
+                    objects[obj_index as usize].get_bbox(),
+                );
             }
-            let _ = left_node;
 
-            let right_node = uninit_nodes.get_mut(1).unwrap();
+            nodes[right_child_idx].first_hittable_idx = i as u32;
+            nodes[right_child_idx].hittable_count =
+                nodes[node_idx].hittable_count - left_count as u32;
 
-            right_node.first_hittable_idx = i as u32;
-            right_node.hittable_count = current_node.hittable_count - left_count as u32;
-
-            current_node.left_node_idx = left_child_idx as u32;
-            current_node.hittable_count = 0;
-            for i in right_node.first_hittable_idx
-                ..right_node.first_hittable_idx + right_node.hittable_count
+            nodes[node_idx].left_node_idx = left_child_idx as u32;
+            nodes[node_idx].hittable_count = 0;
+            for i in nodes[right_child_idx].first_hittable_idx
+                ..nodes[right_child_idx].first_hittable_idx + nodes[right_child_idx].hittable_count
             {
                 let obj_index = indices[i as usize];
-                right_node.bbox =
-                    AABB::from_boxes(&right_node.bbox, objects[obj_index as usize].get_bbox());
+                nodes[right_child_idx].bbox = AABB::from_boxes(
+                    &nodes[right_child_idx].bbox,
+                    objects[obj_index as usize].get_bbox(),
+                );
             }
             subdivide(nodes, left_child_idx, nodes_used, objects, indices);
             subdivide(nodes, right_child_idx, nodes_used, objects, indices);
@@ -132,6 +126,7 @@ impl BVHTree {
         for obj in &objects {
             bbox = AABB::from_boxes(&bbox, obj.get_bbox())
         }
+
         root_node.bbox = bbox;
 
         subdivide(
@@ -200,6 +195,60 @@ impl BVHTree {
                     } else {
                         stack[stack_idx] = child_2;
                         stack_idx += 1;
+                        node = child_1;
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn stack_hit_vec(&self, ray: &Ray, ray_t: Interval, node_idx: usize) -> Option<HitRecord> {
+        let mut node = &self.nodes[0];
+        let mut stack = Vec::with_capacity(10000);
+        let mut closest_hit = ray_t.max;
+        let mut return_val = None;
+        loop {
+            if node.is_leaf() {
+                for i in node.first_hittable_idx..node.first_hittable_idx + node.hittable_count {
+                    let obj_idx = self.indices[i as usize];
+                    match self.objects[obj_idx as usize]
+                        .hit(ray, Interval::new(ray_t.min, closest_hit))
+                    {
+                        Some(rec) => {
+                            closest_hit = rec.t;
+                            return_val = Some(rec);
+                        }
+                        None => {}
+                    }
+                }
+                if stack.is_empty() {
+                    break return_val;
+                } else {
+                    node = stack.pop().unwrap();
+                    continue;
+                }
+            }
+            let mut child_1 = &self.nodes[node.left_node_idx as usize];
+            let mut child_2 = &self.nodes[node.left_node_idx as usize + 1];
+
+            let dist_1 = child_1.bbox.hit(ray, ray_t);
+            let dist_2 = child_2.bbox.hit(ray, ray_t);
+
+            match (dist_1, dist_2) {
+                (None, None) => {
+                    if stack.is_empty() {
+                        break return_val;
+                    }
+                    node = stack.pop().unwrap();
+                }
+                (None, Some(right)) => node = child_2,
+                (Some(left), None) => node = child_1,
+                (Some(left), Some(right)) => {
+                    if left.t < right.t {
+                        stack.push(child_1);
+                        node = child_2;
+                    } else {
+                        stack.push(child_2);
                         node = child_1;
                     }
                 }
