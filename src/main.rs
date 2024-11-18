@@ -19,6 +19,7 @@ mod interval;
 mod material;
 mod ray;
 mod sphere;
+mod texture;
 mod util;
 mod vec3;
 fn main() {
@@ -108,12 +109,12 @@ fn main() {
         material3,
     )));
 
-    let world = BVHTree::from_hit_list(&world);
+    let bvh_world = BVHTree::from_hit_list(&world);
 
     let mut camera = Camera::new();
     camera.aspect_ratio = ASPECT_RATIO;
     camera.image_width = 1200;
-    camera.samples_per_pixel = 100;
+    camera.samples_per_pixel = 500;
     camera.max_depth = 50;
     camera.v_fov = 30.0;
     camera.look_from = Vec3::new(13.0, 2.0, 3.0);
@@ -122,7 +123,7 @@ fn main() {
     camera.defocus_angle = 0.1;
     camera.focus_dist = 10.0;
 
-    let buf = camera.multi_threaded_render(Box::new(Hittable::BVH(world)));
+    let buf = camera.multi_threaded_render(bvh_world);
 
     //file to write to
     let mut file = File::create("./output.ppm").unwrap();

@@ -28,6 +28,7 @@ impl Sphere {
             center_ray.at(0.0) - radius_vec,
             center_ray.at(0.0) + radius_vec,
         );
+
         let box2 = AABB::from_points(
             center_ray.at(1.0) - radius_vec,
             center_ray.at(1.0) + radius_vec,
@@ -70,16 +71,18 @@ impl Sphere {
         let t = root;
         let outward_normal = (point - current_center) / self.radius;
 
-        let mut hit_record = HitRecord {
+        let mut rec = HitRecord {
             point,
             normal: Vec3::default(),
             t,
             front_face: false,
             material: self.material.clone(),
+            u: todo!(),
+            v: todo!(),
         };
 
-        hit_record.set_face_normal(&ray, outward_normal);
+        rec.set_face_normal(&ray, outward_normal);
 
-        Some(hit_record)
+        Some(rec)
     }
 }

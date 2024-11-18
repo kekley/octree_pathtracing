@@ -1,4 +1,4 @@
-use std::f32::INFINITY;
+use std::f64::INFINITY;
 
 use fastrand::Rng;
 
@@ -31,19 +31,16 @@ impl AABB {
     pub const EMPTY: AABB = AABB::new(Interval::EMPTY, Interval::EMPTY, Interval::EMPTY);
     pub const UNIVERSE: AABB =
         AABB::new(Interval::UNIVERSE, Interval::UNIVERSE, Interval::UNIVERSE);
+    #[inline]
     pub fn longest_axis(&self) -> u8 {
-        if self.x_interval.size() > self.y_interval.size() {
-            if self.x_interval.size() > self.z_interval.size() {
-                return 0;
-            } else {
-                return 2;
-            }
+        let longest = self.x_interval.size().max(self.y_interval.size());
+        let longest = longest.max(self.z_interval.size());
+        if longest == self.x_interval.size() {
+            0
+        } else if longest == self.y_interval.size() {
+            1
         } else {
-            if self.y_interval.size() > self.z_interval.size() {
-                return 1;
-            } else {
-                return 2;
-            }
+            2
         }
     }
     #[inline]
@@ -54,6 +51,7 @@ impl AABB {
             z_interval: interval_z,
         }
     }
+    #[inline]
     pub fn from_boxes(a: &AABB, b: &AABB) -> Self {
         let x = Interval::from_intervals(&a.x_interval, &b.x_interval);
         let y = Interval::from_intervals(&a.y_interval, &b.y_interval);
@@ -64,6 +62,7 @@ impl AABB {
             z_interval: z,
         }
     }
+    #[inline]
     pub fn from_points(a: Vec3, b: Vec3) -> Self {
         let x_interval = Interval::new(f64::min(a.x, b.x), f64::max(a.x, b.x));
         let y_interval = Interval::new(f64::min(a.y, b.y), f64::max(a.y, b.y));
@@ -75,19 +74,16 @@ impl AABB {
             z_interval,
         }
     }
-
+    #[inline]
     pub fn get_interval(&self, n: u8) -> &Interval {
-        if n == 1 {
-            return &self.y_interval;
+        match n {
+            1 => &self.y_interval,
+            2 => &self.z_interval,
+            _ => &self.x_interval,
         }
-        if n == 2 {
-            return &self.z_interval;
-        }
-
-        return &self.x_interval;
     }
-
-    pub fn hit(&self, ray: &Ray, mut ray_t: Interval) -> Option<HitRecord> {
+    #[inline]
+    pub fn intersects(&self, ray: &Ray, mut ray_t: Interval) -> f64 {
         let ray_origin: &Vec3 = &ray.origin;
         let ray_dir: &Vec3 = &ray.direction;
         for axis in 0..3 {
@@ -107,19 +103,9 @@ impl AABB {
                 ray_t.max = t0.min(ray_t.max);
             }
             if ray_t.max <= ray_t.min {
-                return None;
+                return INFINITY;
             }
         }
-        let mut rng = Rng::new();
-        let mut rec = HitRecord {
-            point: ray.at(ray_t.min),
-            normal: Vec3::splat(1.0),
-            t: ray_t.min,
-            front_face: true,
-            material: crate::material::Material::Lambertian {
-                albedo: Vec3::splat(random_float(&mut rng)),
-            },
-        };
-        return Some(rec);
+        return ray_t.min;
     }
 }

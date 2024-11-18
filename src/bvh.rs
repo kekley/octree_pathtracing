@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, marker::PhantomData};
+use std::{cmp::Ordering, f64::INFINITY, marker::PhantomData, mem::swap};
 
 use fastrand::Rng;
 
@@ -6,8 +6,7 @@ use crate::{
     aabb::AABB,
     hittable::{HitList, HitRecord, Hittable},
     interval::Interval,
-    ray::{self, Ray},
-    util::random_int,
+    ray::Ray,
 };
 #[derive(Debug, Clone)]
 pub struct BVHTree {
@@ -143,26 +142,28 @@ impl BVHTree {
         }
     }
 
-    pub fn stack_hit(&self, ray: &Ray, ray_t: Interval, node_idx: usize) -> Option<HitRecord> {
+    pub fn stack_hit(&self, ray: &Ray, ray_t: Interval) -> Option<HitRecord> {
         let mut node = &self.nodes[0];
         let mut stack_idx = 0 as usize;
-        let mut stack = [node; 64];
+        let mut stack = [node; 30];
         let mut closest_hit = ray_t.max;
         let mut return_val = None;
         loop {
             if node.is_leaf() {
-                for i in node.first_hittable_idx..node.first_hittable_idx + node.hittable_count {
-                    let obj_idx = self.indices[i as usize];
-                    match self.objects[obj_idx as usize]
-                        .hit(ray, Interval::new(ray_t.min, closest_hit))
-                    {
-                        Some(rec) => {
-                            closest_hit = rec.t;
-                            return_val = Some(rec);
+                (node.first_hittable_idx..node.first_hittable_idx + node.hittable_count).for_each(
+                    |i| {
+                        let obj_idx = self.indices[i as usize];
+                        let rec = self.objects[obj_idx as usize]
+                            .hit(ray, Interval::new(ray_t.min, closest_hit));
+                        match rec {
+                            Some(rec) => {
+                                closest_hit = rec.t;
+                                return_val = Some(rec);
+                            }
+                            None => {}
                         }
-                        None => {}
-                    }
-                }
+                    },
+                );
                 if stack_idx == 0 {
                     break return_val;
                 } else {
@@ -174,107 +175,52 @@ impl BVHTree {
             let mut child_1 = &self.nodes[node.left_node_idx as usize];
             let mut child_2 = &self.nodes[node.left_node_idx as usize + 1];
 
-            let dist_1 = child_1.bbox.hit(ray, ray_t);
-            let dist_2 = child_2.bbox.hit(ray, ray_t);
+            let mut dist_1 = child_1.bbox.intersects(ray, ray_t);
+            let mut dist_2 = child_2.bbox.intersects(ray, ray_t);
 
-            match (dist_1, dist_2) {
-                (None, None) => {
-                    if stack_idx == 0 {
-                        break return_val;
-                    }
+            if dist_1 > dist_2 {
+                swap(&mut dist_1, &mut dist_2);
+                swap(&mut child_1, &mut child_2);
+            }
+            if dist_1 == INFINITY {
+                if stack_idx == 0 {
+                    break return_val;
+                } else {
                     stack_idx -= 1;
                     node = stack[stack_idx];
                 }
-                (None, Some(right)) => node = child_2,
-                (Some(left), None) => node = child_1,
-                (Some(left), Some(right)) => {
-                    if left.t < right.t {
-                        stack[stack_idx] = child_1;
-                        stack_idx += 1;
-                        node = child_2;
-                    } else {
-                        stack[stack_idx] = child_2;
-                        stack_idx += 1;
-                        node = child_1;
-                    }
+            } else {
+                node = child_1;
+                if dist_2 != INFINITY {
+                    stack[stack_idx] = child_2;
+                    stack_idx += 1;
                 }
             }
         }
     }
 
-    pub fn stack_hit_vec(&self, ray: &Ray, ray_t: Interval, node_idx: usize) -> Option<HitRecord> {
-        let mut node = &self.nodes[0];
-        let mut stack = Vec::with_capacity(10000);
-        let mut closest_hit = ray_t.max;
-        let mut return_val = None;
-        loop {
-            if node.is_leaf() {
-                for i in node.first_hittable_idx..node.first_hittable_idx + node.hittable_count {
-                    let obj_idx = self.indices[i as usize];
-                    match self.objects[obj_idx as usize]
-                        .hit(ray, Interval::new(ray_t.min, closest_hit))
-                    {
-                        Some(rec) => {
-                            closest_hit = rec.t;
-                            return_val = Some(rec);
-                        }
-                        None => {}
-                    }
-                }
-                if stack.is_empty() {
-                    break return_val;
-                } else {
-                    node = stack.pop().unwrap();
-                    continue;
-                }
-            }
-            let mut child_1 = &self.nodes[node.left_node_idx as usize];
-            let mut child_2 = &self.nodes[node.left_node_idx as usize + 1];
-
-            let dist_1 = child_1.bbox.hit(ray, ray_t);
-            let dist_2 = child_2.bbox.hit(ray, ray_t);
-
-            match (dist_1, dist_2) {
-                (None, None) => {
-                    if stack.is_empty() {
-                        break return_val;
-                    }
-                    node = stack.pop().unwrap();
-                }
-                (None, Some(right)) => node = child_2,
-                (Some(left), None) => node = child_1,
-                (Some(left), Some(right)) => {
-                    if left.t < right.t {
-                        stack.push(child_1);
-                        node = child_2;
-                    } else {
-                        stack.push(child_2);
-                        node = child_1;
-                    }
-                }
-            }
-        }
-    }
-
-    pub fn hit(&self, ray: &Ray, ray_t: Interval, node_idx: usize) -> Option<HitRecord> {
-        let mut ret_val = None;
+    /*     pub fn hit(&self, ray: &Ray, ray_t: Interval, node_idx: usize) -> HitRecord {
+        todo!();
+        let mut ret_val = HitRecord::MISS;
         let node = &self.nodes[node_idx];
         let mut closest_hit = ray_t.max;
-        if let Some(hit) = node.bbox.hit(ray, ray_t) {
-        } else {
-            return None;
+        let dist = node.bbox.intersects(ray, ray_t);
+
+        if dist < 0.0 {
+            return ret_val;
         }
 
         if node.is_leaf() {
             for i in node.first_hittable_idx..node.first_hittable_idx + node.hittable_count {
                 let obj_index = self.indices[i as usize];
                 let object = &self.objects[obj_index as usize];
-                match object.hit(ray, Interval::new(ray_t.min, closest_hit)) {
-                    Some(rec) => {
+                let rec = object.hit(ray, Interval::new(ray_t.min, closest_hit));
+                match rec.t >= 0.0 {
+                    true => {
                         closest_hit = rec.t;
-                        ret_val = Some(rec);
+                        ret_val = rec;
                     }
-                    None => {}
+                    false => {}
                 }
             }
         } else {
@@ -296,7 +242,7 @@ impl BVHTree {
         }
 
         ret_val
-    }
+    } */
 }
 
 fn box_compare(a: &Hittable, b: &Hittable, axis: u8) -> Ordering {

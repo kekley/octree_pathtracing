@@ -12,6 +12,8 @@ pub struct HitRecord {
     pub point: Vec3,
     pub normal: Vec3,
     pub t: f64,
+    pub u: f64,
+    pub v: f64,
     pub front_face: bool,
     pub material: Material,
 }
@@ -28,8 +30,6 @@ impl HitRecord {
 #[derive(Debug, Clone)]
 pub enum Hittable {
     Sphere(Sphere),
-    AABB(AABB),
-    BVH(BVHTree),
 }
 
 impl Hittable {
@@ -37,20 +37,17 @@ impl Hittable {
     pub fn hit(&self, ray: &Ray, ray_t: Interval) -> Option<HitRecord> {
         match self {
             Hittable::Sphere(sphere) => sphere.hit(ray, ray_t),
-            Hittable::AABB(aabb) => aabb.hit(ray, ray_t),
-            Hittable::BVH(bvh) => bvh.stack_hit(ray, ray_t, 0),
         }
     }
+    #[inline]
     pub fn get_bbox(&self) -> &AABB {
         match self {
             Hittable::Sphere(sphere) => &sphere.bbox,
-            Hittable::AABB(aabb) => &aabb,
-            Hittable::BVH(bvh) => &bvh.bbox(),
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HitList {
     pub objects: Vec<Hittable>,
     pub bbox: AABB,
@@ -73,19 +70,20 @@ impl HitList {
         self.objects.clear();
     }
     pub fn hit(&self, ray: &Ray, ray_t: Interval) -> Option<HitRecord> {
-        let mut temp_record = None;
+        let mut ret_val = None;
         let mut closest_hit = ray_t.max;
 
         for object in &self.objects {
-            match object.hit(ray, Interval::new(ray_t.min, closest_hit)) {
+            let rec = object.hit(ray, Interval::new(ray_t.min, closest_hit));
+            match rec {
                 Some(rec) => {
                     closest_hit = rec.t;
-                    temp_record = Some(rec);
+                    ret_val = Some(rec);
                 }
                 None => {}
             }
         }
 
-        temp_record
+        ret_val
     }
 }

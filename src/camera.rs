@@ -3,6 +3,7 @@ use rayon::prelude::*;
 use std::{cmp::max, io::Write, sync::atomic::AtomicU32};
 
 use crate::{
+    bvh::BVHTree,
     hittable::{HitList, Hittable},
     interval::Interval,
     ray::Ray,
@@ -65,7 +66,7 @@ impl Camera {
             defocus_disk_v: Vec3::ZERO,
         }
     }
-    pub fn render(&mut self, world: Box<Hittable>) -> Vec<u8> {
+    pub fn render(&mut self, world: BVHTree) -> Vec<u8> {
         self.initialize();
         let mut buf = Vec::with_capacity((self.image_height * self.image_height * 11) as usize);
         buf.write(format!("P3\n{}\n{}\n255\n", self.image_width, self.image_height,).as_bytes())
@@ -84,7 +85,7 @@ impl Camera {
         }
         buf
     }
-    pub fn multi_threaded_render(mut self, world: Box<Hittable>) -> Vec<u8> {
+    pub fn multi_threaded_render(mut self, world: BVHTree) -> Vec<u8> {
         self.initialize();
         let mut buf = Vec::with_capacity((self.image_height * self.image_width * 11) as usize);
         buf.write(format!("P3\n{}\n{}\n255\n", self.image_width, self.image_height).as_bytes())
@@ -118,7 +119,11 @@ impl Camera {
                         pixel_color * self.pixel_sample_scale
                     })
                     .collect();
-                rows_done.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let prev = rows_done.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                println!(
+                    "{}% done.",
+                    ((prev + 1) as f64 / self.image_height as f64) * 100.0
+                );
                 res
             })
             .collect();
@@ -165,13 +170,15 @@ impl Camera {
         self.defocus_disk_v = self.v * defocus_radius;
     }
 
-    fn ray_color(rng: &mut Rng, ray: &Ray, depth: i64, world: &Hittable) -> Vec3 {
+    fn ray_color(rng: &mut Rng, ray: &Ray, depth: i64, world: &BVHTree) -> Vec3 {
         if depth <= 0 {
             return Vec3::splat(0f64);
         }
 
-        let color = match world.hit(&ray, Interval::ZEROISH_TO_INFINITY) {
-            Some(hit_record) => match hit_record.material.scatter(rng, ray, &hit_record) {
+        let rec = world.stack_hit(&ray, Interval::ZEROISH_TO_INFINITY);
+
+        let color = match rec {
+            Some(rec) => match rec.material.scatter(rng, ray, &rec) {
                 Some(scatter) => {
                     scatter.color * Self::ray_color(rng, &scatter.ray, depth - 1, world)
                 }
