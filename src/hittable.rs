@@ -7,18 +7,18 @@ use crate::{
     sphere::Sphere,
     vec3::Vec3,
 };
-#[derive(Debug, Default)]
-pub struct HitRecord {
+#[derive(Debug)]
+pub struct HitRecord<'a> {
     pub point: Vec3,
     pub normal: Vec3,
     pub t: f64,
     pub u: f64,
     pub v: f64,
     pub front_face: bool,
-    pub material: Material,
+    pub material: &'a Material,
 }
 
-impl HitRecord {
+impl HitRecord<'_> {
     pub fn set_face_normal(&mut self, ray: &Ray, outward_normal: Vec3) {
         self.front_face = ray.direction.dot(outward_normal) < 0f64;
         self.normal = match self.front_face {

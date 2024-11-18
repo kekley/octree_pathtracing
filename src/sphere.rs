@@ -76,9 +76,9 @@ impl Sphere {
             normal: Vec3::default(),
             t,
             front_face: false,
-            material: self.material.clone(),
-            u: todo!(),
-            v: todo!(),
+            material: &self.material,
+            u: 1.0,
+            v: 1.0,
         };
 
         rec.set_face_normal(&ray, outward_normal);
