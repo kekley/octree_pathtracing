@@ -1,5 +1,6 @@
 use crate::aabb::AABB;
 use crate::material::Material;
+use crate::util::PI;
 use crate::{hittable::HitRecord, interval::Interval, ray::Ray, vec3::Vec3};
 
 #[derive(Debug, Clone)]
@@ -75,19 +76,30 @@ impl<'a> Sphere<'a> {
         let point = ray.at(root);
         let t = root;
         let outward_normal = (point - current_center) / self.radius;
-
+        let (u, v) = Self::get_uv(outward_normal);
         let mut rec = HitRecord {
             point,
             normal: Vec3::default(),
             t,
             front_face: false,
             material: &self.material,
-            u: 1.0,
-            v: 1.0,
+            u,
+            v,
         };
 
         rec.set_face_normal(&ray, outward_normal);
 
         Some(rec)
+    }
+
+    pub fn get_uv(point: Vec3) -> (f64, f64) {
+        let theta = (-point.y).acos();
+
+        let phi = (-point.z).atan2(point.x) + PI;
+
+        let u = phi / (2.0 * PI);
+
+        let v = theta / PI;
+        (u, v)
     }
 }

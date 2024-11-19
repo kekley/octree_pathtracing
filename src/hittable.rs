@@ -30,6 +30,7 @@ impl HitRecord<'_> {
 #[derive(Debug, Clone)]
 pub enum Hittable<'a> {
     Sphere(Sphere<'a>),
+    BVH(BVHTree<'a>),
 }
 
 impl<'a> Hittable<'a> {
@@ -37,12 +38,14 @@ impl<'a> Hittable<'a> {
     pub fn hit(&self, ray: &Ray, ray_t: Interval) -> Option<HitRecord> {
         match self {
             Hittable::Sphere(sphere) => sphere.hit(ray, ray_t),
+            Hittable::BVH(bvhtree) => bvhtree.hit(ray, ray_t),
         }
     }
     #[inline]
     pub fn get_bbox(&self) -> &AABB {
         match self {
             Hittable::Sphere(sphere) => &sphere.bbox,
+            Hittable::BVH(bvhtree) => bvhtree.bbox(),
         }
     }
 }

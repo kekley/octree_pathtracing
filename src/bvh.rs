@@ -141,7 +141,7 @@ impl<'a> BVHTree<'a> {
         }
     }
 
-    pub fn stack_hit(&self, ray: &Ray, ray_t: Interval) -> Option<HitRecord> {
+    pub fn hit(&self, ray: &Ray, ray_t: Interval) -> Option<HitRecord> {
         let mut node = &self.nodes[0];
         let mut stack_idx = 0 as usize;
         let mut stack = [node; 30];

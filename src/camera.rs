@@ -66,7 +66,7 @@ impl Camera {
             defocus_disk_v: Vec3::ZERO,
         }
     }
-    pub fn render(&mut self, world: BVHTree) -> Vec<u8> {
+    pub fn render(&mut self, world: &Hittable) -> Vec<u8> {
         self.initialize();
         let mut buf = Vec::with_capacity((self.image_height * self.image_height * 11) as usize);
         buf.write(format!("P3\n{}\n{}\n255\n", self.image_width, self.image_height,).as_bytes())
@@ -85,7 +85,7 @@ impl Camera {
         }
         buf
     }
-    pub fn multi_threaded_render(mut self, world: BVHTree) -> Vec<u8> {
+    pub fn multi_threaded_render(mut self, world: &Hittable) -> Vec<u8> {
         self.initialize();
         let mut buf = Vec::with_capacity((self.image_height * self.image_width * 11) as usize);
         buf.write(format!("P3\n{}\n{}\n255\n", self.image_width, self.image_height).as_bytes())
@@ -170,12 +170,12 @@ impl Camera {
         self.defocus_disk_v = self.v * defocus_radius;
     }
 
-    fn ray_color(rng: &mut Rng, ray: &Ray, depth: i64, world: &BVHTree) -> Vec3 {
+    fn ray_color(rng: &mut Rng, ray: &Ray, depth: i64, world: &Hittable) -> Vec3 {
         if depth <= 0 {
             return Vec3::splat(0f64);
         }
 
-        let rec = world.stack_hit(&ray, Interval::ZEROISH_TO_INFINITY);
+        let rec = world.hit(&ray, Interval::ZEROISH_TO_INFINITY);
 
         let color = match rec {
             Some(rec) => match rec.material.scatter(rng, ray, &rec) {

@@ -5,6 +5,7 @@ use camera::Camera;
 use fastrand::Rng;
 use hittable::{HitList, Hittable};
 use material::Material;
+use rtw_image::RTWImage;
 use sphere::Sphere;
 use texture::Texture;
 use util::{random_float, random_float_in_range, random_vec};
@@ -19,24 +20,42 @@ mod hittable;
 mod interval;
 mod material;
 mod ray;
+mod rtw_image;
 mod sphere;
 mod texture;
 mod util;
 mod vec3;
 fn main() {
     let start = Instant::now();
+
+    checkered_spheres();
+
+    let finish = Instant::now();
+    let duration = finish - start;
+
+    println!("time elapsed: {}", duration.as_millis());
+}
+
+fn checkered_spheres() {
     let mut world = HitList::new();
 
     let texture_black = Texture::Color(Vec3::splat(0.0));
     let texture_white = Texture::Color(Vec3::splat(1.0));
     let checker_texture = Texture::CheckerBoard {
-        inv_scale: 0.32,
+        inv_scale: 1.0 / 0.32,
         a: Box::new(texture_black),
         b: Box::new(texture_white),
     };
 
     let ground_material = Material::Lambertian {
         texture: &checker_texture,
+    };
+    let earth_texture = Texture::Image(RTWImage::load(
+        "D:\\Rust\\ray_tracing\\ray_tracing\\assets\\greasy.png",
+    ));
+
+    let earth_surface = Material::Lambertian {
+        texture: &earth_texture,
     };
 
     world.add(Hittable::Sphere(Sphere::new(
@@ -110,7 +129,7 @@ fn main() {
     world.add(Hittable::Sphere(Sphere::new(
         Vec3::new(-4.0, 1.0, 0.0),
         1.0,
-        &material2,
+        &earth_surface,
     )));
 
     let gray = Vec3::new(0.7, 0.6, 0.5);
@@ -130,23 +149,51 @@ fn main() {
     let mut camera = Camera::new();
     camera.aspect_ratio = ASPECT_RATIO;
     camera.image_width = 1200;
-    camera.samples_per_pixel = 500;
+    camera.samples_per_pixel = 200;
     camera.max_depth = 50;
-    camera.v_fov = 30.0;
+    camera.v_fov = 20.0;
     camera.look_from = Vec3::new(13.0, 2.0, 3.0);
     camera.look_at = Vec3::new(0.0, 0.0, 0.0);
     camera.v_up = Vec3::new(0.0, 1.0, 0.0);
     camera.defocus_angle = 0.1;
     camera.focus_dist = 10.0;
 
-    let buf = camera.multi_threaded_render(bvh_world);
+    let buf = camera.multi_threaded_render(&Hittable::BVH(bvh_world));
 
     //file to write to
     let mut file = File::create("./output.ppm").unwrap();
 
     file.write(&buf[..]).unwrap();
-    let finish = Instant::now();
-    let duration = finish - start;
+}
 
-    println!("time elapsed: {}", duration.as_millis());
+fn earth() {
+    let earth_texture = Texture::Image(RTWImage::load(
+        "D:\\Rust\\ray_tracing\\ray_tracing\\assets\\greasy.png",
+    ));
+
+    let earth_surface = Material::Lambertian {
+        texture: &earth_texture,
+    };
+
+    let globe = Hittable::Sphere(Sphere::new(Vec3::splat(0.0), 2.0, &earth_surface));
+
+    let mut camera = Camera::new();
+
+    camera.aspect_ratio = 16.0 / 9.0;
+    camera.image_width = 1200;
+    camera.samples_per_pixel = 500;
+    camera.max_depth = 50;
+    camera.v_fov = 20.0;
+    camera.look_from = Vec3::new(0.0, 0.0, 12.0);
+    camera.look_at = Vec3::splat(0.0);
+    camera.v_up = Vec3::new(0.0, 1.0, 0.0);
+
+    camera.defocus_angle = 0.0;
+
+    let buf = camera.multi_threaded_render(&globe);
+
+    //file to write to
+    let mut file = File::create("./output.ppm").unwrap();
+
+    file.write(&buf[..]).unwrap();
 }
