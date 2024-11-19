@@ -1,13 +1,10 @@
 use std::f64::INFINITY;
 
-use fastrand::Rng;
-
 use crate::{
     hittable::HitRecord,
     interval::{self, Interval},
     ray::Ray,
-    util::random_float,
-    vec3::Vec3,
+    vec3::{Axis, Vec3},
 };
 
 #[derive(Debug, Clone)]
@@ -32,15 +29,15 @@ impl AABB {
     pub const UNIVERSE: AABB =
         AABB::new(Interval::UNIVERSE, Interval::UNIVERSE, Interval::UNIVERSE);
     #[inline]
-    pub fn longest_axis(&self) -> u8 {
+    pub fn longest_axis(&self) -> Axis {
         let longest = self.x_interval.size().max(self.y_interval.size());
         let longest = longest.max(self.z_interval.size());
         if longest == self.x_interval.size() {
-            0
+            Axis::X
         } else if longest == self.y_interval.size() {
-            1
+            Axis::Y
         } else {
-            2
+            Axis::Z
         }
     }
     #[inline]
@@ -75,23 +72,23 @@ impl AABB {
         }
     }
     #[inline]
-    pub fn get_interval(&self, n: u8) -> &Interval {
-        match n {
-            1 => &self.y_interval,
-            2 => &self.z_interval,
-            _ => &self.x_interval,
+    pub fn get_interval(&self, axis: Axis) -> &Interval {
+        match axis {
+            Axis::X => &self.x_interval,
+            Axis::Y => &self.y_interval,
+            Axis::Z => &self.z_interval,
         }
     }
     #[inline]
     pub fn intersects(&self, ray: &Ray, mut ray_t: Interval) -> f64 {
         let ray_origin: &Vec3 = &ray.origin;
         let ray_dir: &Vec3 = &ray.direction;
-        for axis in 0..3 {
-            let axis_interval = self.get_interval(axis);
-            let axis_dir_inverse = 1.0 / ray_dir.get_axis(axis);
+        for axis in Axis::iter() {
+            let axis_interval = self.get_interval(*axis);
+            let axis_dir_inverse = 1.0 / ray_dir.get_axis(*axis);
 
-            let t0 = (axis_interval.min - ray_origin.get_axis(axis)) * axis_dir_inverse;
-            let t1 = (axis_interval.max - ray_origin.get_axis(axis)) * axis_dir_inverse;
+            let t0 = (axis_interval.min - ray_origin.get_axis(*axis)) * axis_dir_inverse;
+            let t1 = (axis_interval.max - ray_origin.get_axis(*axis)) * axis_dir_inverse;
 
             if t0 < t1 {
                 ray_t.min = t0.max(ray_t.min);
@@ -107,5 +104,9 @@ impl AABB {
             }
         }
         return ray_t.min;
+    }
+
+    pub fn hit(&self, ray: &Ray, mut ray_t: Interval) -> HitRecord {
+        todo!()
     }
 }

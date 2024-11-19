@@ -9,7 +9,20 @@ pub struct Vec3 {
     pub y: f64,
     pub z: f64,
 }
+#[derive(Debug, Clone, Copy)]
+pub enum Axis {
+    X = 0,
+    Y = 1,
+    Z = 2,
+}
 
+impl Axis {
+    pub fn iter() -> std::slice::Iter<'static, Axis> {
+        static AXES: [Axis; 3] = [Axis::X, Axis::Y, Axis::Z];
+
+        AXES.iter()
+    }
+}
 impl Vec3 {
     /// All zeroes.
     pub const ZERO: Self = Self::splat(0.0);
@@ -48,14 +61,12 @@ impl Vec3 {
     }
 
     #[inline]
-    pub fn get_axis(&self, n: u8) -> f64 {
-        if n == 1 {
-            return self.y;
+    pub fn get_axis(&self, axis: Axis) -> f64 {
+        match axis {
+            Axis::X => self.x,
+            Axis::Y => self.y,
+            Axis::Z => self.z,
         }
-        if n == 2 {
-            return self.z;
-        }
-        self.x
     }
     pub fn write_as_text_to_stream(vec: &Vec3, stream: &mut dyn std::io::Write) {
         stream

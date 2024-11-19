@@ -1,12 +1,11 @@
-use std::{cmp::Ordering, f64::INFINITY, marker::PhantomData, mem::swap};
-
-use fastrand::Rng;
+use std::{cmp::Ordering, f64::INFINITY, mem::swap};
 
 use crate::{
     aabb::AABB,
     hittable::{HitList, HitRecord, Hittable},
     interval::Interval,
     ray::Ray,
+    vec3::Axis,
 };
 #[derive(Debug, Clone)]
 pub struct BVHTree<'a> {
@@ -245,7 +244,7 @@ impl<'a> BVHTree<'a> {
     } */
 }
 
-fn box_compare(a: &Hittable, b: &Hittable, axis: u8) -> Ordering {
+fn box_compare(a: &Hittable, b: &Hittable, axis: Axis) -> Ordering {
     let a_axis_interval = a.get_bbox().get_interval(axis);
     let b_axis_interval = b.get_bbox().get_interval(axis);
 
@@ -254,16 +253,4 @@ fn box_compare(a: &Hittable, b: &Hittable, axis: u8) -> Ordering {
         Ordering::Equal => Ordering::Equal,
         Ordering::Greater => Ordering::Greater,
     }
-}
-
-fn box_x_compare(objects: &Vec<Hittable>, a_idx: u32, b_idx: u32) -> Ordering {
-    box_compare(&objects[a_idx as usize], &objects[b_idx as usize], 0)
-}
-
-fn box_y_compare(objects: &Vec<Hittable>, a_idx: u32, b_idx: u32) -> Ordering {
-    box_compare(&objects[a_idx as usize], &objects[b_idx as usize], 1)
-}
-
-fn box_z_compare(objects: &Vec<Hittable>, a_idx: u32, b_idx: u32) -> Ordering {
-    box_compare(&objects[a_idx as usize], &objects[b_idx as usize], 2)
 }
