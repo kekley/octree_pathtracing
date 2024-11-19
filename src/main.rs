@@ -6,6 +6,7 @@ use fastrand::Rng;
 use hittable::{HitList, Hittable};
 use material::Material;
 use sphere::Sphere;
+use texture::Texture;
 use util::{random_float, random_float_in_range, random_vec};
 use vec3::Vec3;
 
@@ -26,20 +27,28 @@ fn main() {
     let start = Instant::now();
     let mut world = HitList::new();
 
+    let texture_black = Texture::Color(Vec3::splat(0.0));
+    let texture_white = Texture::Color(Vec3::splat(1.0));
+    let checker_texture = Texture::CheckerBoard {
+        inv_scale: 0.32,
+        a: Box::new(texture_black),
+        b: Box::new(texture_white),
+    };
+
     let ground_material = Material::Lambertian {
-        albedo: Vec3::new(0.5, 0.5, 0.5),
+        texture: &checker_texture,
     };
 
     world.add(Hittable::Sphere(Sphere::new(
         Vec3::new(0.0, -1000.0, 0.0),
         1000.0,
-        ground_material,
+        &ground_material,
     )));
 
-    let mut materials: Vec<(Material, Vec3)> = vec![];
+    let mut materials = Vec::new();
     let mut rng = Rng::new();
-    for a in -11..11 {
-        for b in -11..11 {
+    (-11..11).for_each(|a| {
+        for b in (-11..11) {
             let choose_mat = random_float(&mut rng);
             let center = Vec3::new(
                 a as f64 + 0.9 * random_float(&mut rng),
@@ -52,7 +61,9 @@ fn main() {
                     //diffuse
                     _mat if choose_mat < 0.8 => {
                         let albedo = random_vec(&mut rng);
-                        sphere_material = Material::Lambertian { albedo: albedo };
+                        sphere_material = Material::Lambertian {
+                            texture: Box::leak(Box::new(Texture::Color(albedo))),
+                        };
                     }
                     _mat if choose_mat < 0.95 => {
                         let albedo = random_vec(&mut rng);
@@ -68,16 +79,16 @@ fn main() {
                         };
                     }
                 }
-                materials.push((sphere_material, center));
+                materials.push((sphere_material.clone(), center));
             }
         }
-    }
+    });
 
     materials.iter().for_each(|sphere_data| {
         world.add(Hittable::Sphere(Sphere::new(
             sphere_data.1,
             0.2,
-            sphere_data.0.clone(),
+            &sphere_data.0,
         )));
     });
 
@@ -87,26 +98,31 @@ fn main() {
     world.add(Hittable::Sphere(Sphere::new(
         Vec3::new(0.0, 1.0, 0.0),
         1.0,
-        material1,
+        &material1,
     )));
 
+    let yellow_tex = Texture::Color(Vec3::new(0.4, 0.2, 0.1));
+
     let material2 = Material::Lambertian {
-        albedo: Vec3::new(0.4, 0.2, 0.1),
+        texture: &yellow_tex,
     };
+
     world.add(Hittable::Sphere(Sphere::new(
         Vec3::new(-4.0, 1.0, 0.0),
         1.0,
-        material2,
+        &material2,
     )));
 
+    let gray = Vec3::new(0.7, 0.6, 0.5);
+
     let material3 = Material::Metal {
-        albedo: Vec3::new(0.7, 0.6, 0.5),
+        albedo: gray,
         fuzz: 0.0,
     };
     world.add(Hittable::Sphere(Sphere::new(
         Vec3::new(4.0, 1.0, 0.0),
         1.0,
-        material3,
+        &material3,
     )));
 
     let bvh_world = BVHTree::from_hit_list(&world);

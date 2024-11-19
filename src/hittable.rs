@@ -15,7 +15,7 @@ pub struct HitRecord<'a> {
     pub u: f64,
     pub v: f64,
     pub front_face: bool,
-    pub material: &'a Material,
+    pub material: &'a Material<'a>,
 }
 
 impl HitRecord<'_> {
@@ -28,11 +28,11 @@ impl HitRecord<'_> {
     }
 }
 #[derive(Debug, Clone)]
-pub enum Hittable {
-    Sphere(Sphere),
+pub enum Hittable<'a> {
+    Sphere(Sphere<'a>),
 }
 
-impl Hittable {
+impl<'a> Hittable<'a> {
     #[inline]
     pub fn hit(&self, ray: &Ray, ray_t: Interval) -> Option<HitRecord> {
         match self {
@@ -48,12 +48,12 @@ impl Hittable {
 }
 
 #[derive(Debug, Clone)]
-pub struct HitList {
-    pub objects: Vec<Hittable>,
+pub struct HitList<'a> {
+    pub objects: Vec<Hittable<'a>>,
     pub bbox: AABB,
 }
 
-impl HitList {
+impl<'a> HitList<'a> {
     pub fn new() -> Self {
         Self {
             objects: vec![],
@@ -61,7 +61,7 @@ impl HitList {
         }
     }
 
-    pub fn add(&mut self, object: Hittable) {
+    pub fn add(&mut self, object: Hittable<'a>) {
         self.bbox = AABB::from_boxes(&self.bbox, object.get_bbox());
         self.objects.push(object);
     }

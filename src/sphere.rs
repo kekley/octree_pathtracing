@@ -3,25 +3,30 @@ use crate::material::Material;
 use crate::{hittable::HitRecord, interval::Interval, ray::Ray, vec3::Vec3};
 
 #[derive(Debug, Clone)]
-pub struct Sphere {
+pub struct Sphere<'a> {
     center: Ray,
     radius: f64,
-    material: Material,
+    material: &'a Material<'a>,
     pub bbox: AABB,
 }
 
-impl Sphere {
-    pub fn new(center: Vec3, radius: f64, material: Material) -> Self {
+impl<'a> Sphere<'a> {
+    pub fn new(center: Vec3, radius: f64, material: &'a Material<'a>) -> Self {
         let radius_vec = Vec3::splat(radius);
         let bbox = AABB::from_points(center - radius_vec, center + radius_vec);
         Self {
             center: Ray::new(center, Vec3::ZERO),
             radius: f64::max(radius, 0f64),
-            material,
+            material: &material,
             bbox,
         }
     }
-    pub fn new_moving(center1: Vec3, center2: Vec3, radius: f64, material: Material) -> Self {
+    pub fn new_moving(
+        center1: Vec3,
+        center2: Vec3,
+        radius: f64,
+        material: &'a Material<'a>,
+    ) -> Self {
         let center_ray = Ray::new(center1, center2 - center1);
         let radius_vec = Vec3::splat(radius);
         let box1 = AABB::from_points(
@@ -37,7 +42,7 @@ impl Sphere {
         Self {
             center: center_ray,
             radius: radius.max(0.0),
-            material: material,
+            material: &material,
             bbox,
         }
     }

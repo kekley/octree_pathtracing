@@ -9,9 +9,9 @@ use crate::{
     ray::Ray,
 };
 #[derive(Debug, Clone)]
-pub struct BVHTree {
+pub struct BVHTree<'a> {
     nodes: Vec<BVHNode>,
-    objects: Vec<Hittable>,
+    objects: Vec<Hittable<'a>>,
     indices: Vec<u32>,
 }
 
@@ -29,15 +29,15 @@ impl BVHNode {
     }
 }
 
-impl BVHTree {
+impl<'a> BVHTree<'a> {
     pub fn bbox(&self) -> &AABB {
         &self.nodes[0].bbox
     }
-    pub fn from_hit_list(list: &HitList) -> Self {
+    pub fn from_hit_list(list: &HitList<'a>) -> Self {
         Self::from_hittable_vec(list.objects.clone())
     }
 
-    pub fn from_hittable_vec(objects: Vec<Hittable>) -> Self {
+    pub fn from_hittable_vec(objects: Vec<Hittable<'a>>) -> Self {
         let mut indices: Vec<u32> = (0..objects.len()).map(|i| i as u32).collect();
         let mut nodes: Vec<BVHNode> = vec![Default::default(); objects.len() * 2 - 1];
         fn subdivide(

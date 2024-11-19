@@ -3,13 +3,14 @@ use fastrand::Rng;
 use crate::{
     hittable::HitRecord,
     ray::Ray,
+    texture::Texture,
     util::{random_float, random_unit_vec},
     vec3::Vec3,
 };
 
 #[derive(Debug, Clone)]
-pub enum Material {
-    Lambertian { albedo: Vec3 },
+pub enum Material<'a> {
+    Lambertian { texture: &'a Texture },
     Metal { albedo: Vec3, fuzz: f64 },
     Dielectric { refraction_index: f64 },
 }
@@ -26,17 +27,17 @@ impl Scatter {
     }
 }
 
-impl Material {
+impl<'a> Material<'a> {
     pub fn scatter(&self, rng: &mut Rng, ray_in: &Ray, hit_record: &HitRecord) -> Option<Scatter> {
         match self {
-            Material::Lambertian { albedo } => {
+            Material::Lambertian { texture } => {
                 let mut scatter_direction = hit_record.normal + random_unit_vec(rng);
                 if scatter_direction.near_zero() {
                     scatter_direction = hit_record.normal;
                 }
                 let scattered_ray =
                     Ray::create_at(hit_record.point, scatter_direction, ray_in.time);
-                let color = *albedo;
+                let color = texture.value(hit_record.u, hit_record.v, &hit_record.point);
 
                 Some(Scatter::new(scattered_ray, color))
             }
@@ -83,13 +84,5 @@ impl Material {
         let mut r0 = (1f64 - refraction_index) / (1f64 + refraction_index);
         r0 = r0 * r0;
         r0 + (1.0 - r0) * (1.0 - cosine).powi(5)
-    }
-}
-
-impl Default for Material {
-    fn default() -> Self {
-        Self::Lambertian {
-            albedo: Vec3::splat(0f64),
-        }
     }
 }
