@@ -1,3 +1,4 @@
+use core::f64;
 use std::f64::INFINITY;
 
 use crate::{
@@ -81,14 +82,12 @@ impl AABB {
     }
     #[inline]
     pub fn intersects(&self, ray: &Ray, mut ray_t: Interval) -> f64 {
-        let ray_origin: &Vec3 = &ray.origin;
-        let ray_dir: &Vec3 = &ray.direction;
         for axis in Axis::iter() {
             let axis_interval = self.get_interval(*axis);
-            let axis_dir_inverse = 1.0 / ray_dir.get_axis(*axis);
+            let axis_dir_inverse = ray.inv_dir.get_axis(*axis);
 
-            let t0 = (axis_interval.min - ray_origin.get_axis(*axis)) * axis_dir_inverse;
-            let t1 = (axis_interval.max - ray_origin.get_axis(*axis)) * axis_dir_inverse;
+            let t0 = (axis_interval.min - ray.origin.get_axis(*axis)) * axis_dir_inverse;
+            let t1 = (axis_interval.max - ray.origin.get_axis(*axis)) * axis_dir_inverse;
 
             if t0 < t1 {
                 ray_t.min = t0.max(ray_t.min);
@@ -104,9 +103,5 @@ impl AABB {
             }
         }
         return ray_t.min;
-    }
-
-    pub fn hit(&self, ray: &Ray, mut ray_t: Interval) -> HitRecord {
-        todo!()
     }
 }

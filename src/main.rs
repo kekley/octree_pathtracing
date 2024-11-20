@@ -1,7 +1,9 @@
 use std::{fs::File, io::Write, time::Instant};
 
+use aabb::AABB;
 use bvh::BVHTree;
 use camera::Camera;
+use cuboid::Cuboid;
 use fastrand::Rng;
 use hittable::{HitList, Hittable};
 use material::Material;
@@ -16,6 +18,7 @@ pub const ASPECT_RATIO: f64 = 1.5;
 mod aabb;
 mod bvh;
 mod camera;
+mod cuboid;
 mod hittable;
 mod interval;
 mod material;
@@ -28,7 +31,7 @@ mod vec3;
 fn main() {
     let start = Instant::now();
 
-    checkered_spheres();
+    cube();
 
     let finish = Instant::now();
     let duration = finish - start;
@@ -50,9 +53,7 @@ fn checkered_spheres() {
     let ground_material = Material::Lambertian {
         texture: &checker_texture,
     };
-    let earth_texture = Texture::Image(RTWImage::load(
-        "D:\\Rust\\ray_tracing\\ray_tracing\\assets\\greasy.png",
-    ));
+    let earth_texture = Texture::Image(RTWImage::load("./assets/greasy.png"));
 
     let earth_surface = Material::Lambertian {
         texture: &earth_texture,
@@ -148,8 +149,8 @@ fn checkered_spheres() {
 
     let mut camera = Camera::new();
     camera.aspect_ratio = ASPECT_RATIO;
-    camera.image_width = 1200;
-    camera.samples_per_pixel = 200;
+    camera.image_width = 400;
+    camera.samples_per_pixel = 100;
     camera.max_depth = 50;
     camera.v_fov = 20.0;
     camera.look_from = Vec3::new(13.0, 2.0, 3.0);
@@ -167,9 +168,7 @@ fn checkered_spheres() {
 }
 
 fn earth() {
-    let earth_texture = Texture::Image(RTWImage::load(
-        "D:\\Rust\\ray_tracing\\ray_tracing\\assets\\greasy.png",
-    ));
+    let earth_texture = Texture::Image(RTWImage::load("./assets/earthmap.jpg"));
 
     let earth_surface = Material::Lambertian {
         texture: &earth_texture,
@@ -191,6 +190,37 @@ fn earth() {
     camera.defocus_angle = 0.0;
 
     let buf = camera.multi_threaded_render(&globe);
+
+    //file to write to
+    let mut file = File::create("./output.ppm").unwrap();
+
+    file.write(&buf[..]).unwrap();
+}
+
+fn cube() {
+    let greasy_texture = Texture::Image(RTWImage::load("./assets/greasy.jpg"));
+
+    let cube_surface = Material::Lambertian {
+        texture: &greasy_texture,
+    };
+
+    let bounds = AABB::from_points(Vec3::splat(-1.0), Vec3::splat(1.0));
+    let cube = Hittable::Box(Cuboid::new(bounds, &cube_surface));
+
+    let mut camera = Camera::new();
+
+    camera.aspect_ratio = 16.0 / 9.0;
+    camera.image_width = 1200;
+    camera.samples_per_pixel = 500;
+    camera.max_depth = 50;
+    camera.v_fov = 20.0;
+    camera.look_from = Vec3::new(-10.0, 10.0, 10.0);
+    camera.look_at = Vec3::splat(0.0);
+    camera.v_up = Vec3::new(0.0, 1.0, 0.0);
+
+    camera.defocus_angle = 0.0;
+
+    let buf = camera.multi_threaded_render(&cube);
 
     //file to write to
     let mut file = File::create("./output.ppm").unwrap();
