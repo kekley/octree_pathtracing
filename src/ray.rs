@@ -3,6 +3,7 @@ use crate::vec3::Vec3;
 pub struct Ray {
     pub origin: Vec3,
     pub direction: Vec3,
+    pub inv_dir: Vec3,
     pub time: f64,
 }
 
@@ -17,6 +18,7 @@ impl Ray {
         Self {
             origin: point,
             direction,
+            inv_dir: 1.0 / direction,
             time: 0.0,
         }
     }
@@ -25,6 +27,7 @@ impl Ray {
         Self {
             origin: point,
             direction: direction,
+            inv_dir: 1.0 / direction,
             time: time,
         }
     }

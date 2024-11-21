@@ -1,6 +1,7 @@
 use crate::{
     aabb::AABB,
     bvh::{BVHNode, BVHTree},
+    cuboid::Cuboid,
     interval::Interval,
     material::Material,
     ray::Ray,
@@ -31,6 +32,7 @@ impl HitRecord<'_> {
 pub enum Hittable<'a> {
     Sphere(Sphere<'a>),
     BVH(BVHTree<'a>),
+    Box(crate::cuboid::Cuboid<'a>),
 }
 
 impl<'a> Hittable<'a> {
@@ -39,6 +41,7 @@ impl<'a> Hittable<'a> {
         match self {
             Hittable::Sphere(sphere) => sphere.hit(ray, ray_t),
             Hittable::BVH(bvhtree) => bvhtree.hit(ray, ray_t),
+            Hittable::Box(r#box) => r#box.hit(ray, ray_t),
         }
     }
     #[inline]
@@ -46,6 +49,7 @@ impl<'a> Hittable<'a> {
         match self {
             Hittable::Sphere(sphere) => &sphere.bbox,
             Hittable::BVH(bvhtree) => bvhtree.bbox(),
+            Hittable::Box(r#box) => &r#box.bbox,
         }
     }
 }

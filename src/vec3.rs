@@ -9,7 +9,44 @@ pub struct Vec3 {
     pub y: f64,
     pub z: f64,
 }
+#[derive(Debug, Clone, Copy)]
+pub enum Axis {
+    X = 0,
+    Y = 1,
+    Z = 2,
+}
 
+pub enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+    Forward,
+    Back,
+}
+
+impl Direction {
+    pub fn iter() -> std::slice::Iter<'static, Direction> {
+        static DIRECTIONS: [Direction; 6] = [
+            Direction::Up,
+            Direction::Down,
+            Direction::Left,
+            Direction::Right,
+            Direction::Forward,
+            Direction::Back,
+        ];
+
+        DIRECTIONS.iter()
+    }
+}
+
+impl Axis {
+    pub fn iter() -> std::slice::Iter<'static, Axis> {
+        static AXES: [Axis; 3] = [Axis::X, Axis::Y, Axis::Z];
+
+        AXES.iter()
+    }
+}
 impl Vec3 {
     /// All zeroes.
     pub const ZERO: Self = Self::splat(0.0);
@@ -32,6 +69,13 @@ impl Vec3 {
     /// All `f64::INFINITY`.
     pub const INFINITY: Self = Self::splat(f64::INFINITY);
 
+    pub const UP: Self = Self::new(0.0, 1.0, 0.0);
+    pub const DOWN: Self = Self::new(0.0, -1.0, 0.0);
+    pub const LEFT: Self = Self::new(-1.0, 0.0, 0.0);
+    pub const RIGHT: Self = Self::new(1.0, 1.0, 0.0);
+    pub const FORWARD: Self = Self::new(0.0, 1.0, 1.0);
+    pub const BACK: Self = Self::new(0.0, 1.0, -1.0);
+
     /// All `f64::NEG_INFINITY`.
     pub const NEG_INFINITY: Self = Self::splat(f64::NEG_INFINITY);
     #[inline]
@@ -48,15 +92,37 @@ impl Vec3 {
     }
 
     #[inline]
-    pub fn get_axis(&self, n: u8) -> f64 {
-        if n == 1 {
-            return self.y;
+    pub fn get_unit_dir(dir: Direction) -> Vec3 {
+        match dir {
+            (Direction::Left) => Self::LEFT,
+            (Direction::Right) => Self::RIGHT,
+            (Direction::Down) => Self::DOWN,
+            (Direction::Up) => Self::UP,
+            (Direction::Back) => Self::BACK,
+            (Direction::Forward) => Self::FORWARD,
         }
-        if n == 2 {
-            return self.z;
-        }
-        self.x
     }
+    #[inline]
+    pub fn get_axis_normal(axis: Axis, negative: bool) -> Vec3 {
+        match (axis, negative) {
+            (Axis::X, true) => Self::LEFT,
+            (Axis::X, false) => Self::RIGHT,
+            (Axis::Y, true) => Self::DOWN,
+            (Axis::Y, false) => Self::UP,
+            (Axis::Z, true) => Self::BACK,
+            (Axis::Z, false) => Self::FORWARD,
+        }
+    }
+
+    #[inline]
+    pub fn get_axis(&self, axis: Axis) -> f64 {
+        match axis {
+            Axis::X => self.x,
+            Axis::Y => self.y,
+            Axis::Z => self.z,
+        }
+    }
+
     pub fn write_as_text_to_stream(vec: &Vec3, stream: &mut dyn std::io::Write) {
         stream
             .write(format!("{} {} {}\n", vec.x as i64, vec.y as i64, vec.z as i64).as_bytes())
