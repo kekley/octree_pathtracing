@@ -7,6 +7,7 @@ edition = "2021"
 fastrand = "2.2.0"
 rayon = "1.10.0"
 stb_image = "0.3.0"
+spider_eye = { path = "C:/Users/jesus/Repos/SpiderEye/spider_eye" }
 
 [profile.release-with-debug]
 inherits = "release"

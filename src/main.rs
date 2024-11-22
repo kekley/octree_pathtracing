@@ -1,33 +1,25 @@
+extern crate ray_tracing;
+use std::error::Error;
+use std::fs;
+use std::io::{Cursor, Read};
 use std::{fs::File, io::Write, time::Instant};
 
-use aabb::AABB;
-use bvh::BVHTree;
-use camera::Camera;
-use cuboid::Cuboid;
 use fastrand::Rng;
-use hittable::{HitList, Hittable};
-use material::Material;
-use rtw_image::RTWImage;
-use sphere::Sphere;
-use texture::Texture;
-use util::{random_float, random_float_in_range, random_vec};
-use vec3::Vec3;
+use ray_tracing::BVHTree;
+use ray_tracing::Camera;
+use ray_tracing::Cuboid;
+use ray_tracing::Material;
+use ray_tracing::RTWImage;
+use ray_tracing::Sphere;
+use ray_tracing::Texture;
+use ray_tracing::Vec3;
+use ray_tracing::AABB;
+use ray_tracing::{random_float, random_float_in_range, random_vec};
+use ray_tracing::{HitList, Hittable};
+use spider_eye::{Region, SpiderEyeError};
 
 pub const ASPECT_RATIO: f64 = 1.5;
 
-mod aabb;
-mod bvh;
-mod camera;
-mod cuboid;
-mod hittable;
-mod interval;
-mod material;
-mod ray;
-mod rtw_image;
-mod sphere;
-mod texture;
-mod util;
-mod vec3;
 fn main() {
     let start = Instant::now();
 
@@ -226,4 +218,22 @@ fn cube() {
     let mut file = File::create("./output.ppm").unwrap();
 
     file.write(&buf[..]).unwrap();
+}
+
+fn chunk() -> Result<(), Box<dyn Error>> {
+    let mut region_file = File::open("r.0.0.mca").unwrap();
+
+    let mut file_data = Vec::with_capacity(region_file.metadata().unwrap().len() as usize);
+
+    region_file.read_to_end(&mut file_data).unwrap();
+
+    let file_data = Cursor::new(file_data);
+
+    let mut region = Region::from_stream(file_data)?;
+
+    let chunk = region.get_chunk(0, 0).ok_or("Error getting chunk")?;
+
+
+    
+    Ok(())
 }
