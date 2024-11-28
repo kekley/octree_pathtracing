@@ -16,5 +16,5 @@ mod vec3;
 
 pub use {
     aabb::*, bvh::*, camera::*, cuboid::*, hittable::*, interval::*, material::*, ray::*,
-    rtw_image::*, sphere::*, texture::*, util::*, vec3::*,
+    rtw_image::*, sphere::*, texture::*, texture_manager::TextureManager, util::*, vec3::*,
 };

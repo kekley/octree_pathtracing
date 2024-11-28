@@ -5,7 +5,6 @@ use std::io::{Cursor, Read};
 use std::{fs::File, io::Write, time::Instant};
 
 use fastrand::Rng;
-use ray_tracing::BVHTree;
 use ray_tracing::Camera;
 use ray_tracing::Cuboid;
 use ray_tracing::Material;
@@ -15,6 +14,7 @@ use ray_tracing::Texture;
 use ray_tracing::Vec3;
 use ray_tracing::AABB;
 use ray_tracing::{random_float, random_float_in_range, random_vec};
+use ray_tracing::{BVHTree, TextureManager};
 use ray_tracing::{HitList, Hittable};
 use spider_eye::{ChunkData, Region, SpiderEyeError};
 
@@ -23,7 +23,7 @@ pub const ASPECT_RATIO: f64 = 1.5;
 fn main() -> Result<(), Box<dyn Error>> {
     let start = Instant::now();
 
-    checkered_spheres();
+    chunk();
 
     let finish = Instant::now();
     let duration = finish - start;
@@ -31,7 +31,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("time elapsed: {}", duration.as_millis());
     Ok(())
 }
-
+/*
 fn checkered_spheres() {
     let mut world = HitList::new();
 
@@ -219,7 +219,7 @@ fn cube() {
 
     file.write(&buf[..]).unwrap();
 }
-
+ */
 fn chunk() -> Result<(), Box<dyn Error>> {
     let mut region_file = File::open("r.0.0.mca").unwrap();
 
@@ -235,51 +235,31 @@ fn chunk() -> Result<(), Box<dyn Error>> {
 
     let data = ChunkData::from_compound(chunk.data);
 
-    let brown_tex = Texture::Color(Vec3::new(0.5, 0.35, 0.05));
-    let green_tex = Texture::Color(Vec3::new(0.05, 0.5, 0.05));
-    let black_tex = Texture::Color(Vec3::new(0.1, 0.1, 0.1));
-    let dirt = Material::Lambertian {
-        texture: &brown_tex,
-    };
-    let grass = Material::Lambertian {
-        texture: &green_tex,
-    };
-    let bedrock = Material::Lambertian {
-        texture: &black_tex,
-    };
     let mut hitlist = HitList::new();
+    let mut material_manager = TextureManager::new();
+
     data.sections
         .iter()
         .enumerate()
-        .for_each(|(section_idx, b)| {
+        .for_each(|(section_idx, section)| {
             (0..16).for_each(|y| {
                 (0..16).for_each(|z| {
                     (0..16).for_each(|x| {
-                        let block = b.block_states.get_block(x, y, z);
-                        let start_pos =
-                            Vec3::new(x as f64, (y as u32 * section_idx as u32) as f64, z as f64);
-                        let end_pos = start_pos + 1.0;
-                        match block.0.as_str() {
-                            "minecraft:bedrock" => {
-                                hitlist.add(Hittable::Box(Cuboid::new(
-                                    AABB::from_points(start_pos, end_pos),
-                                    &bedrock,
-                                )));
-                            }
-                            "minecraft:dirt" => {
-                                hitlist.add(Hittable::Box(Cuboid::new(
-                                    AABB::from_points(start_pos, end_pos),
-                                    &dirt,
-                                )));
-                            }
-                            "minecraft:grass_block" => {
-                                hitlist.add(Hittable::Box(Cuboid::new(
-                                    AABB::from_points(start_pos, end_pos),
-                                    &grass,
-                                )));
-                            }
-                            _ => {}
-                        };
+                        let block = section.block_states.get_block(x, y, z);
+                        if !(block.0 == "minecraft:air") && !(block.0 == "minecraft:grass_block") {
+                            println!("{}", block.0);
+                            let start_pos = Vec3::new(
+                                x as f64,
+                                (y as u32 * section_idx as u32) as f64,
+                                z as f64,
+                            );
+
+                            let mat = material_manager.get_or_make_material_idx(&block.0);
+                            let end_pos = start_pos + 1.0;
+
+                            let block = Cuboid::new(AABB::from_points(start_pos, end_pos), mat);
+                            hitlist.add(Hittable::Box(block));
+                        }
                     });
                 });
             });
@@ -302,7 +282,7 @@ fn chunk() -> Result<(), Box<dyn Error>> {
 
     camera.defocus_angle = 0.0;
 
-    let buf = camera.multi_threaded_render(&Hittable::BVH(tree));
+    let buf = camera.multi_threaded_render(&Hittable::BVH(tree), material_manager.clone());
 
     //file to write to
     let mut file = File::create("./output.ppm").unwrap();

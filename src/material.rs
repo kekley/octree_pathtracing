@@ -9,9 +9,9 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub enum Material<'a> {
-    Lambertian { texture: &'a Texture },
-    Metal { texture: &'a Texture, fuzz: f64 },
+pub enum Material {
+    Lambertian { texture: Texture },
+    Metal { texture: Texture, fuzz: f64 },
     Dielectric { refraction_index: f64 },
 }
 
@@ -27,7 +27,7 @@ impl Scatter {
     }
 }
 
-impl<'a> Material<'a> {
+impl Material {
     pub fn scatter(&self, rng: &mut Rng, ray_in: &Ray, hit_record: &HitRecord) -> Option<Scatter> {
         match self {
             Material::Lambertian { texture } => {

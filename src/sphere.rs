@@ -4,30 +4,25 @@ use crate::util::PI;
 use crate::{hittable::HitRecord, interval::Interval, ray::Ray, vec3::Vec3};
 
 #[derive(Debug, Clone)]
-pub struct Sphere<'a> {
+pub struct Sphere {
     center: Ray,
     radius: f64,
-    material: &'a Material<'a>,
+    material_idx: u16,
     pub bbox: AABB,
 }
 
-impl<'a> Sphere<'a> {
-    pub fn new(center: Vec3, radius: f64, material: &'a Material<'a>) -> Self {
+impl Sphere {
+    pub fn new(center: Vec3, radius: f64, material_idx: u16) -> Self {
         let radius_vec = Vec3::splat(radius);
         let bbox = AABB::from_points(center - radius_vec, center + radius_vec);
         Self {
             center: Ray::new(center, Vec3::ZERO),
             radius: f64::max(radius, 0f64),
-            material: &material,
+            material_idx,
             bbox,
         }
     }
-    pub fn new_moving(
-        center1: Vec3,
-        center2: Vec3,
-        radius: f64,
-        material: &'a Material<'a>,
-    ) -> Self {
+    pub fn new_moving(center1: Vec3, center2: Vec3, radius: f64, material_idx: u16) -> Self {
         let center_ray = Ray::new(center1, center2 - center1);
         let radius_vec = Vec3::splat(radius);
         let box1 = AABB::from_points(
@@ -43,7 +38,7 @@ impl<'a> Sphere<'a> {
         Self {
             center: center_ray,
             radius: radius.max(0.0),
-            material: &material,
+            material_idx,
             bbox,
         }
     }
@@ -82,7 +77,7 @@ impl<'a> Sphere<'a> {
             normal: Vec3::default(),
             t,
             front_face: false,
-            material: &self.material,
+            material_idx: self.material_idx,
             u,
             v,
         };

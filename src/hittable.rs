@@ -9,17 +9,17 @@ use crate::{
     vec3::Vec3,
 };
 #[derive(Debug)]
-pub struct HitRecord<'a> {
+pub struct HitRecord {
     pub point: Vec3,
     pub normal: Vec3,
     pub t: f64,
     pub u: f64,
     pub v: f64,
     pub front_face: bool,
-    pub material: &'a Material<'a>,
+    pub material_idx: u16,
 }
 
-impl HitRecord<'_> {
+impl HitRecord {
     pub fn set_face_normal(&mut self, ray: &Ray, outward_normal: Vec3) {
         self.front_face = ray.direction.dot(outward_normal) < 0f64;
         self.normal = match self.front_face {
@@ -29,13 +29,13 @@ impl HitRecord<'_> {
     }
 }
 #[derive(Debug, Clone)]
-pub enum Hittable<'a> {
-    Sphere(Sphere<'a>),
-    BVH(BVHTree<'a>),
-    Box(crate::cuboid::Cuboid<'a>),
+pub enum Hittable {
+    Sphere(Sphere),
+    BVH(BVHTree),
+    Box(crate::cuboid::Cuboid),
 }
 
-impl<'a> Hittable<'a> {
+impl Hittable {
     #[inline]
     pub fn hit(&self, ray: &Ray, ray_t: Interval) -> Option<HitRecord> {
         match self {
@@ -55,12 +55,12 @@ impl<'a> Hittable<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub struct HitList<'a> {
-    pub objects: Vec<Hittable<'a>>,
+pub struct HitList {
+    pub objects: Vec<Hittable>,
     pub bbox: AABB,
 }
 
-impl<'a> HitList<'a> {
+impl HitList {
     pub fn new() -> Self {
         Self {
             objects: vec![],
@@ -68,7 +68,7 @@ impl<'a> HitList<'a> {
         }
     }
 
-    pub fn add(&mut self, object: Hittable<'a>) {
+    pub fn add(&mut self, object: Hittable) {
         self.bbox = AABB::from_boxes(&self.bbox, object.get_bbox());
         self.objects.push(object);
     }

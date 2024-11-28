@@ -1,6 +1,6 @@
 use crate::{interval::Interval, rtw_image::RTWImage, vec3::Vec3};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Texture {
     Color(Vec3),
     Image(RTWImage),

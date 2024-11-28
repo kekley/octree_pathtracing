@@ -1,5 +1,5 @@
 use stb_image::image::load;
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RTWImage {
     bytes_per_pixel: u32,
     fdata: Vec<f32>,
@@ -21,7 +21,7 @@ impl RTWImage {
         };
         let load_result = load(file_path);
         match load_result {
-            stb_image::image::LoadResult::Error(e) => panic!("{}", e),
+            stb_image::image::LoadResult::Error(e) => panic!("Error: {}, path: {}", e, file_path),
             stb_image::image::LoadResult::ImageU8(image) => {
                 tmp.bdata = image.data;
                 tmp.image_width = image.width as u32;
@@ -80,8 +80,15 @@ impl RTWImage {
         y = y.clamp(0, self.image_height - 1);
 
         let index = (y * self.bytes_per_scanline + x * self.bytes_per_pixel) as usize;
-        self.bdata[index..index + 3]
-            .try_into()
-            .unwrap_or([255, 0, 255])
+        let mut ret_val: [u8; 3] = [255, 0, 255];
+        match self.bytes_per_pixel {
+            1 => {
+                let col = *self.bdata.get(index).unwrap();
+                ret_val = [col, col, col];
+            }
+            3 => ret_val = self.bdata[index..index + 3].try_into().unwrap(),
+            _ => {}
+        }
+        ret_val
     }
 }

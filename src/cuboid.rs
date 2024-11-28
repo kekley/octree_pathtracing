@@ -5,17 +5,36 @@ use crate::{
     material::Material,
     ray::Ray,
     vec3::{Axis, Vec3},
+    TextureManager,
 };
+
+pub enum Face {
+    Top,
+    Bottom,
+    Left,
+    Right,
+    Front,
+    Back,
+}
 #[derive(Debug, Clone)]
-pub struct Cuboid<'a> {
+pub struct Cuboid {
     pub bbox: AABB,
-    material: &'a Material<'a>,
+    materials_idx: [u16; 6],
 }
 pub const EPSILON: f64 = 0.00000000001;
 
-impl<'a> Cuboid<'a> {
-    pub fn new(bbox: AABB, material: &'a Material) -> Self {
-        Self { bbox, material }
+impl Cuboid {
+    pub fn new(bbox: AABB, material_idx: u16) -> Self {
+        Self {
+            bbox,
+            materials_idx: [material_idx; 6],
+        }
+    }
+    pub fn new_multi_texture(bbox: AABB, materials_idx: [u16; 6]) -> Self {
+        Self {
+            bbox,
+            materials_idx: materials_idx,
+        }
     }
     pub fn hit(&self, ray: &Ray, ray_t: Interval) -> Option<HitRecord> {
         let mut interval = ray_t.clone();
@@ -45,8 +64,8 @@ impl<'a> Cuboid<'a> {
         let mut u = 0.0;
         let mut v = 0.0;
         let mut normal = Vec3::UP;
-
-        Axis::iter()
+        let mut mat_index: usize = 0;
+        let mut direction = Axis::iter()
             .find(|&&axis| {
                 let distance_to_min =
                     (point.get_axis(axis) - self.bbox.get_interval(axis).min).abs();
@@ -61,6 +80,7 @@ impl<'a> Cuboid<'a> {
 
                 match (is_min_face, axis) {
                     (true, Axis::X) => {
+                        mat_index = 2;
                         normal = Vec3::LEFT;
                         u = (point.z - self.bbox.get_interval(Axis::Z).min)
                             / self.bbox.get_interval(Axis::Z).size();
@@ -68,6 +88,7 @@ impl<'a> Cuboid<'a> {
                             / self.bbox.get_interval(Axis::Y).size();
                     }
                     (true, Axis::Y) => {
+                        mat_index = 1;
                         normal = Vec3::DOWN;
                         u = (point.x - self.bbox.get_interval(Axis::X).min)
                             / self.bbox.get_interval(Axis::X).size();
@@ -75,6 +96,7 @@ impl<'a> Cuboid<'a> {
                             / self.bbox.get_interval(Axis::Z).size();
                     }
                     (true, Axis::Z) => {
+                        mat_index = 5;
                         normal = Vec3::BACK;
                         u = (point.x - self.bbox.get_interval(Axis::X).min)
                             / self.bbox.get_interval(Axis::X).size();
@@ -82,6 +104,7 @@ impl<'a> Cuboid<'a> {
                             / self.bbox.get_interval(Axis::Y).size();
                     }
                     (false, Axis::X) => {
+                        mat_index = 3;
                         normal = Vec3::RIGHT;
                         u = (point.z - self.bbox.get_interval(Axis::Z).min)
                             / self.bbox.get_interval(Axis::Z).size();
@@ -89,6 +112,7 @@ impl<'a> Cuboid<'a> {
                             / self.bbox.get_interval(Axis::Y).size();
                     }
                     (false, Axis::Y) => {
+                        mat_index = 0;
                         normal = Vec3::UP;
                         u = (point.x - self.bbox.get_interval(Axis::X).min)
                             / self.bbox.get_interval(Axis::X).size();
@@ -96,6 +120,7 @@ impl<'a> Cuboid<'a> {
                             / self.bbox.get_interval(Axis::Z).size();
                     }
                     (false, Axis::Z) => {
+                        mat_index = 4;
                         normal = Vec3::FORWARD;
                         u = (point.x - self.bbox.get_interval(Axis::X).min)
                             / self.bbox.get_interval(Axis::X).size();
@@ -113,7 +138,7 @@ impl<'a> Cuboid<'a> {
             u,
             v,
             front_face: false,
-            material: &self.material,
+            material_idx: self.materials_idx[mat_index],
         };
 
         rec.set_face_normal(ray, normal);

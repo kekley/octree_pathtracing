@@ -11,6 +11,7 @@ use crate::{
         degrees_to_rads, random_float, random_in_unit_disk, write_rgb8_color_as_text_to_stream,
     },
     vec3::Vec3,
+    TextureManager,
 };
 
 #[derive(Debug, Clone)]
@@ -66,7 +67,7 @@ impl Camera {
             defocus_disk_v: Vec3::ZERO,
         }
     }
-    pub fn render(&mut self, world: &Hittable) -> Vec<u8> {
+    pub fn render(&mut self, world: &Hittable, materials: TextureManager) -> Vec<u8> {
         self.initialize();
         let mut buf = Vec::with_capacity((self.image_height * self.image_height * 11) as usize);
         buf.write(format!("P3\n{}\n{}\n255\n", self.image_width, self.image_height,).as_bytes())
@@ -77,7 +78,8 @@ impl Camera {
                 let mut pixel_color = Vec3::ZERO;
                 for _ in 0..self.samples_per_pixel {
                     let ray = self.get_ray(&mut rng, x, y);
-                    pixel_color += Self::ray_color(&mut rng, &ray, self.max_depth, &world);
+                    pixel_color +=
+                        Self::ray_color(&mut rng, &ray, self.max_depth, &world, &materials);
                 }
                 pixel_color = pixel_color * self.pixel_sample_scale;
                 write_rgb8_color_as_text_to_stream(&pixel_color, &mut buf);
@@ -85,7 +87,7 @@ impl Camera {
         }
         buf
     }
-    pub fn multi_threaded_render(mut self, world: &Hittable) -> Vec<u8> {
+    pub fn multi_threaded_render(mut self, world: &Hittable, materials: TextureManager) -> Vec<u8> {
         self.initialize();
         let mut buf = Vec::with_capacity((self.image_height * self.image_width * 11) as usize);
         buf.write(format!("P3\n{}\n{}\n255\n", self.image_width, self.image_height).as_bytes())
@@ -113,8 +115,13 @@ impl Camera {
                                 x,
                                 y,
                             );
-                            pixel_color +=
-                                Camera::ray_color(&mut rng, &ray, self.max_depth, &world);
+                            pixel_color += Camera::ray_color(
+                                &mut rng,
+                                &ray,
+                                self.max_depth,
+                                &world,
+                                &materials,
+                            );
                         }
                         pixel_color * self.pixel_sample_scale
                     })
@@ -170,7 +177,13 @@ impl Camera {
         self.defocus_disk_v = self.v * defocus_radius;
     }
 
-    fn ray_color(rng: &mut Rng, ray: &Ray, depth: i64, world: &Hittable) -> Vec3 {
+    fn ray_color(
+        rng: &mut Rng,
+        ray: &Ray,
+        depth: i64,
+        world: &Hittable,
+        materials: &TextureManager,
+    ) -> Vec3 {
         if depth <= 0 {
             return Vec3::splat(0f64);
         }
@@ -178,9 +191,12 @@ impl Camera {
         let rec = world.hit(&ray, Interval::ZEROISH_TO_INFINITY);
 
         let color = match rec {
-            Some(rec) => match rec.material.scatter(rng, ray, &rec) {
+            Some(rec) => match materials
+                .get_material(rec.material_idx)
+                .scatter(rng, ray, &rec)
+            {
                 Some(scatter) => {
-                    scatter.color * Self::ray_color(rng, &scatter.ray, depth - 1, world)
+                    scatter.color * Self::ray_color(rng, &scatter.ray, depth - 1, world, materials)
                 }
                 None => Vec3::ZERO,
             },
