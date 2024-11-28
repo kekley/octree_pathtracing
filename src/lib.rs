@@ -5,10 +5,12 @@ mod cuboid;
 mod hittable;
 mod interval;
 mod material;
+mod minecraft_textures;
 mod ray;
 mod rtw_image;
 mod sphere;
 mod texture;
+mod texture_manager;
 mod util;
 mod vec3;
 

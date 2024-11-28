@@ -16,25 +16,26 @@ use ray_tracing::Vec3;
 use ray_tracing::AABB;
 use ray_tracing::{random_float, random_float_in_range, random_vec};
 use ray_tracing::{HitList, Hittable};
-use spider_eye::{Region, SpiderEyeError};
+use spider_eye::{ChunkData, Region, SpiderEyeError};
 
 pub const ASPECT_RATIO: f64 = 1.5;
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     let start = Instant::now();
 
-    cube();
+    checkered_spheres();
 
     let finish = Instant::now();
     let duration = finish - start;
 
     println!("time elapsed: {}", duration.as_millis());
+    Ok(())
 }
 
 fn checkered_spheres() {
     let mut world = HitList::new();
 
-    let texture_black = Texture::Color(Vec3::splat(0.0));
+    let texture_black = Texture::Color(Vec3::splat(0.6));
     let texture_white = Texture::Color(Vec3::splat(1.0));
     let checker_texture = Texture::CheckerBoard {
         inv_scale: 1.0 / 0.32,
@@ -78,10 +79,9 @@ fn checkered_spheres() {
                         };
                     }
                     _mat if choose_mat < 0.95 => {
-                        let albedo = random_vec(&mut rng);
                         let fuzz = random_float_in_range(&mut rng, 0.0, 0.5);
                         sphere_material = Material::Metal {
-                            albedo: albedo,
+                            texture: &earth_texture,
                             fuzz: fuzz,
                         };
                     }
@@ -128,8 +128,8 @@ fn checkered_spheres() {
     let gray = Vec3::new(0.7, 0.6, 0.5);
 
     let material3 = Material::Metal {
-        albedo: gray,
-        fuzz: 0.0,
+        texture: &checker_texture,
+        fuzz: 0.1,
     };
     world.add(Hittable::Sphere(Sphere::new(
         Vec3::new(4.0, 1.0, 0.0),
@@ -141,8 +141,8 @@ fn checkered_spheres() {
 
     let mut camera = Camera::new();
     camera.aspect_ratio = ASPECT_RATIO;
-    camera.image_width = 400;
-    camera.samples_per_pixel = 100;
+    camera.image_width = 1000;
+    camera.samples_per_pixel = 200;
     camera.max_depth = 50;
     camera.v_fov = 20.0;
     camera.look_from = Vec3::new(13.0, 2.0, 3.0);
@@ -231,9 +231,83 @@ fn chunk() -> Result<(), Box<dyn Error>> {
 
     let mut region = Region::from_stream(file_data)?;
 
-    let chunk = region.get_chunk(0, 0).ok_or("Error getting chunk")?;
+    let chunk = region.get_chunk(1, 0).ok_or("Error getting chunk")?;
 
+    let data = ChunkData::from_compound(chunk.data);
 
-    
+    let brown_tex = Texture::Color(Vec3::new(0.5, 0.35, 0.05));
+    let green_tex = Texture::Color(Vec3::new(0.05, 0.5, 0.05));
+    let black_tex = Texture::Color(Vec3::new(0.1, 0.1, 0.1));
+    let dirt = Material::Lambertian {
+        texture: &brown_tex,
+    };
+    let grass = Material::Lambertian {
+        texture: &green_tex,
+    };
+    let bedrock = Material::Lambertian {
+        texture: &black_tex,
+    };
+    let mut hitlist = HitList::new();
+    data.sections
+        .iter()
+        .enumerate()
+        .for_each(|(section_idx, b)| {
+            (0..16).for_each(|y| {
+                (0..16).for_each(|z| {
+                    (0..16).for_each(|x| {
+                        let block = b.block_states.get_block(x, y, z);
+                        let start_pos =
+                            Vec3::new(x as f64, (y as u32 * section_idx as u32) as f64, z as f64);
+                        let end_pos = start_pos + 1.0;
+                        match block.0.as_str() {
+                            "minecraft:bedrock" => {
+                                hitlist.add(Hittable::Box(Cuboid::new(
+                                    AABB::from_points(start_pos, end_pos),
+                                    &bedrock,
+                                )));
+                            }
+                            "minecraft:dirt" => {
+                                hitlist.add(Hittable::Box(Cuboid::new(
+                                    AABB::from_points(start_pos, end_pos),
+                                    &dirt,
+                                )));
+                            }
+                            "minecraft:grass_block" => {
+                                hitlist.add(Hittable::Box(Cuboid::new(
+                                    AABB::from_points(start_pos, end_pos),
+                                    &grass,
+                                )));
+                            }
+                            _ => {}
+                        };
+                    });
+                });
+            });
+        });
+
+    println!("{:?}", hitlist.objects.len());
+
+    let tree = BVHTree::from_hit_list(&hitlist);
+
+    let mut camera = Camera::new();
+
+    camera.aspect_ratio = 16.0 / 9.0;
+    camera.image_width = 1200;
+    camera.samples_per_pixel = 300;
+    camera.max_depth = 50;
+    camera.v_fov = 20.0;
+    camera.look_from = Vec3::new(-20.0, 5.0, -20.0);
+    camera.look_at = Vec3::new(0.0, 2.0, 0.0);
+    camera.v_up = Vec3::new(0.0, 1.0, 0.0);
+
+    camera.defocus_angle = 0.0;
+
+    let buf = camera.multi_threaded_render(&Hittable::BVH(tree));
+
+    //file to write to
+    let mut file = File::create("./output.ppm").unwrap();
+
+    file.write(&buf[..]).unwrap();
+
     Ok(())
 }

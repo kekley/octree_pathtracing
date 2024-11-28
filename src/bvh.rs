@@ -39,7 +39,7 @@ impl<'a> BVHTree<'a> {
     pub fn from_hittable_vec(objects: Vec<Hittable<'a>>) -> Self {
         let mut indices: Vec<u32> = (0..objects.len()).map(|i| i as u32).collect();
         let mut nodes: Vec<BVHNode> = vec![Default::default(); objects.len() * 2 - 1];
-        fn subdivide(
+        fn subdivide_old(
             nodes: &mut Vec<BVHNode>,
             node_idx: usize,
             nodes_used: &mut u32,
@@ -66,6 +66,83 @@ impl<'a> BVHTree<'a> {
                     }
                     _ => {
                         indices.swap(i, j);
+                        j -= 1;
+                    }
+                }
+            }
+
+            let left_count = i - nodes[node_idx].first_hittable_idx as usize;
+
+            if left_count == 0 || left_count == nodes[node_idx].hittable_count as usize {
+                return;
+            }
+
+            let left_child_idx: usize = *nodes_used as usize;
+            *nodes_used += 1;
+
+            let right_child_idx: usize = *nodes_used as usize;
+            *nodes_used += 1;
+
+            nodes[left_child_idx].first_hittable_idx = nodes[node_idx].first_hittable_idx;
+            nodes[left_child_idx].hittable_count = left_count as u32;
+            for i in nodes[left_child_idx].first_hittable_idx
+                ..nodes[left_child_idx].first_hittable_idx + nodes[left_child_idx].hittable_count
+            {
+                let obj_index = indices[i as usize];
+                nodes[left_child_idx].bbox = AABB::from_boxes(
+                    &nodes[left_child_idx].bbox,
+                    objects[obj_index as usize].get_bbox(),
+                );
+            }
+
+            nodes[right_child_idx].first_hittable_idx = i as u32;
+            nodes[right_child_idx].hittable_count =
+                nodes[node_idx].hittable_count - left_count as u32;
+
+            nodes[node_idx].left_node_idx = left_child_idx as u32;
+            nodes[node_idx].hittable_count = 0;
+            for i in nodes[right_child_idx].first_hittable_idx
+                ..nodes[right_child_idx].first_hittable_idx + nodes[right_child_idx].hittable_count
+            {
+                let obj_index = indices[i as usize];
+                nodes[right_child_idx].bbox = AABB::from_boxes(
+                    &nodes[right_child_idx].bbox,
+                    objects[obj_index as usize].get_bbox(),
+                );
+            }
+            subdivide(nodes, left_child_idx, nodes_used, objects, indices);
+            subdivide(nodes, right_child_idx, nodes_used, objects, indices);
+        }
+        fn subdivide(
+            nodes: &mut Vec<BVHNode>,
+            node_idx: usize,
+            nodes_used: &mut u32,
+            objects: &Vec<Hittable>,
+            indices: &mut Vec<u32>,
+        ) {
+            let axis = nodes[node_idx].bbox.longest_axis();
+
+            if nodes[node_idx].hittable_count <= 2 {
+                return;
+            }
+
+            let mut i = nodes[node_idx].first_hittable_idx as usize;
+            let mut j = (i + nodes[node_idx].hittable_count as usize - 1).saturating_sub(1);
+
+            while i <= j {
+                match box_compare(
+                    &objects[indices[i] as usize],
+                    &objects[indices[j] as usize],
+                    axis,
+                ) {
+                    Ordering::Less => {
+                        i += 1;
+                    }
+                    _ => {
+                        indices.swap(i, j);
+                        if j == 0 {
+                            break; // Prevent underflow
+                        }
                         j -= 1;
                     }
                 }

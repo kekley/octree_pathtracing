@@ -11,7 +11,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub enum Material<'a> {
     Lambertian { texture: &'a Texture },
-    Metal { albedo: Vec3, fuzz: f64 },
+    Metal { texture: &'a Texture, fuzz: f64 },
     Dielectric { refraction_index: f64 },
 }
 
@@ -41,13 +41,13 @@ impl<'a> Material<'a> {
 
                 Some(Scatter::new(scattered_ray, color))
             }
-            Material::Metal { albedo, fuzz } => {
+            Material::Metal { texture, fuzz } => {
                 let mut reflected_direction = ray_in.direction.reflect(hit_record.normal);
                 reflected_direction =
                     reflected_direction.normalize() + (fuzz * random_unit_vec(rng));
                 let scattered_ray =
                     Ray::create_at(hit_record.point, reflected_direction, ray_in.time);
-                let color = *albedo;
+                let color = texture.value(hit_record.u, hit_record.v, &hit_record.point);
 
                 if scattered_ray.direction.dot(hit_record.normal) > 0f64 {
                     Some(Scatter::new(scattered_ray, color))
