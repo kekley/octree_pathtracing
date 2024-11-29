@@ -65,7 +65,7 @@ impl Cuboid {
         let mut v = 0.0;
         let mut normal = Vec3::UP;
         let mut mat_index: usize = 0;
-        let mut direction = Axis::iter()
+        Axis::iter()
             .find(|&&axis| {
                 let distance_to_min =
                     (point.get_axis(axis) - self.bbox.get_interval(axis).min).abs();
@@ -128,8 +128,7 @@ impl Cuboid {
                             / self.bbox.get_interval(Axis::Y).size();
                     }
                 };
-            })
-            .unwrap();
+            });
 
         let mut rec = HitRecord {
             point,

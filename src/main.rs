@@ -231,7 +231,7 @@ fn chunk() -> Result<(), Box<dyn Error>> {
 
     let mut region = Region::from_stream(file_data)?;
 
-    let chunk = region.get_chunk(1, 0).ok_or("Error getting chunk")?;
+    let chunk = region.get_chunk(0, 0).ok_or("Error getting chunk")?;
 
     let data = ChunkData::from_compound(chunk.data);
 
@@ -250,9 +250,10 @@ fn chunk() -> Result<(), Box<dyn Error>> {
                             println!("{}", block.0);
                             let start_pos = Vec3::new(
                                 x as f64,
-                                (y as u32 * section_idx as u32) as f64,
+                                (y as u32 + section_idx as u32 * 16) as f64,
                                 z as f64,
                             );
+                            println!("{:?}", start_pos);
 
                             let mat = material_manager.get_or_make_material_idx(&block.0);
                             let end_pos = start_pos + 1.0;
@@ -272,12 +273,12 @@ fn chunk() -> Result<(), Box<dyn Error>> {
     let mut camera = Camera::new();
 
     camera.aspect_ratio = 16.0 / 9.0;
-    camera.image_width = 1200;
-    camera.samples_per_pixel = 300;
+    camera.image_width = 2560;
+    camera.samples_per_pixel = 500;
     camera.max_depth = 50;
     camera.v_fov = 20.0;
-    camera.look_from = Vec3::new(-20.0, 5.0, -20.0);
-    camera.look_at = Vec3::new(0.0, 2.0, 0.0);
+    camera.look_from = Vec3::new(-20.0, 7.0, -20.0);
+    camera.look_at = Vec3::new(0.0, 4.5, 0.0);
     camera.v_up = Vec3::new(0.0, 1.0, 0.0);
 
     camera.defocus_angle = 0.0;
