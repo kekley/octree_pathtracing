@@ -16,7 +16,7 @@ use ray_tracing::AABB;
 use ray_tracing::{random_float, random_float_in_range, random_vec};
 use ray_tracing::{BVHTree, TextureManager};
 use ray_tracing::{HitList, Hittable};
-use spider_eye::{ChunkData, Region, SpiderEyeError};
+use spider_eye::{Chunk, ChunkData, Region, SpiderEyeError};
 
 pub const ASPECT_RATIO: f64 = 1.5;
 
@@ -231,57 +231,72 @@ fn chunk() -> Result<(), Box<dyn Error>> {
 
     let mut region = Region::from_stream(file_data)?;
 
-    let chunk = region.get_chunk(0, 0).ok_or("Error getting chunk")?;
-
-    let data = ChunkData::from_compound(chunk.data);
-
     let mut hitlist = HitList::new();
     let mut material_manager = TextureManager::new();
-
-    data.sections
-        .iter()
-        .enumerate()
-        .for_each(|(section_idx, section)| {
-            (0..16).for_each(|y| {
-                (0..16).for_each(|z| {
-                    (0..16).for_each(|x| {
-                        let block = section.block_states.get_block(x, y, z);
-                        if !(block.0 == "minecraft:air") && !(block.0 == "minecraft:grass_block") {
-                            println!("{}", block.0);
-                            let start_pos = Vec3::new(
-                                x as f64,
-                                (y as u32 + section_idx as u32 * 16) as f64,
-                                z as f64,
-                            );
-                            println!("{:?}", start_pos);
-
-                            let mat = material_manager.get_or_make_material_idx(&block.0);
-                            let end_pos = start_pos + 1.0;
-
-                            let block = Cuboid::new(AABB::from_points(start_pos, end_pos), mat);
-                            hitlist.add(Hittable::Box(block));
-                        }
-                    });
-                });
-            });
-        });
-
-    println!("{:?}", hitlist.objects.len());
-
-    let tree = BVHTree::from_hit_list(&hitlist);
-
     let mut camera = Camera::new();
 
     camera.aspect_ratio = 16.0 / 9.0;
-    camera.image_width = 2560;
+    camera.image_width = 1200;
     camera.samples_per_pixel = 500;
-    camera.max_depth = 50;
+    camera.max_depth = 10;
     camera.v_fov = 20.0;
     camera.look_from = Vec3::new(-20.0, 7.0, -20.0);
     camera.look_at = Vec3::new(0.0, 4.5, 0.0);
     camera.v_up = Vec3::new(0.0, 1.0, 0.0);
 
     camera.defocus_angle = 0.0;
+
+    for chunk in region.chunk_segments {
+        if let Some(segment) = chunk {
+            let chunk_data = region.read_chunk_from_segment(segment).unwrap();
+
+            let chunk = Chunk::from_data(&mut Cursor::new(chunk_data)).unwrap();
+
+            let data = ChunkData::from_compound(chunk.data);
+            let pos = Vec3::new(data.xpos as f64, 0.0 as f64, data.zpos as f64);
+            let distance = ((pos * 16.0) - camera.look_from).length();
+            if distance >= 80.0 {
+                continue;
+            }
+            data.sections
+                .iter()
+                .enumerate()
+                .for_each(|(section_idx, section)| {
+                    (0..16).for_each(|y| {
+                        (0..16).for_each(|z| {
+                            (0..16).for_each(|x| {
+                                let chunk_x = data.xpos * 16;
+                                let chunk_z = data.zpos * 16;
+                                let block = section.block_states.get_block(x, y, z);
+                                if !(block.0 == "minecraft:air") {
+                                    let start_pos = Vec3::new(
+                                        chunk_x as f64 + x as f64,
+                                        (y as u32 + section_idx as u32 * 16) as f64,
+                                        chunk_z as f64 + z as f64,
+                                    );
+
+                                    let mat = if (block.0 == "minecraft:grass_block") {
+                                        material_manager
+                                            .get_or_make_material_idx("minecraft:grass_block")
+                                    } else {
+                                        material_manager.get_or_make_material_idx(&block.0)
+                                    };
+                                    let end_pos = start_pos + 1.0;
+
+                                    let block =
+                                        Cuboid::new(AABB::from_points(start_pos, end_pos), mat);
+                                    hitlist.add(Hittable::Box(block));
+                                }
+                            });
+                        });
+                    });
+                });
+        }
+    }
+
+    println!("{:?}", hitlist.objects.len());
+
+    let tree = BVHTree::from_hit_list(&hitlist);
 
     let buf = camera.multi_threaded_render(&Hittable::BVH(tree), material_manager.clone());
 

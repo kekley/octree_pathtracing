@@ -42,6 +42,17 @@ impl AABB {
         }
     }
     #[inline]
+    pub fn area(&self) -> f64 {
+        let size_x = self.x_interval.size();
+        let size_y = self.y_interval.size();
+        let size_z = self.z_interval.size();
+        2.0 * (size_x * size_y + size_x * size_z + size_y * size_z)
+    }
+    #[inline]
+    pub fn centroid(&self, axis: Axis) -> f64 {
+        self.get_interval(axis).max - self.get_interval(axis).min
+    }
+    #[inline]
     pub const fn new(interval_x: Interval, interval_y: Interval, interval_z: Interval) -> Self {
         Self {
             x_interval: interval_x,

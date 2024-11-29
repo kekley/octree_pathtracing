@@ -29,6 +29,36 @@ impl BVHNode {
 }
 
 impl BVHTree {
+    pub fn evaluate_sah(
+        objects: &Vec<Hittable>,
+        indices: &Vec<u32>,
+        node: &BVHNode,
+        axis: Axis,
+        pos: f64,
+    ) -> f64 {
+        let mut left_box = AABB::EMPTY;
+        let mut right_box = AABB::EMPTY;
+
+        let mut left_count = 0;
+        let mut right_count = 0;
+        (0..node.hittable_count).for_each(|i| {
+            let obj = &objects[indices[node.left_node_idx as usize + i as usize] as usize];
+            if obj.get_bbox().centroid(axis) < pos {
+                left_count += 1;
+                left_box = AABB::from_boxes(&left_box, obj.get_bbox());
+            } else {
+                right_count += 1;
+                right_box = AABB::from_boxes(&right_box, obj.get_bbox());
+            }
+        });
+
+        let cost = left_count as f64 * left_box.area() + right_count as f64 * right_box.area();
+        if cost > 0.0 {
+            cost
+        } else {
+            INFINITY
+        }
+    }
     pub fn bbox(&self) -> &AABB {
         &self.nodes[0].bbox
     }
@@ -120,9 +150,35 @@ impl BVHTree {
             objects: &Vec<Hittable>,
             indices: &mut Vec<u32>,
         ) {
-            let axis = nodes[node_idx].bbox.longest_axis();
+            let mut best_axis = Axis::X;
+            let mut best_cost = INFINITY;
+            let mut best_pos = 0.0;
+            for axis in Axis::iter() {
+                (0..nodes[node_idx].hittable_count).for_each(|i| {
+                    let obj = &objects[indices
+                        [nodes[node_idx as usize].first_hittable_idx as usize + i as usize]
+                        as usize];
 
-            if nodes[node_idx].hittable_count <= 2 {
+                    let candidate_pos = obj.get_bbox().centroid(*axis);
+
+                    let cost = BVHTree::evaluate_sah(
+                        objects,
+                        &indices,
+                        &nodes[indices[node_idx as usize] as usize],
+                        *axis,
+                        candidate_pos,
+                    );
+                    if cost < best_cost {
+                        best_axis = *axis;
+                        best_cost = cost;
+                        best_pos = candidate_pos;
+                    }
+                });
+            }
+            let axis = best_axis;
+            let split_pos = best_pos;
+
+            if nodes[node_idx].hittable_count <= 10 {
                 return;
             }
 
@@ -130,21 +186,14 @@ impl BVHTree {
             let mut j = (i + nodes[node_idx].hittable_count as usize - 1).saturating_sub(1);
 
             while i <= j {
-                match box_compare(
-                    &objects[indices[i] as usize],
-                    &objects[indices[j] as usize],
-                    axis,
-                ) {
-                    Ordering::Less => {
-                        i += 1;
+                if objects[i].get_bbox().centroid(axis) < split_pos {
+                    i += 1;
+                } else {
+                    indices.swap(i, j);
+                    if j == 0 {
+                        break;
                     }
-                    _ => {
-                        indices.swap(i, j);
-                        if j == 0 {
-                            break; // Prevent underflow
-                        }
-                        j -= 1;
-                    }
+                    j -= 1;
                 }
             }
 
@@ -221,7 +270,7 @@ impl BVHTree {
     pub fn hit(&self, ray: &Ray, ray_t: Interval) -> Option<HitRecord> {
         let mut node = &self.nodes[0];
         let mut stack_idx = 0 as usize;
-        let mut stack = [node; 30];
+        let mut stack = [node; 256];
         let mut closest_hit = ray_t.max;
         let mut return_val = None;
         loop {
