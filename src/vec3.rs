@@ -5,9 +5,9 @@ use std::{
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Vec3 {
-    pub x: f64,
-    pub y: f64,
-    pub z: f64,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
 }
 #[derive(Debug, Clone, Copy)]
 pub enum Axis {
@@ -57,17 +57,17 @@ impl Vec3 {
     /// All negative ones.
     pub const NEG_ONE: Self = Self::splat(-1.0);
 
-    /// All `f64::MIN`.
-    pub const MIN: Self = Self::splat(f64::MIN);
+    /// All `f32::MIN`.
+    pub const MIN: Self = Self::splat(f32::MIN);
 
-    /// All `f64::MAX`.
-    pub const MAX: Self = Self::splat(f64::MAX);
+    /// All `f32::MAX`.
+    pub const MAX: Self = Self::splat(f32::MAX);
 
-    /// All `f64::NAN`.
-    pub const NAN: Self = Self::splat(f64::NAN);
+    /// All `f32::NAN`.
+    pub const NAN: Self = Self::splat(f32::NAN);
 
-    /// All `f64::INFINITY`.
-    pub const INFINITY: Self = Self::splat(f64::INFINITY);
+    /// All `f32::INFINITY`.
+    pub const INFINITY: Self = Self::splat(f32::INFINITY);
 
     pub const UP: Self = Self::new(0.0, 1.0, 0.0);
     pub const DOWN: Self = Self::new(0.0, -1.0, 0.0);
@@ -76,14 +76,14 @@ impl Vec3 {
     pub const FORWARD: Self = Self::new(0.0, 1.0, 1.0);
     pub const BACK: Self = Self::new(0.0, 1.0, -1.0);
 
-    /// All `f64::NEG_INFINITY`.
-    pub const NEG_INFINITY: Self = Self::splat(f64::NEG_INFINITY);
+    /// All `f32::NEG_INFINITY`.
+    pub const NEG_INFINITY: Self = Self::splat(f32::NEG_INFINITY);
     #[inline]
-    pub const fn new(x: f64, y: f64, z: f64) -> Self {
+    pub const fn new(x: f32, y: f32, z: f32) -> Self {
         Self { x, y, z }
     }
     #[inline]
-    pub const fn splat(val: f64) -> Self {
+    pub const fn splat(val: f32) -> Self {
         Self {
             x: val,
             y: val,
@@ -115,7 +115,7 @@ impl Vec3 {
     }
 
     #[inline]
-    pub fn get_axis(&self, axis: Axis) -> f64 {
+    pub fn get_axis(&self, axis: Axis) -> f32 {
         match axis {
             Axis::X => self.x,
             Axis::Y => self.y,
@@ -130,15 +130,15 @@ impl Vec3 {
     }
 
     #[inline]
-    pub fn length(&self) -> f64 {
-        f64::sqrt(self.length_squared())
+    pub fn length(&self) -> f32 {
+        f32::sqrt(self.length_squared())
     }
     #[inline]
-    pub fn length_squared(&self) -> f64 {
+    pub fn length_squared(&self) -> f32 {
         self.dot(*self)
     }
     #[inline]
-    pub fn dot(self, rhs: Self) -> f64 {
+    pub fn dot(self, rhs: Self) -> f32 {
         (self.x * rhs.x) + (self.y * rhs.y) + (self.z * rhs.z)
     }
     #[inline]
@@ -157,16 +157,16 @@ impl Vec3 {
     #[inline]
     pub fn near_zero(&self) -> bool {
         let s = 1e-8;
-        f64::abs(self.x) < s && f64::abs(self.y) < s && f64::abs(self.z) < s
+        f32::abs(self.x) < s && f32::abs(self.y) < s && f32::abs(self.z) < s
     }
 
     #[inline]
     pub fn reflect(&self, n: Vec3) -> Self {
-        self - 2f64 * self.dot(n) * n
+        self - 2f32 * self.dot(n) * n
     }
     #[inline]
-    pub fn refract(&self, normal: Vec3, etai_over_etat: f64) -> Vec3 {
-        let cos_theta = f64::min((-self).dot(normal), 1.0);
+    pub fn refract(&self, normal: Vec3, etai_over_etat: f32) -> Vec3 {
+        let cos_theta = f32::min((-self).dot(normal), 1.0);
 
         let r_out_perp = etai_over_etat * (self + cos_theta * normal);
         let r_out_parallel = -(1.0 - r_out_perp.length_squared()).abs().sqrt() * normal;
@@ -285,10 +285,10 @@ impl MulAssign<&Self> for Vec3 {
     }
 }
 
-impl Mul<f64> for Vec3 {
+impl Mul<f32> for Vec3 {
     type Output = Self;
     #[inline]
-    fn mul(self, rhs: f64) -> Self {
+    fn mul(self, rhs: f32) -> Self {
         Self {
             x: self.x.mul(rhs),
             y: self.y.mul(rhs),
@@ -297,47 +297,47 @@ impl Mul<f64> for Vec3 {
     }
 }
 
-impl Mul<&f64> for Vec3 {
+impl Mul<&f32> for Vec3 {
     type Output = Vec3;
     #[inline]
-    fn mul(self, rhs: &f64) -> Vec3 {
+    fn mul(self, rhs: &f32) -> Vec3 {
         self.mul(*rhs)
     }
 }
 
-impl Mul<&f64> for &Vec3 {
+impl Mul<&f32> for &Vec3 {
     type Output = Vec3;
     #[inline]
-    fn mul(self, rhs: &f64) -> Vec3 {
+    fn mul(self, rhs: &f32) -> Vec3 {
         (*self).mul(*rhs)
     }
 }
 
-impl Mul<f64> for &Vec3 {
+impl Mul<f32> for &Vec3 {
     type Output = Vec3;
     #[inline]
-    fn mul(self, rhs: f64) -> Vec3 {
+    fn mul(self, rhs: f32) -> Vec3 {
         (*self).mul(rhs)
     }
 }
 
-impl MulAssign<f64> for Vec3 {
+impl MulAssign<f32> for Vec3 {
     #[inline]
-    fn mul_assign(&mut self, rhs: f64) {
+    fn mul_assign(&mut self, rhs: f32) {
         self.x.mul_assign(rhs);
         self.y.mul_assign(rhs);
         self.z.mul_assign(rhs);
     }
 }
 
-impl MulAssign<&f64> for Vec3 {
+impl MulAssign<&f32> for Vec3 {
     #[inline]
-    fn mul_assign(&mut self, rhs: &f64) {
+    fn mul_assign(&mut self, rhs: &f32) {
         self.mul_assign(*rhs)
     }
 }
 
-impl Mul<Vec3> for f64 {
+impl Mul<Vec3> for f32 {
     type Output = Vec3;
     #[inline]
     fn mul(self, rhs: Vec3) -> Vec3 {
@@ -349,7 +349,7 @@ impl Mul<Vec3> for f64 {
     }
 }
 
-impl Mul<&Vec3> for f64 {
+impl Mul<&Vec3> for f32 {
     type Output = Vec3;
     #[inline]
     fn mul(self, rhs: &Vec3) -> Vec3 {
@@ -357,7 +357,7 @@ impl Mul<&Vec3> for f64 {
     }
 }
 
-impl Mul<&Vec3> for &f64 {
+impl Mul<&Vec3> for &f32 {
     type Output = Vec3;
     #[inline]
     fn mul(self, rhs: &Vec3) -> Vec3 {
@@ -365,7 +365,7 @@ impl Mul<&Vec3> for &f64 {
     }
 }
 
-impl Mul<Vec3> for &f64 {
+impl Mul<Vec3> for &f32 {
     type Output = Vec3;
     #[inline]
     fn mul(self, rhs: Vec3) -> Vec3 {
@@ -445,10 +445,10 @@ impl DivAssign<&Self> for Vec3 {
     }
 }
 
-impl Div<f64> for Vec3 {
+impl Div<f32> for Vec3 {
     type Output = Self;
     #[inline]
-    fn div(self, rhs: f64) -> Self {
+    fn div(self, rhs: f32) -> Self {
         Self {
             x: self.x.div(rhs),
             y: self.y.div(rhs),
@@ -457,47 +457,47 @@ impl Div<f64> for Vec3 {
     }
 }
 
-impl Div<&f64> for Vec3 {
+impl Div<&f32> for Vec3 {
     type Output = Vec3;
     #[inline]
-    fn div(self, rhs: &f64) -> Vec3 {
+    fn div(self, rhs: &f32) -> Vec3 {
         self.div(*rhs)
     }
 }
 
-impl Div<&f64> for &Vec3 {
+impl Div<&f32> for &Vec3 {
     type Output = Vec3;
     #[inline]
-    fn div(self, rhs: &f64) -> Vec3 {
+    fn div(self, rhs: &f32) -> Vec3 {
         (*self).div(*rhs)
     }
 }
 
-impl Div<f64> for &Vec3 {
+impl Div<f32> for &Vec3 {
     type Output = Vec3;
     #[inline]
-    fn div(self, rhs: f64) -> Vec3 {
+    fn div(self, rhs: f32) -> Vec3 {
         (*self).div(rhs)
     }
 }
 
-impl DivAssign<f64> for Vec3 {
+impl DivAssign<f32> for Vec3 {
     #[inline]
-    fn div_assign(&mut self, rhs: f64) {
+    fn div_assign(&mut self, rhs: f32) {
         self.x.div_assign(rhs);
         self.y.div_assign(rhs);
         self.z.div_assign(rhs);
     }
 }
 
-impl DivAssign<&f64> for Vec3 {
+impl DivAssign<&f32> for Vec3 {
     #[inline]
-    fn div_assign(&mut self, rhs: &f64) {
+    fn div_assign(&mut self, rhs: &f32) {
         self.div_assign(*rhs)
     }
 }
 
-impl Div<Vec3> for f64 {
+impl Div<Vec3> for f32 {
     type Output = Vec3;
     #[inline]
     fn div(self, rhs: Vec3) -> Vec3 {
@@ -509,7 +509,7 @@ impl Div<Vec3> for f64 {
     }
 }
 
-impl Div<&Vec3> for f64 {
+impl Div<&Vec3> for f32 {
     type Output = Vec3;
     #[inline]
     fn div(self, rhs: &Vec3) -> Vec3 {
@@ -517,7 +517,7 @@ impl Div<&Vec3> for f64 {
     }
 }
 
-impl Div<&Vec3> for &f64 {
+impl Div<&Vec3> for &f32 {
     type Output = Vec3;
     #[inline]
     fn div(self, rhs: &Vec3) -> Vec3 {
@@ -525,7 +525,7 @@ impl Div<&Vec3> for &f64 {
     }
 }
 
-impl Div<Vec3> for &f64 {
+impl Div<Vec3> for &f32 {
     type Output = Vec3;
     #[inline]
     fn div(self, rhs: Vec3) -> Vec3 {
@@ -585,10 +585,10 @@ impl AddAssign<&Self> for Vec3 {
     }
 }
 
-impl Add<f64> for Vec3 {
+impl Add<f32> for Vec3 {
     type Output = Self;
     #[inline]
-    fn add(self, rhs: f64) -> Self {
+    fn add(self, rhs: f32) -> Self {
         Self {
             x: self.x.add(rhs),
             y: self.y.add(rhs),
@@ -597,47 +597,47 @@ impl Add<f64> for Vec3 {
     }
 }
 
-impl Add<&f64> for Vec3 {
+impl Add<&f32> for Vec3 {
     type Output = Vec3;
     #[inline]
-    fn add(self, rhs: &f64) -> Vec3 {
+    fn add(self, rhs: &f32) -> Vec3 {
         self.add(*rhs)
     }
 }
 
-impl Add<&f64> for &Vec3 {
+impl Add<&f32> for &Vec3 {
     type Output = Vec3;
     #[inline]
-    fn add(self, rhs: &f64) -> Vec3 {
+    fn add(self, rhs: &f32) -> Vec3 {
         (*self).add(*rhs)
     }
 }
 
-impl Add<f64> for &Vec3 {
+impl Add<f32> for &Vec3 {
     type Output = Vec3;
     #[inline]
-    fn add(self, rhs: f64) -> Vec3 {
+    fn add(self, rhs: f32) -> Vec3 {
         (*self).add(rhs)
     }
 }
 
-impl AddAssign<f64> for Vec3 {
+impl AddAssign<f32> for Vec3 {
     #[inline]
-    fn add_assign(&mut self, rhs: f64) {
+    fn add_assign(&mut self, rhs: f32) {
         self.x.add_assign(rhs);
         self.y.add_assign(rhs);
         self.z.add_assign(rhs);
     }
 }
 
-impl AddAssign<&f64> for Vec3 {
+impl AddAssign<&f32> for Vec3 {
     #[inline]
-    fn add_assign(&mut self, rhs: &f64) {
+    fn add_assign(&mut self, rhs: &f32) {
         self.add_assign(*rhs)
     }
 }
 
-impl Add<Vec3> for f64 {
+impl Add<Vec3> for f32 {
     type Output = Vec3;
     #[inline]
     fn add(self, rhs: Vec3) -> Vec3 {
@@ -649,7 +649,7 @@ impl Add<Vec3> for f64 {
     }
 }
 
-impl Add<&Vec3> for f64 {
+impl Add<&Vec3> for f32 {
     type Output = Vec3;
     #[inline]
     fn add(self, rhs: &Vec3) -> Vec3 {
@@ -657,7 +657,7 @@ impl Add<&Vec3> for f64 {
     }
 }
 
-impl Add<&Vec3> for &f64 {
+impl Add<&Vec3> for &f32 {
     type Output = Vec3;
     #[inline]
     fn add(self, rhs: &Vec3) -> Vec3 {
@@ -665,7 +665,7 @@ impl Add<&Vec3> for &f64 {
     }
 }
 
-impl Add<Vec3> for &f64 {
+impl Add<Vec3> for &f32 {
     type Output = Vec3;
     #[inline]
     fn add(self, rhs: Vec3) -> Vec3 {

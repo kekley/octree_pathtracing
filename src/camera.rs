@@ -1,6 +1,6 @@
 use fastrand::Rng;
 use rayon::prelude::*;
-use std::{cmp::max, io::Write, sync::atomic::AtomicU32};
+use std::{cmp::max, f32::INFINITY, io::Write, sync::atomic::AtomicU32};
 
 use crate::{
     bvh::BVHTree,
@@ -16,22 +16,22 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct Camera {
-    pub aspect_ratio: f64,
-    pub image_width: u64,
-    pub samples_per_pixel: u64,
+    pub aspect_ratio: f32,
+    pub image_width: u32,
+    pub samples_per_pixel: u32,
     pub max_depth: i64,
-    pub v_fov: f64,
+    pub v_fov: f32,
     pub look_from: Vec3,
     pub look_at: Vec3,
     pub v_up: Vec3,
-    pub defocus_angle: f64,
-    pub focus_dist: f64,
-    image_height: u64,
+    pub defocus_angle: f32,
+    pub focus_dist: f32,
+    image_height: u32,
     center: Vec3,
     pixel00_loc: Vec3,
     pixel_delta_u: Vec3,
     pixel_delta_v: Vec3,
-    pixel_sample_scale: f64,
+    pixel_sample_scale: f32,
     u: Vec3,
     v: Vec3,
     w: Vec3,
@@ -77,9 +77,9 @@ impl Camera {
             for x in 0..self.image_width {
                 let mut pixel_color = Vec3::ZERO;
                 for _ in 0..self.samples_per_pixel {
-                    let ray = self.get_ray(&mut rng, x, y);
+                    let mut ray = self.get_ray(&mut rng, x, y);
                     pixel_color +=
-                        Self::ray_color(&mut rng, &ray, self.max_depth, &world, &materials);
+                        Self::ray_color(&mut rng, &mut ray, self.max_depth, &world, &materials);
                 }
                 pixel_color = pixel_color * self.pixel_sample_scale;
                 write_rgb8_color_as_text_to_stream(&pixel_color, &mut buf);
@@ -103,7 +103,7 @@ impl Camera {
                     .map(|x| {
                         let mut pixel_color = Vec3::ZERO;
                         for _ in 0..self.samples_per_pixel {
-                            let ray = Camera::thread_safe_get_ray(
+                            let mut ray = Camera::thread_safe_get_ray(
                                 self.center,
                                 self.pixel_delta_u,
                                 self.pixel_delta_v,
@@ -117,7 +117,7 @@ impl Camera {
                             );
                             pixel_color += Camera::ray_color(
                                 &mut rng,
-                                &ray,
+                                &mut ray,
                                 self.max_depth,
                                 &world,
                                 &materials,
@@ -129,7 +129,7 @@ impl Camera {
                 let prev = rows_done.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 println!(
                     "{}% done.",
-                    ((prev + 1) as f64 / self.image_height as f64) * 100.0
+                    ((prev + 1) as f32 / self.image_height as f32) * 100.0
                 );
                 res
             })
@@ -145,17 +145,17 @@ impl Camera {
     }
 
     fn initialize(&mut self) {
-        self.image_height = max((self.image_width as f64 / self.aspect_ratio) as u64, 1);
+        self.image_height = max((self.image_width as f32 / self.aspect_ratio) as u32, 1);
 
-        self.pixel_sample_scale = 1f64 / self.samples_per_pixel as f64;
+        self.pixel_sample_scale = 1f32 / self.samples_per_pixel as f32;
 
         self.center = self.look_from;
 
         //viewport
         let theta = degrees_to_rads(self.v_fov);
-        let h = f64::tan(theta / 2.0);
+        let h = f32::tan(theta / 2.0);
         let viewport_height = 2.0 * h * self.focus_dist;
-        let viewport_width = viewport_height * (self.image_width as f64 / self.image_height as f64);
+        let viewport_width = viewport_height * (self.image_width as f32 / self.image_height as f32);
 
         self.w = (self.look_from - self.look_at).normalize();
         self.u = self.v_up.cross(self.w).normalize();
@@ -164,61 +164,53 @@ impl Camera {
         let viewport_u = viewport_width * self.u;
         let viewport_v = viewport_height * -self.v;
 
-        self.pixel_delta_u = viewport_u / self.image_width as f64;
-        self.pixel_delta_v = viewport_v / self.image_height as f64;
+        self.pixel_delta_u = viewport_u / self.image_width as f32;
+        self.pixel_delta_v = viewport_v / self.image_height as f32;
 
         let viewport_upper_left =
             self.center - (self.focus_dist * self.w) - viewport_u / 2.0 - viewport_v / 2.0;
 
         self.pixel00_loc = viewport_upper_left + 0.5 * (self.pixel_delta_u + self.pixel_delta_v);
 
-        let defocus_radius = self.focus_dist * f64::tan(degrees_to_rads(self.defocus_angle / 2.0));
+        let defocus_radius = self.focus_dist * f32::tan(degrees_to_rads(self.defocus_angle / 2.0));
         self.defocus_disk_u = self.u * defocus_radius;
         self.defocus_disk_v = self.v * defocus_radius;
     }
 
     fn ray_color(
         rng: &mut Rng,
-        ray: &Ray,
+        ray: &mut Ray,
         depth: i64,
         world: &Hittable,
         materials: &TextureManager,
     ) -> Vec3 {
         if depth <= 0 {
-            return Vec3::splat(0f64);
+            return Vec3::splat(0f32);
         }
 
-        let rec = world.hit(&ray, Interval::ZEROISH_TO_INFINITY);
+        world.hit(ray, Interval::ZEROISH_TO_INFINITY);
 
-        let color = match rec {
-            Some(rec) => match materials
-                .get_material(rec.material_idx)
-                .scatter(rng, ray, &rec)
-            {
-                Some(scatter) => {
-                    scatter.color * Self::ray_color(rng, &scatter.ray, depth - 1, world, materials)
-                }
-                None => Vec3::ZERO,
-            },
-            None => {
-                let normalized_dir = ray.direction.normalize();
+        if ray.hit.t == INFINITY {
+            let normalized_dir = ray.direction.normalize();
+            let a = 0.5f32 * (normalized_dir.y + 1f32);
+            return (1.0 - a) * Vec3::ONE + a * Camera::SKY_COLOR;
+        }
 
-                let a = 0.5f64 * (normalized_dir.y + 1f64);
+        if let Some(color) = materials.get_material(ray.hit.mat_idx).scatter(rng, ray) {
+            return color * Self::ray_color(rng, ray, depth - 1, world, materials);
+        }
 
-                (1.0 - a) * Vec3::ONE + a * Camera::SKY_COLOR
-            }
-        };
-        color
+        Vec3::ZERO
     }
 
-    fn get_ray(&self, rng: &mut Rng, x: u64, y: u64) -> Ray {
+    fn get_ray(&self, rng: &mut Rng, x: u32, y: u32) -> Ray {
         // Construct a camera ray originating from the defocus disk and directed at a randomly
         // sampled point around the pixel location i, j.
         let offset = Self::sample_square(rng);
 
         let pixel_sample = self.pixel00_loc
-            + ((x as f64 + offset.x) * self.pixel_delta_u)
-            + ((y as f64 + offset.y) * self.pixel_delta_v);
+            + ((x as f32 + offset.x) * self.pixel_delta_u)
+            + ((y as f32 + offset.y) * self.pixel_delta_v);
 
         let ray_origin = match self.defocus_angle <= 0.0 {
             true => self.center,
@@ -244,18 +236,18 @@ impl Camera {
         pixel_delta_u: Vec3,
         pixel_delta_v: Vec3,
         pixel00_loc: Vec3,
-        defocus_angle: f64,
+        defocus_angle: f32,
         disc_u: Vec3,
         disc_v: Vec3,
         rng: &mut Rng,
-        x: u64,
-        y: u64,
+        x: u32,
+        y: u32,
     ) -> Ray {
         let offset = Self::sample_square(rng);
 
         let pixel_sample = pixel00_loc
-            + ((x as f64 + offset.x) * pixel_delta_u)
-            + ((y as f64 + offset.y) * pixel_delta_v);
+            + ((x as f32 + offset.x) * pixel_delta_u)
+            + ((y as f32 + offset.y) * pixel_delta_v);
 
         let ray_origin = match defocus_angle <= 0.0 {
             true => center,
@@ -269,6 +261,6 @@ impl Camera {
     #[inline]
 
     fn sample_square(rng: &mut Rng) -> Vec3 {
-        Vec3::new(random_float(rng) - 0.5f64, random_float(rng) - 0.5f64, 0.0)
+        Vec3::new(random_float(rng) - 0.5f32, random_float(rng) - 0.5f32, 0.0)
     }
 }

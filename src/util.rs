@@ -1,19 +1,18 @@
-use core::f64;
+use core::f32;
 
 use fastrand::Rng;
 
 use crate::{interval::Interval, vec3::Vec3};
 
-pub const PI: f64 = std::f64::consts::PI;
-pub const INFINITY: f64 = f64::INFINITY;
+pub const PI: f32 = std::f32::consts::PI;
 #[inline]
-pub fn degrees_to_rads(degrees: f64) -> f64 {
-    degrees * PI / 180f64
+pub fn degrees_to_rads(degrees: f32) -> f32 {
+    degrees * PI / 180f32
 }
 
 #[inline]
-pub fn random_float(rng: &mut Rng) -> f64 {
-    rng.f64()
+pub fn random_float(rng: &mut Rng) -> f32 {
+    rng.f32()
 }
 
 #[inline]
@@ -22,16 +21,16 @@ pub fn random_int(rng: &mut Rng, min: i64, max: i64) -> i64 {
 }
 
 #[inline]
-pub fn random_float_in_range(rng: &mut Rng, min: f64, max: f64) -> f64 {
+pub fn random_float_in_range(rng: &mut Rng, min: f32, max: f32) -> f32 {
     return min + (max - min) * random_float(rng);
 }
 
 #[inline]
-pub fn linear_to_gamma(linear_component: f64) -> f64 {
-    if linear_component > 0f64 {
-        return f64::sqrt(linear_component);
+pub fn linear_to_gamma(linear_component: f32) -> f32 {
+    if linear_component > 0f32 {
+        return f32::sqrt(linear_component);
     } else {
-        return 0f64;
+        return 0f32;
     }
 }
 #[inline]
@@ -40,7 +39,7 @@ pub fn random_vec(rng: &mut Rng) -> Vec3 {
 }
 #[inline]
 
-pub fn random_vec_in_range(rng: &mut Rng, min: f64, max: f64) -> Vec3 {
+pub fn random_vec_in_range(rng: &mut Rng, min: f32, max: f32) -> Vec3 {
     Vec3::new(
         random_float_in_range(rng, min, max),
         random_float_in_range(rng, min, max),
@@ -51,18 +50,18 @@ pub fn random_vec_in_range(rng: &mut Rng, min: f64, max: f64) -> Vec3 {
 
 pub fn random_unit_vec(rng: &mut Rng) -> Vec3 {
     loop {
-        let p = random_vec_in_range(rng, -1f64, 1f64);
+        let p = random_vec_in_range(rng, -1f32, 1f32);
         let len_sq = p.length_squared();
 
-        if 1e-160 < len_sq && len_sq <= 1f64 {
-            return p / f64::sqrt(len_sq);
+        if 1e-160 < len_sq && len_sq <= 1f32 {
+            return p / f32::sqrt(len_sq);
         }
     }
 }
 #[inline]
 pub fn random_on_hemisphere(rng: &mut Rng, normal: Vec3) -> Vec3 {
     let on_sphere = random_unit_vec(rng);
-    if on_sphere.dot(normal) > 0f64 {
+    if on_sphere.dot(normal) > 0f32 {
         return on_sphere;
     } else {
         return -on_sphere;
@@ -88,11 +87,11 @@ pub fn write_rgb8_color_as_text_to_stream(vec: &Vec3, stream: &mut dyn std::io::
     let g = linear_to_gamma(vec.y);
     let b = linear_to_gamma(vec.z);
 
-    let intensity = Interval::new(0f64, 0.999f64);
+    let intensity = Interval::new(0f32, 0.999f32);
 
-    let r_byte: u8 = (intensity.clamp(r) * 256f64) as u8;
-    let g_byte: u8 = (intensity.clamp(g) * 256f64) as u8;
-    let b_byte: u8 = (intensity.clamp(b) * 256f64) as u8;
+    let r_byte: u8 = (intensity.clamp(r) * 256f32) as u8;
+    let g_byte: u8 = (intensity.clamp(g) * 256f32) as u8;
+    let b_byte: u8 = (intensity.clamp(b) * 256f32) as u8;
 
     stream
         .write(format!("{} {} {}\n", r_byte, g_byte, b_byte).as_bytes())

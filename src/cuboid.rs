@@ -1,3 +1,5 @@
+use std::f32::INFINITY;
+
 use crate::{
     aabb::AABB,
     hittable::HitRecord,
@@ -21,7 +23,7 @@ pub struct Cuboid {
     pub bbox: AABB,
     materials_idx: [u16; 6],
 }
-pub const EPSILON: f64 = 0.00000000001;
+pub const EPSILON: f32 = 0.00000000001;
 
 impl Cuboid {
     pub fn new(bbox: AABB, material_idx: u16) -> Self {
@@ -36,7 +38,8 @@ impl Cuboid {
             materials_idx: materials_idx,
         }
     }
-    pub fn hit(&self, ray: &Ray, ray_t: Interval) -> Option<HitRecord> {
+
+    pub fn hit(&self, ray: &mut Ray, ray_t: Interval) {
         let mut interval = ray_t.clone();
 
         for axis in Axis::iter() {
@@ -56,7 +59,7 @@ impl Cuboid {
                 interval.max = t0.min(interval.max);
             }
             if interval.max <= interval.min {
-                return None;
+                return;
             }
         }
 
@@ -130,18 +133,10 @@ impl Cuboid {
                 };
             });
 
-        let mut rec = HitRecord {
-            point,
-            normal,
-            t: interval.min,
-            u,
-            v,
-            front_face: false,
-            material_idx: self.materials_idx[mat_index],
-        };
-
-        rec.set_face_normal(ray, normal);
-
-        Some(rec)
+        ray.hit.u = u;
+        ray.hit.v = v;
+        ray.hit.t = interval.min;
+        ray.hit.outward_normal = normal;
+        ray.hit.mat_idx = self.materials_idx[mat_index];
     }
 }

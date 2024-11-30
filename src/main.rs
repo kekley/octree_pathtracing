@@ -18,7 +18,7 @@ use ray_tracing::{BVHTree, TextureManager};
 use ray_tracing::{HitList, Hittable};
 use spider_eye::{Chunk, ChunkData, Region, SpiderEyeError};
 
-pub const ASPECT_RATIO: f64 = 1.5;
+pub const ASPECT_RATIO: f32 = 1.5;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let start = Instant::now();
@@ -64,9 +64,9 @@ fn checkered_spheres() {
         for b in (-11..11) {
             let choose_mat = random_float(&mut rng);
             let center = Vec3::new(
-                a as f64 + 0.9 * random_float(&mut rng),
+                a as f32 + 0.9 * random_float(&mut rng),
                 0.2,
-                b as f64 + 0.9 * random_float(&mut rng),
+                b as f32 + 0.9 * random_float(&mut rng),
             );
             if (center - Vec3::new(4.0, 0.2, 0.0)).length() > 0.9 {
                 let sphere_material: Material;
@@ -236,12 +236,12 @@ fn chunk() -> Result<(), Box<dyn Error>> {
     let mut camera = Camera::new();
 
     camera.aspect_ratio = 16.0 / 9.0;
-    camera.image_width = 1200;
-    camera.samples_per_pixel = 500;
-    camera.max_depth = 10;
-    camera.v_fov = 20.0;
-    camera.look_from = Vec3::new(-20.0, 7.0, -20.0);
-    camera.look_at = Vec3::new(0.0, 4.5, 0.0);
+    camera.image_width = 400;
+    camera.samples_per_pixel = 16;
+    camera.max_depth = 5;
+    camera.v_fov = 70.0;
+    camera.look_from = Vec3::new(0.0, -57.0, 0.0);
+    camera.look_at = Vec3::new(10.0, -59.0, 10.0);
     camera.v_up = Vec3::new(0.0, 1.0, 0.0);
 
     camera.defocus_angle = 0.0;
@@ -253,44 +253,39 @@ fn chunk() -> Result<(), Box<dyn Error>> {
             let chunk = Chunk::from_data(&mut Cursor::new(chunk_data)).unwrap();
 
             let data = ChunkData::from_compound(chunk.data);
-            let pos = Vec3::new(data.xpos as f64, 0.0 as f64, data.zpos as f64);
+            let pos = Vec3::new(data.xpos as f32, 0.0 as f32, data.zpos as f32);
             let distance = ((pos * 16.0) - camera.look_from).length();
-            if distance >= 80.0 {
+
+            if distance >= 128.0 {
                 continue;
             }
-            data.sections
-                .iter()
-                .enumerate()
-                .for_each(|(section_idx, section)| {
-                    (0..16).for_each(|y| {
-                        (0..16).for_each(|z| {
-                            (0..16).for_each(|x| {
-                                let chunk_x = data.xpos * 16;
-                                let chunk_z = data.zpos * 16;
-                                let block = section.block_states.get_block(x, y, z);
-                                if !(block.0 == "minecraft:air") {
-                                    let start_pos = Vec3::new(
-                                        chunk_x as f64 + x as f64,
-                                        (y as u32 + section_idx as u32 * 16) as f64,
-                                        chunk_z as f64 + z as f64,
-                                    );
 
-                                    let mat = if (block.0 == "minecraft:grass_block") {
-                                        material_manager
-                                            .get_or_make_material_idx("minecraft:grass_block")
-                                    } else {
-                                        material_manager.get_or_make_material_idx(&block.0)
-                                    };
-                                    let end_pos = start_pos + 1.0;
+            (-64..320).for_each(|y: i16| {
+                (0..16).for_each(|x: i16| {
+                    (0..16).for_each(|z: i16| {
+                        let chunk_x = data.xpos * 16;
+                        let chunk_z = data.zpos * 16;
+                        let block = data.get_block(x, y, z);
+                        if !(block.0 == "minecraft:air") {
+                            let start_pos = Vec3::new(
+                                chunk_x as f32 + x as f32,
+                                y as f32,
+                                chunk_z as f32 + z as f32,
+                            );
 
-                                    let block =
-                                        Cuboid::new(AABB::from_points(start_pos, end_pos), mat);
-                                    hitlist.add(Hittable::Box(block));
-                                }
-                            });
-                        });
+                            let mat = if (block.0 == "minecraft:grass_block") {
+                                material_manager.get_or_make_material_idx("minecraft:grass_block")
+                            } else {
+                                material_manager.get_or_make_material_idx(&block.0)
+                            };
+                            let end_pos = start_pos + 1.0;
+
+                            let block = Cuboid::new(AABB::from_points(start_pos, end_pos), mat);
+                            hitlist.add(Hittable::Box(block));
+                        }
                     });
                 });
+            });
         }
     }
 

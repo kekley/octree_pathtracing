@@ -1,47 +1,49 @@
+use std::f32::INFINITY;
+
 use crate::{
     aabb::AABB,
     bvh::{BVHNode, BVHTree},
-    cuboid::Cuboid,
+    cuboid::{self, Cuboid},
     interval::Interval,
-    material::Material,
     ray::Ray,
     sphere::Sphere,
     vec3::Vec3,
 };
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HitRecord {
-    pub point: Vec3,
-    pub normal: Vec3,
-    pub t: f64,
-    pub u: f64,
-    pub v: f64,
-    pub front_face: bool,
-    pub material_idx: u16,
+    pub t: f32,
+    pub u: f32,
+    pub v: f32,
+    pub mat_idx: u16,
+    pub outward_normal: Vec3,
 }
 
-impl HitRecord {
-    pub fn set_face_normal(&mut self, ray: &Ray, outward_normal: Vec3) {
-        self.front_face = ray.direction.dot(outward_normal) < 0f64;
-        self.normal = match self.front_face {
-            true => outward_normal,
-            false => -outward_normal,
+impl Default for HitRecord {
+    fn default() -> Self {
+        Self {
+            t: INFINITY,
+            u: 0.0,
+            v: 0.0,
+            mat_idx: 0,
+            outward_normal: Vec3::ZERO,
         }
     }
 }
+
 #[derive(Debug, Clone)]
 pub enum Hittable {
     Sphere(Sphere),
     BVH(BVHTree),
-    Box(crate::cuboid::Cuboid),
+    Box(Cuboid),
 }
 
 impl Hittable {
     #[inline]
-    pub fn hit(&self, ray: &Ray, ray_t: Interval) -> Option<HitRecord> {
+    pub fn hit(&self, ray: &mut Ray, ray_t: Interval) {
         match self {
             Hittable::Sphere(sphere) => sphere.hit(ray, ray_t),
             Hittable::BVH(bvhtree) => bvhtree.hit(ray, ray_t),
-            Hittable::Box(r#box) => r#box.hit(ray, ray_t),
+            Hittable::Box(cuboid) => cuboid.hit(ray, ray_t),
         }
     }
     #[inline]
@@ -76,21 +78,14 @@ impl HitList {
     pub fn clear(&mut self) {
         self.objects.clear();
     }
-    pub fn hit(&self, ray: &Ray, ray_t: Interval) -> Option<HitRecord> {
-        let mut ret_val = None;
+    pub fn hit(&self, ray: &mut Ray, ray_t: Interval) {
         let mut closest_hit = ray_t.max;
 
         for object in &self.objects {
-            let rec = object.hit(ray, Interval::new(ray_t.min, closest_hit));
-            match rec {
-                Some(rec) => {
-                    closest_hit = rec.t;
-                    ret_val = Some(rec);
-                }
-                None => {}
+            object.hit(ray, Interval::new(ray_t.min, closest_hit));
+            if ray.hit.t < closest_hit {
+                closest_hit = ray.hit.t;
             }
         }
-
-        ret_val
     }
 }

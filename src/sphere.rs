@@ -1,28 +1,29 @@
+use std::f32::INFINITY;
+
 use crate::aabb::AABB;
-use crate::material::Material;
 use crate::util::PI;
-use crate::{hittable::HitRecord, interval::Interval, ray::Ray, vec3::Vec3};
+use crate::{interval::Interval, ray::Ray, vec3::Vec3};
 
 #[derive(Debug, Clone)]
 pub struct Sphere {
     center: Ray,
-    radius: f64,
+    radius: f32,
     material_idx: u16,
     pub bbox: AABB,
 }
 
 impl Sphere {
-    pub fn new(center: Vec3, radius: f64, material_idx: u16) -> Self {
+    pub fn new(center: Vec3, radius: f32, material_idx: u16) -> Self {
         let radius_vec = Vec3::splat(radius);
         let bbox = AABB::from_points(center - radius_vec, center + radius_vec);
         Self {
             center: Ray::new(center, Vec3::ZERO),
-            radius: f64::max(radius, 0f64),
+            radius: f32::max(radius, 0f32),
             material_idx,
             bbox,
         }
     }
-    pub fn new_moving(center1: Vec3, center2: Vec3, radius: f64, material_idx: u16) -> Self {
+    pub fn new_moving(center1: Vec3, center2: Vec3, radius: f32, material_idx: u16) -> Self {
         let center_ray = Ray::new(center1, center2 - center1);
         let radius_vec = Vec3::splat(radius);
         let box1 = AABB::from_points(
@@ -43,8 +44,8 @@ impl Sphere {
         }
     }
     #[inline]
-    pub fn hit(&self, ray: &Ray, ray_t: Interval) -> Option<HitRecord> {
-        let current_center = self.center.at(ray.time);
+    pub fn hit(&self, ray: &mut Ray, ray_t: Interval) {
+        let current_center = self.center.at(ray.hit.t);
         let origin_to_center = current_center - ray.origin;
         let a = ray.direction.length_squared();
         let h = ray.direction.dot(origin_to_center);
@@ -52,8 +53,9 @@ impl Sphere {
 
         let discriminant = h * h - a * c;
 
-        if discriminant < 0f64 {
-            return None;
+        if discriminant < 0f32 {
+            ray.hit.t = INFINITY;
+            return;
         }
 
         let sqrt_discriminant = discriminant.sqrt();
@@ -64,7 +66,8 @@ impl Sphere {
             root = (h + sqrt_discriminant) / a;
 
             if !ray_t.surrounds(root) {
-                return None;
+                ray.hit.t = INFINITY;
+                return;
             }
         }
 
@@ -72,22 +75,14 @@ impl Sphere {
         let t = root;
         let outward_normal = (point - current_center) / self.radius;
         let (u, v) = Self::get_uv(outward_normal);
-        let mut rec = HitRecord {
-            point,
-            normal: Vec3::default(),
-            t,
-            front_face: false,
-            material_idx: self.material_idx,
-            u,
-            v,
-        };
-
-        rec.set_face_normal(&ray, outward_normal);
-
-        Some(rec)
+        ray.hit.t = t;
+        ray.hit.u = u;
+        ray.hit.v = v;
+        ray.hit.outward_normal = outward_normal;
+        ray.hit.mat_idx = self.material_idx;
     }
 
-    pub fn get_uv(point: Vec3) -> (f64, f64) {
+    pub fn get_uv(point: Vec3) -> (f32, f32) {
         let theta = (-point.y).acos();
 
         let phi = (-point.z).atan2(point.x) + PI;

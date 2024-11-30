@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, f64::INFINITY, mem::swap};
+use std::{cmp::Ordering, f32::INFINITY, mem::swap};
 
 use crate::{
     aabb::AABB,
@@ -34,8 +34,8 @@ impl BVHTree {
         indices: &Vec<u32>,
         node: &BVHNode,
         axis: Axis,
-        pos: f64,
-    ) -> f64 {
+        pos: f32,
+    ) -> f32 {
         let mut left_box = AABB::EMPTY;
         let mut right_box = AABB::EMPTY;
 
@@ -52,7 +52,7 @@ impl BVHTree {
             }
         });
 
-        let cost = left_count as f64 * left_box.area() + right_count as f64 * right_box.area();
+        let cost = left_count as f32 * left_box.area() + right_count as f32 * right_box.area();
         if cost > 0.0 {
             cost
         } else {
@@ -69,80 +69,7 @@ impl BVHTree {
     pub fn from_hittable_vec(objects: Vec<Hittable>) -> Self {
         let mut indices: Vec<u32> = (0..objects.len()).map(|i| i as u32).collect();
         let mut nodes: Vec<BVHNode> = vec![Default::default(); objects.len() * 2 - 1];
-        fn subdivide_old(
-            nodes: &mut Vec<BVHNode>,
-            node_idx: usize,
-            nodes_used: &mut u32,
-            objects: &Vec<Hittable>,
-            indices: &mut Vec<u32>,
-        ) {
-            let axis = nodes[node_idx].bbox.longest_axis();
 
-            if nodes[node_idx].hittable_count <= 2 {
-                return;
-            }
-
-            let mut i = nodes[node_idx].first_hittable_idx as usize;
-            let mut j = (i as u32 + nodes[node_idx].hittable_count - 1) as usize;
-
-            while i <= j {
-                match box_compare(
-                    &objects[indices[i] as usize],
-                    &objects[indices[j] as usize],
-                    axis,
-                ) {
-                    Ordering::Less => {
-                        i += 1;
-                    }
-                    _ => {
-                        indices.swap(i, j);
-                        j -= 1;
-                    }
-                }
-            }
-
-            let left_count = i - nodes[node_idx].first_hittable_idx as usize;
-
-            if left_count == 0 || left_count == nodes[node_idx].hittable_count as usize {
-                return;
-            }
-
-            let left_child_idx: usize = *nodes_used as usize;
-            *nodes_used += 1;
-
-            let right_child_idx: usize = *nodes_used as usize;
-            *nodes_used += 1;
-
-            nodes[left_child_idx].first_hittable_idx = nodes[node_idx].first_hittable_idx;
-            nodes[left_child_idx].hittable_count = left_count as u32;
-            for i in nodes[left_child_idx].first_hittable_idx
-                ..nodes[left_child_idx].first_hittable_idx + nodes[left_child_idx].hittable_count
-            {
-                let obj_index = indices[i as usize];
-                nodes[left_child_idx].bbox = AABB::from_boxes(
-                    &nodes[left_child_idx].bbox,
-                    objects[obj_index as usize].get_bbox(),
-                );
-            }
-
-            nodes[right_child_idx].first_hittable_idx = i as u32;
-            nodes[right_child_idx].hittable_count =
-                nodes[node_idx].hittable_count - left_count as u32;
-
-            nodes[node_idx].left_node_idx = left_child_idx as u32;
-            nodes[node_idx].hittable_count = 0;
-            for i in nodes[right_child_idx].first_hittable_idx
-                ..nodes[right_child_idx].first_hittable_idx + nodes[right_child_idx].hittable_count
-            {
-                let obj_index = indices[i as usize];
-                nodes[right_child_idx].bbox = AABB::from_boxes(
-                    &nodes[right_child_idx].bbox,
-                    objects[obj_index as usize].get_bbox(),
-                );
-            }
-            subdivide(nodes, left_child_idx, nodes_used, objects, indices);
-            subdivide(nodes, right_child_idx, nodes_used, objects, indices);
-        }
         fn subdivide(
             nodes: &mut Vec<BVHNode>,
             node_idx: usize,
@@ -178,7 +105,11 @@ impl BVHTree {
             let axis = best_axis;
             let split_pos = best_pos;
 
-            if nodes[node_idx].hittable_count <= 10 {
+            let e = nodes[node_idx].bbox.extent();
+            let parent_area = e.x * e.y * e.y * e.z + e.z * e.x;
+            let parent_cost = nodes[node_idx].hittable_count as f32 * parent_area;
+
+            if best_cost >= parent_cost {
                 return;
             }
 
@@ -236,6 +167,7 @@ impl BVHTree {
                     objects[obj_index as usize].get_bbox(),
                 );
             }
+
             subdivide(nodes, left_child_idx, nodes_used, objects, indices);
             subdivide(nodes, right_child_idx, nodes_used, objects, indices);
         }
@@ -267,30 +199,26 @@ impl BVHTree {
         }
     }
 
-    pub fn hit(&self, ray: &Ray, ray_t: Interval) -> Option<HitRecord> {
+    pub fn hit(&self, ray: &mut Ray, ray_t: Interval) {
         let mut node = &self.nodes[0];
         let mut stack_idx = 0 as usize;
-        let mut stack = [node; 256];
+        let mut stack = [node; 64];
         let mut closest_hit = ray_t.max;
-        let mut return_val = None;
         loop {
             if node.is_leaf() {
                 (node.first_hittable_idx..node.first_hittable_idx + node.hittable_count).for_each(
                     |i| {
                         let obj_idx = self.indices[i as usize];
-                        let rec = self.objects[obj_idx as usize]
+                        self.objects[obj_idx as usize]
                             .hit(ray, Interval::new(ray_t.min, closest_hit));
-                        match rec {
-                            Some(rec) => {
-                                closest_hit = rec.t;
-                                return_val = Some(rec);
-                            }
-                            None => {}
+
+                        if ray.hit.t < closest_hit {
+                            closest_hit = ray.hit.t;
                         }
                     },
                 );
                 if stack_idx == 0 {
-                    break return_val;
+                    break;
                 } else {
                     stack_idx -= 1;
                     node = stack[stack_idx];
@@ -309,7 +237,7 @@ impl BVHTree {
             }
             if dist_1 == INFINITY {
                 if stack_idx == 0 {
-                    break return_val;
+                    break;
                 } else {
                     stack_idx -= 1;
                     node = stack[stack_idx];
@@ -323,51 +251,6 @@ impl BVHTree {
             }
         }
     }
-
-    /*     pub fn hit(&self, ray: &Ray, ray_t: Interval, node_idx: usize) -> HitRecord {
-        todo!();
-        let mut ret_val = HitRecord::MISS;
-        let node = &self.nodes[node_idx];
-        let mut closest_hit = ray_t.max;
-        let dist = node.bbox.intersects(ray, ray_t);
-
-        if dist < 0.0 {
-            return ret_val;
-        }
-
-        if node.is_leaf() {
-            for i in node.first_hittable_idx..node.first_hittable_idx + node.hittable_count {
-                let obj_index = self.indices[i as usize];
-                let object = &self.objects[obj_index as usize];
-                let rec = object.hit(ray, Interval::new(ray_t.min, closest_hit));
-                match rec.t >= 0.0 {
-                    true => {
-                        closest_hit = rec.t;
-                        ret_val = rec;
-                    }
-                    false => {}
-                }
-            }
-        } else {
-            let left_hit = self.hit(ray, ray_t, node.left_node_idx as usize);
-            let right_hit = self.hit(ray, ray_t, node.left_node_idx as usize + 1);
-
-            return match (left_hit, right_hit) {
-                (Some(l_hit), Some(r_hit)) => {
-                    if l_hit.t <= r_hit.t {
-                        Some(l_hit)
-                    } else {
-                        Some(r_hit)
-                    }
-                }
-                (Some(l_hit), None) => Some(l_hit),
-                (None, Some(r_hit)) => Some(r_hit),
-                (None, None) => None,
-            };
-        }
-
-        ret_val
-    } */
 }
 
 fn box_compare(a: &Hittable, b: &Hittable, axis: Axis) -> Ordering {

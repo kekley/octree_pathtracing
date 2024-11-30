@@ -5,14 +5,14 @@ pub enum Texture {
     Color(Vec3),
     Image(RTWImage),
     CheckerBoard {
-        inv_scale: f64,
+        inv_scale: f32,
         a: Box<Texture>,
         b: Box<Texture>,
     },
 }
 
 impl Texture {
-    pub fn value(&self, u: f64, v: f64, point: &Vec3) -> Vec3 {
+    pub fn value(&self, u: f32, v: f32, point: &Vec3) -> Vec3 {
         match self {
             Texture::Color(color) => return *color,
             Texture::Image(image) => {
@@ -23,16 +23,16 @@ impl Texture {
                 let u = Interval::new(0.0, 1.0).clamp(u);
                 let v = 1.0 - Interval::new(0.0, 1.0).clamp(v);
 
-                let i = (u * (image.image_width as f64)) as u32;
+                let i = (u * (image.image_width as f32)) as u32;
                 let j =
-                    (v * (image.image_height as f64)).min(image.image_height as f64 - 1.0) as u32;
+                    (v * (image.image_height as f32)).min(image.image_height as f32 - 1.0) as u32;
 
                 let color = image.pixel_data(i, j);
 
                 let val = Vec3::new(
-                    RTWImage::byte_to_float(color[0]) as f64,
-                    RTWImage::byte_to_float(color[1]) as f64,
-                    RTWImage::byte_to_float(color[2]) as f64,
+                    RTWImage::byte_to_float(color[0]) as f32,
+                    RTWImage::byte_to_float(color[1]) as f32,
+                    RTWImage::byte_to_float(color[2]) as f32,
                 );
                 val
             }

@@ -1,18 +1,18 @@
-use crate::util::INFINITY;
+use std::f32::INFINITY;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Interval {
-    pub min: f64,
-    pub max: f64,
+    pub min: f32,
+    pub max: f32,
 }
 
 impl Interval {
     pub const EMPTY: Interval = Interval::new(INFINITY, -INFINITY);
     pub const UNIVERSE: Interval = Interval::new(-INFINITY, INFINITY);
-    pub const ZEROISH_TO_INFINITY: Interval = Interval::new(0.001f64, INFINITY);
+    pub const ZEROISH_TO_INFINITY: Interval = Interval::new(0.001f32, INFINITY);
     #[inline]
 
-    pub const fn new(min: f64, max: f64) -> Self {
+    pub const fn new(min: f32, max: f32) -> Self {
         Self { min, max }
     }
     #[inline]
@@ -23,21 +23,21 @@ impl Interval {
     }
 
     #[inline]
-    pub fn size(&self) -> f64 {
+    pub fn size(&self) -> f32 {
         self.max - self.min
     }
     #[inline]
 
-    pub fn conains(&self, x: f64) -> bool {
+    pub fn conains(&self, x: f32) -> bool {
         x >= self.min && x <= self.max
     }
     #[inline]
 
-    pub fn surrounds(&self, x: f64) -> bool {
+    pub fn surrounds(&self, x: f32) -> bool {
         x > self.min && x < self.max
     }
     #[inline]
-    pub fn clamp(&self, x: f64) -> f64 {
+    pub fn clamp(&self, x: f32) -> f32 {
         if x < self.min {
             return self.min;
         } else if x > self.max {
@@ -47,7 +47,7 @@ impl Interval {
         return x;
     }
     #[inline]
-    pub fn expand(&self, delta: f64) -> Interval {
+    pub fn expand(&self, delta: f32) -> Interval {
         let padding = delta / 2.0;
         Interval {
             min: self.min - padding,

@@ -1,5 +1,5 @@
-use core::f64;
-use std::f64::INFINITY;
+use core::f32;
+use std::f32::INFINITY;
 
 use crate::{
     hittable::HitRecord,
@@ -42,14 +42,14 @@ impl AABB {
         }
     }
     #[inline]
-    pub fn area(&self) -> f64 {
+    pub fn area(&self) -> f32 {
         let size_x = self.x_interval.size();
         let size_y = self.y_interval.size();
         let size_z = self.z_interval.size();
         2.0 * (size_x * size_y + size_x * size_z + size_y * size_z)
     }
     #[inline]
-    pub fn centroid(&self, axis: Axis) -> f64 {
+    pub fn centroid(&self, axis: Axis) -> f32 {
         self.get_interval(axis).max - self.get_interval(axis).min
     }
     #[inline]
@@ -73,15 +73,23 @@ impl AABB {
     }
     #[inline]
     pub fn from_points(a: Vec3, b: Vec3) -> Self {
-        let x_interval = Interval::new(f64::min(a.x, b.x), f64::max(a.x, b.x));
-        let y_interval = Interval::new(f64::min(a.y, b.y), f64::max(a.y, b.y));
-        let z_interval = Interval::new(f64::min(a.z, b.z), f64::max(a.z, b.z));
+        let x_interval = Interval::new(f32::min(a.x, b.x), f32::max(a.x, b.x));
+        let y_interval = Interval::new(f32::min(a.y, b.y), f32::max(a.y, b.y));
+        let z_interval = Interval::new(f32::min(a.z, b.z), f32::max(a.z, b.z));
 
         Self {
             x_interval,
             y_interval,
             z_interval,
         }
+    }
+    #[inline]
+    pub fn extent(&self) -> Vec3 {
+        Vec3::new(
+            self.x_interval.size(),
+            self.y_interval.size(),
+            self.z_interval.size(),
+        )
     }
     #[inline]
     pub fn get_interval(&self, axis: Axis) -> &Interval {
@@ -92,7 +100,7 @@ impl AABB {
         }
     }
     #[inline]
-    pub fn intersects(&self, ray: &Ray, mut ray_t: Interval) -> f64 {
+    pub fn intersects(&self, ray: &Ray, mut ray_t: Interval) -> f32 {
         for axis in Axis::iter() {
             let axis_interval = self.get_interval(*axis);
             let axis_dir_inverse = ray.inv_dir.get_axis(*axis);
