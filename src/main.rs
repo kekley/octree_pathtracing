@@ -1,4 +1,5 @@
 extern crate ray_tracing;
+use core::str;
 use std::error::Error;
 use std::fs;
 use std::io::{Cursor, Read};
@@ -252,7 +253,7 @@ fn chunk() -> Result<(), Box<dyn Error>> {
         if let Some(segment) = chunk {
             let chunk_data = region.read_chunk_from_segment(segment);
 
-            let chunk = Chunk::from_slice(&chunk_data).unwrap();
+            let chunk = Chunk::from_slice(chunk_data).unwrap();
             let pos = Vec3::new(chunk.xpos as f32, 0.0 as f32, chunk.zpos as f32);
             let distance = ((pos * 16.0) - camera.look_from).length();
             if distance >= 128.0 {
@@ -276,7 +277,8 @@ fn chunk() -> Result<(), Box<dyn Error>> {
                             let mat = if (block.0 == "minecraft:grass_block") {
                                 material_manager.get_or_make_material_idx("minecraft:grass_block")
                             } else {
-                                material_manager.get_or_make_material_idx(&block.0)
+                                material_manager
+                                    .get_or_make_material_idx(str::from_utf8(block.0).unwrap())
                             };
                             let end_pos = start_pos + 1.0;
 
@@ -338,7 +340,7 @@ fn world() -> Result<(), Box<dyn Error>> {
     }
 
     let a = regions
-        .into_par_iter()
+        .into_iter()
         .filter(|region| {
             (((region.x * 32).pow(2) + (region.z * 32).pow(2)) as f32).sqrt()
                 <= chunk_view_distance as f32
@@ -346,11 +348,11 @@ fn world() -> Result<(), Box<dyn Error>> {
         .map(|region| {
             let segments = region.chunk_segments;
             let chunks = segments
-                .iter()
+                .into_par_iter()
                 .filter_map(|opt| {
                     if let Some(segment) = opt {
-                        let chunk = region.read_chunk_from_segment(*segment);
-                        let chunk = Chunk::from_slice(&chunk).unwrap();
+                        let chunk = region.read_chunk_from_segment(segment);
+                        let chunk = Chunk::from_slice(chunk).unwrap();
                         let dist = (((chunk.xpos * 16) as f32 - camera.look_from.x).powi(2)
                             + ((chunk.zpos * 16) as f32 - camera.look_from.z).powi(2))
                         .sqrt();
