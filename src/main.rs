@@ -16,14 +16,16 @@ use ray_tracing::AABB;
 use ray_tracing::{random_float, random_float_in_range, random_vec};
 use ray_tracing::{BVHTree, TextureManager};
 use ray_tracing::{HitList, Hittable};
-use spider_eye::{Chunk, ChunkData, Region, SpiderEyeError};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::vec;
+use spider_eye::{Chunk, ChunkData, Region, SpiderEyeError, World};
 
 pub const ASPECT_RATIO: f32 = 1.5;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let start = Instant::now();
 
-    chunk();
+    world()?;
 
     let finish = Instant::now();
     let duration = finish - start;
@@ -237,8 +239,8 @@ fn chunk() -> Result<(), Box<dyn Error>> {
 
     camera.aspect_ratio = 16.0 / 9.0;
     camera.image_width = 400;
-    camera.samples_per_pixel = 16;
-    camera.max_depth = 5;
+    camera.samples_per_pixel = 4;
+    camera.max_depth = 10;
     camera.v_fov = 70.0;
     camera.look_from = Vec3::new(0.0, -57.0, 0.0);
     camera.look_at = Vec3::new(10.0, -59.0, 10.0);
@@ -248,23 +250,21 @@ fn chunk() -> Result<(), Box<dyn Error>> {
 
     for chunk in region.chunk_segments {
         if let Some(segment) = chunk {
-            let chunk_data = region.read_chunk_from_segment(segment).unwrap();
+            let chunk_data = region.read_chunk_from_segment(segment);
 
-            let chunk = Chunk::from_data(&mut Cursor::new(chunk_data)).unwrap();
-
-            let data = ChunkData::from_compound(chunk.data);
-            let pos = Vec3::new(data.xpos as f32, 0.0 as f32, data.zpos as f32);
+            let chunk = Chunk::from_slice(&chunk_data).unwrap();
+            let pos = Vec3::new(chunk.xpos as f32, 0.0 as f32, chunk.zpos as f32);
             let distance = ((pos * 16.0) - camera.look_from).length();
-
             if distance >= 128.0 {
                 continue;
             }
+            let data = chunk.get_data();
 
             (-64..320).for_each(|y: i16| {
                 (0..16).for_each(|x: i16| {
                     (0..16).for_each(|z: i16| {
-                        let chunk_x = data.xpos * 16;
-                        let chunk_z = data.zpos * 16;
+                        let chunk_x = chunk.xpos * 16;
+                        let chunk_z = chunk.zpos * 16;
                         let block = data.get_block(x, y, z);
                         if !(block.0 == "minecraft:air") {
                             let start_pos = Vec3::new(
@@ -299,6 +299,84 @@ fn chunk() -> Result<(), Box<dyn Error>> {
     let mut file = File::create("./output.ppm").unwrap();
 
     file.write(&buf[..]).unwrap();
+
+    Ok(())
+}
+
+fn world() -> Result<(), Box<dyn Error>> {
+    let mut hitlist = HitList::new();
+    let mut material_manager = TextureManager::new();
+    let mut camera = Camera::new();
+
+    camera.aspect_ratio = 16.0 / 9.0;
+    camera.image_width = 400;
+    camera.samples_per_pixel = 4;
+    camera.max_depth = 10;
+    camera.v_fov = 70.0;
+    camera.look_from = Vec3::new(0.0, -57.0, 0.0);
+    camera.look_at = Vec3::new(10.0, -59.0, 10.0);
+    camera.v_up = Vec3::new(0.0, 1.0, 0.0);
+
+    camera.defocus_angle = 0.0;
+
+    //world stuff here
+    let world = World::new("./world");
+
+    let chunk_view_distance: i32 = 16;
+    let starting_chunk_x = (camera.look_from.x as i32) >> 4;
+    let starting_chunk_z = (camera.look_from.z as i32) >> 4;
+    // Estimate the number of regions based on chunk view distance
+    let estimated_regions = (chunk_view_distance * chunk_view_distance) as usize;
+
+    let mut regions: Vec<Region> = Vec::with_capacity(estimated_regions);
+    for x in starting_chunk_x..starting_chunk_x + chunk_view_distance {
+        for z in starting_chunk_z..starting_chunk_z + chunk_view_distance {
+            if let Some(region) = world.get_region_containing_chunk(x, z) {
+                regions.push(region.clone());
+            }
+        }
+    }
+
+    let a = regions
+        .into_par_iter()
+        .filter(|region| {
+            (((region.x * 32).pow(2) + (region.z * 32).pow(2)) as f32).sqrt()
+                <= chunk_view_distance as f32
+        })
+        .map(|region| {
+            let segments = region.chunk_segments;
+            let chunks = segments
+                .iter()
+                .filter_map(|opt| {
+                    if let Some(segment) = opt {
+                        let chunk = region.read_chunk_from_segment(*segment);
+                        let chunk = Chunk::from_slice(&chunk).unwrap();
+                        let dist = (((chunk.xpos * 16) as f32 - camera.look_from.x).powi(2)
+                            + ((chunk.zpos * 16) as f32 - camera.look_from.z).powi(2))
+                        .sqrt();
+                        if dist <= chunk_view_distance as f32 {
+                            return Some(chunk);
+                        } else {
+                            return None;
+                        }
+                    } else {
+                        return None;
+                    }
+                })
+                .collect::<Vec<_>>();
+            chunks
+        })
+        .collect::<Vec<_>>();
+
+    println!("{:?}", a.len());
+    //let tree = BVHTree::from_hit_list(&hitlist);
+
+    //let buf = camera.multi_threaded_render(&Hittable::BVH(tree), material_manager.clone());
+
+    //file to write to
+    //let mut file = File::create("./output.ppm").unwrap();
+
+    //file.write(&buf[..]).unwrap();
 
     Ok(())
 }
