@@ -249,7 +249,7 @@ fn chunk() -> Result<(), Box<dyn Error>> {
 
     camera.defocus_angle = 0.0;
 
-    for chunk in region.chunk_segments {
+    for chunk in region.compresssed_chunks {
         if let Some(segment) = chunk {
             let chunk_data = region.read_chunk_from_segment(segment);
 
@@ -346,7 +346,7 @@ fn world() -> Result<(), Box<dyn Error>> {
                 <= chunk_view_distance as f32
         })
         .map(|region| {
-            let segments = region.chunk_segments;
+            let segments = region.compresssed_chunks;
             let chunks = segments
                 .into_par_iter()
                 .filter_map(|opt| {
