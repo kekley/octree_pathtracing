@@ -17,7 +17,7 @@ use ray_tracing::AABB;
 use ray_tracing::{random_float, random_float_in_range, random_vec};
 use ray_tracing::{BVHTree, TextureManager};
 use ray_tracing::{HitList, Hittable};
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rayon::vec;
 use spider_eye::{Chunk, ChunkData, Region, SpiderEyeError, World};
 
@@ -230,9 +230,7 @@ fn chunk() -> Result<(), Box<dyn Error>> {
 
     region_file.read_to_end(&mut file_data).unwrap();
 
-    let file_data = Cursor::new(file_data);
-
-    let mut region = Region::from_stream(file_data)?;
+    let mut region = Region::from_bytes(file_data)?;
 
     let mut hitlist = HitList::new();
     let mut material_manager = TextureManager::new();
@@ -250,10 +248,10 @@ fn chunk() -> Result<(), Box<dyn Error>> {
     camera.defocus_angle = 0.0;
 
     for chunk in region.compresssed_chunks {
-        if let Some(segment) = chunk {
-            let chunk_data = region.read_chunk_from_segment(segment);
+        if let Some(compressed_chunk) = chunk {
+            let chunk_data = Region::decompress_chunk(&compressed_chunk);
 
-            let chunk = Chunk::from_slice(chunk_data).unwrap();
+            let chunk = Chunk::from_bytes(chunk_data).unwrap();
             let pos = Vec3::new(chunk.xpos as f32, 0.0 as f32, chunk.zpos as f32);
             let distance = ((pos * 16.0) - camera.look_from).length();
             if distance >= 128.0 {
@@ -322,15 +320,15 @@ fn world() -> Result<(), Box<dyn Error>> {
     camera.defocus_angle = 0.0;
 
     //world stuff here
-    let world = World::new("./world");
+    let world = World::new("./biggerworld");
 
-    let chunk_view_distance: i32 = 16;
+    let chunk_view_distance: i32 = 500;
     let starting_chunk_x = (camera.look_from.x as i32) >> 4;
     let starting_chunk_z = (camera.look_from.z as i32) >> 4;
     // Estimate the number of regions based on chunk view distance
     let estimated_regions = (chunk_view_distance * chunk_view_distance) as usize;
 
-    let mut regions: Vec<Region> = Vec::with_capacity(estimated_regions);
+    let mut regions: Vec<Region> = Vec::with_capacity(100);
     for x in starting_chunk_x..starting_chunk_x + chunk_view_distance {
         for z in starting_chunk_z..starting_chunk_z + chunk_view_distance {
             if let Some(region) = world.get_region_containing_chunk(x, z) {
@@ -340,26 +338,27 @@ fn world() -> Result<(), Box<dyn Error>> {
     }
 
     let a = regions
-        .into_iter()
+        .par_iter()
         .filter(|region| {
             (((region.x * 32).pow(2) + (region.z * 32).pow(2)) as f32).sqrt()
                 <= chunk_view_distance as f32
         })
         .map(|region| {
-            let segments = region.compresssed_chunks;
-            let chunks = segments
-                .into_par_iter()
+            let chunks = region
+                .compresssed_chunks
+                .clone()
+                .par_iter()
                 .filter_map(|opt| {
-                    if let Some(segment) = opt {
-                        let chunk = region.read_chunk_from_segment(segment);
-                        let chunk = Chunk::from_slice(chunk).unwrap();
+                    if let Some(compressed_data) = opt {
+                        let decompressed = Region::decompress_chunk(&compressed_data);
+                        let chunk = Chunk::from_bytes(decompressed).unwrap();
                         let dist = (((chunk.xpos * 16) as f32 - camera.look_from.x).powi(2)
                             + ((chunk.zpos * 16) as f32 - camera.look_from.z).powi(2))
                         .sqrt();
                         if dist <= chunk_view_distance as f32 {
                             return Some(chunk);
                         } else {
-                            return None;
+                            return Some(chunk);
                         }
                     } else {
                         return None;
