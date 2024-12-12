@@ -22,14 +22,14 @@ use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
 use rayon::{result, vec};
-use spider_eye::{Chunk, ChunkData, Region, SpiderEyeError, World};
+use spider_eye::{Chunk, ChunkCoords, Region, SpiderEyeError, World, WorldCoords};
 
 pub const ASPECT_RATIO: f32 = 1.5;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let start = Instant::now();
 
-    world()?;
+    blocks()?;
 
     let finish = Instant::now();
     let duration = finish - start;
@@ -251,19 +251,21 @@ fn world() -> Result<(), Box<dyn Error>> {
     let starting_chunk_z = (camera.look_from.z as i32) >> 4;
     // Estimate the number of regions based on chunk view distance
     let estimated_regions = (chunk_view_distance * chunk_view_distance) as usize;
-
     let result = Vec::with_capacity(200);
     let mutex = Mutex::new(result);
     (-100..100).for_each(|z| {
         let a: Vec<_> = (-100..100)
             .into_par_iter()
-            .filter_map(|x| world.get_chunk(x, z))
+            .filter_map(|x| world.get_chunk(ChunkCoords::new(x, z)))
             .collect();
         let mut result = mutex.lock().unwrap();
         result.extend(a);
     });
+
+    println!("{:?}", world.global_palette);
     let result = mutex.into_inner().unwrap();
     println!("{:?}", result.len());
+
     //let tree = BVHTree::from_hit_list(&hitlist);
 
     //let buf = camera.multi_threaded_render(&Hittable::BVH(tree), material_manager.clone());
@@ -272,6 +274,73 @@ fn world() -> Result<(), Box<dyn Error>> {
     //let mut file = File::create("./output.ppm").unwrap();
 
     //file.write(&buf[..]).unwrap();
+
+    Ok(())
+}
+
+fn blocks() -> Result<(), Box<dyn Error>> {
+    let mut hitlist = HitList::new();
+    let mut material_manager = TextureManager::new();
+    let mut camera = Camera::new();
+
+    camera.aspect_ratio = 16.0 / 9.0;
+    camera.image_width = 800;
+    camera.samples_per_pixel = 32;
+    camera.max_depth = 10;
+    camera.v_fov = 70.0;
+    camera.look_from = Vec3::new(-10.0, 90.0, -10.0);
+    camera.look_at = Vec3::new(0.0, 80.0, 0.0);
+    camera.v_up = Vec3::new(0.0, 1.0, 0.0);
+
+    camera.defocus_angle = 0.0;
+
+    //world stuff here
+    let world = World::new("./biggerworld");
+
+    let chunk_view_distance: i32 = 500;
+    let starting_chunk_x = (camera.look_from.x as i32) >> 4;
+    let starting_chunk_z = (camera.look_from.z as i32) >> 4;
+    // Estimate the number of regions based on chunk view distance
+    let estimated_regions = (chunk_view_distance * chunk_view_distance) as usize;
+
+    (64..80).for_each(|y| {
+        (0..16).for_each(|x| {
+            (0..16).for_each(|z| {
+                let block = world.get_block(WorldCoords { x: x, y: y, z: z });
+                let mat = material_manager.get_or_make_material_idx(
+                    world
+                        .global_palette
+                        .read()
+                        .unwrap()
+                        .get_index(block as usize)
+                        .unwrap()
+                        .0,
+                );
+                match mat {
+                    Ok(ind) => {
+                        let start_pos = Vec3::new(x as f32, y as f32, z as f32);
+                        let end_pos = start_pos + 1.0;
+                        hitlist.add(Hittable::Box(Cuboid::new(
+                            AABB::from_points(start_pos, end_pos),
+                            ind,
+                        )));
+                    }
+                    Err(_) => {}
+                }
+            });
+        });
+    });
+
+    println!("{:?}", world.global_palette);
+
+    let tree = BVHTree::from_hit_list(&hitlist);
+
+    let buf = camera.multi_threaded_render(&Hittable::BVH(tree), material_manager.clone());
+
+    //file to write to
+    let mut file = File::create("./output.ppm").unwrap();
+
+    file.write(&buf[..]).unwrap();
 
     Ok(())
 }

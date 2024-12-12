@@ -4,7 +4,7 @@ use crate::{
     aabb::AABB,
     hittable::HitRecord,
     interval::Interval,
-    material::Material,
+    material::{self, Material},
     ray::Ray,
     vec3::{Axis, Vec3},
     TextureManager,
@@ -21,21 +21,21 @@ pub enum Face {
 #[derive(Debug, Clone)]
 pub struct Cuboid {
     pub bbox: AABB,
-    materials_idx: [u16; 6],
+    material_idx: u16,
 }
 pub const EPSILON: f32 = 0.00000000001;
 
 impl Cuboid {
-    pub fn new(bbox: AABB, material_idx: u16) -> Self {
-        Self {
-            bbox,
-            materials_idx: [material_idx; 6],
-        }
+    pub fn get_bbox(&self) -> AABB {
+        self.bbox.clone()
     }
-    pub fn new_multi_texture(bbox: AABB, materials_idx: [u16; 6]) -> Self {
+    pub fn new(bbox: AABB, material_idx: u16) -> Self {
+        Self { bbox, material_idx }
+    }
+    pub fn new_multi_texture(bbox: AABB, materials_idx: u16) -> Self {
         Self {
             bbox,
-            materials_idx: materials_idx,
+            material_idx: materials_idx,
         }
     }
 
@@ -137,6 +137,6 @@ impl Cuboid {
         ray.hit.v = v;
         ray.hit.t = interval.min;
         ray.hit.outward_normal = normal;
-        ray.hit.mat_idx = self.materials_idx[mat_index];
+        ray.hit.mat_idx = self.material_idx;
     }
 }

@@ -22,16 +22,16 @@ impl TextureManager {
             resource_map: HashMap::default(),
         }
     }
-    pub fn get_or_make_material_idx(&mut self, resource_name: &str) -> u16 {
+    pub fn get_or_make_material_idx(&mut self, resource_name: &str) -> Result<u16, ()> {
         if self.resource_map.contains_key(resource_name) {
-            return *self.resource_map.get(resource_name).unwrap();
+            return Ok(*self.resource_map.get(resource_name).unwrap());
         } else {
             let image = RTWImage::load(
                 &(ASSET_PATH.to_owned()
                     + "/"
                     + resource_name.trim_start_matches("minecraft:")
                     + ".png"),
-            );
+            )?;
 
             let texture = Texture::Image(image);
 
@@ -47,7 +47,7 @@ impl TextureManager {
                 .insert(resource_name.into(), self.num_materials);
 
             self.num_materials += 1;
-            return *self.resource_map.get(resource_name).unwrap();
+            return Ok(*self.resource_map.get(resource_name).unwrap());
         }
     }
 

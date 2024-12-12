@@ -2,7 +2,7 @@ use std::{cmp::Ordering, f32::INFINITY, mem::swap};
 
 use crate::{
     aabb::AABB,
-    hittable::{HitList, HitRecord, Hittable},
+    hittable::{HitList, Hittable},
     interval::Interval,
     ray::Ray,
     vec3::Axis,
@@ -45,10 +45,10 @@ impl BVHTree {
             let obj = &objects[indices[node.left_node_idx as usize + i as usize] as usize];
             if obj.get_bbox().centroid(axis) < pos {
                 left_count += 1;
-                left_box = AABB::from_boxes(&left_box, obj.get_bbox());
+                left_box = AABB::from_boxes(&left_box, &obj.get_bbox());
             } else {
                 right_count += 1;
-                right_box = AABB::from_boxes(&right_box, obj.get_bbox());
+                right_box = AABB::from_boxes(&right_box, &obj.get_bbox());
             }
         });
 
@@ -148,7 +148,7 @@ impl BVHTree {
                 let obj_index = indices[i as usize];
                 nodes[left_child_idx].bbox = AABB::from_boxes(
                     &nodes[left_child_idx].bbox,
-                    objects[obj_index as usize].get_bbox(),
+                    &objects[obj_index as usize].get_bbox(),
                 );
             }
 
@@ -164,7 +164,7 @@ impl BVHTree {
                 let obj_index = indices[i as usize];
                 nodes[right_child_idx].bbox = AABB::from_boxes(
                     &nodes[right_child_idx].bbox,
-                    objects[obj_index as usize].get_bbox(),
+                    &objects[obj_index as usize].get_bbox(),
                 );
             }
 
@@ -180,7 +180,7 @@ impl BVHTree {
         root_node.hittable_count = objects.len() as u32;
         let mut bbox = AABB::EMPTY;
         for obj in &objects {
-            bbox = AABB::from_boxes(&bbox, obj.get_bbox())
+            bbox = AABB::from_boxes(&bbox, &obj.get_bbox())
         }
 
         root_node.bbox = bbox;
@@ -254,8 +254,10 @@ impl BVHTree {
 }
 
 fn box_compare(a: &Hittable, b: &Hittable, axis: Axis) -> Ordering {
-    let a_axis_interval = a.get_bbox().get_interval(axis);
-    let b_axis_interval = b.get_bbox().get_interval(axis);
+    let binding = a.get_bbox();
+    let a_axis_interval = binding.get_interval(axis);
+    let binding = b.get_bbox();
+    let b_axis_interval = binding.get_interval(axis);
 
     match a_axis_interval.min.total_cmp(&b_axis_interval.min) {
         Ordering::Less => Ordering::Less,

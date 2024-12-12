@@ -13,6 +13,7 @@ mod texture;
 mod texture_manager;
 mod util;
 mod vec3;
+mod voxel_scene;
 
 pub use {
     aabb::*, bvh::*, camera::*, cuboid::*, hittable::*, interval::*, material::*, ray::*,

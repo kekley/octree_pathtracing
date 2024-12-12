@@ -10,7 +10,7 @@ pub struct RTWImage {
 }
 
 impl RTWImage {
-    pub fn load(file_path: &str) -> Self {
+    pub fn load(file_path: &str) -> Result<Self, ()> {
         let mut tmp = Self {
             bytes_per_pixel: 0,
             fdata: vec![],
@@ -21,7 +21,7 @@ impl RTWImage {
         };
         let load_result = load(file_path);
         match load_result {
-            stb_image::image::LoadResult::Error(e) => panic!("Error: {}, path: {}", e, file_path),
+            stb_image::image::LoadResult::Error(e) => return Err(()),
             stb_image::image::LoadResult::ImageU8(image) => {
                 tmp.bdata = image.data;
                 tmp.image_width = image.width as u32;
@@ -39,7 +39,7 @@ impl RTWImage {
                 tmp.convert_to_bytes();
             }
         }
-        tmp
+        Ok(tmp)
     }
 
     pub fn float_to_byte(value: f32) -> u8 {

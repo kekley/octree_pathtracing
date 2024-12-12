@@ -6,47 +6,29 @@ use crate::{interval::Interval, ray::Ray, vec3::Vec3};
 
 #[derive(Debug, Clone)]
 pub struct Sphere {
-    center: Ray,
+    center: Vec3,
     radius: f32,
     material_idx: u16,
-    pub bbox: AABB,
 }
 
 impl Sphere {
     pub fn new(center: Vec3, radius: f32, material_idx: u16) -> Self {
-        let radius_vec = Vec3::splat(radius);
-        let bbox = AABB::from_points(center - radius_vec, center + radius_vec);
         Self {
-            center: Ray::new(center, Vec3::ZERO),
-            radius: f32::max(radius, 0f32),
+            center: center,
+            radius: radius,
             material_idx,
-            bbox,
         }
     }
-    pub fn new_moving(center1: Vec3, center2: Vec3, radius: f32, material_idx: u16) -> Self {
-        let center_ray = Ray::new(center1, center2 - center1);
-        let radius_vec = Vec3::splat(radius);
-        let box1 = AABB::from_points(
-            center_ray.at(0.0) - radius_vec,
-            center_ray.at(0.0) + radius_vec,
-        );
 
-        let box2 = AABB::from_points(
-            center_ray.at(1.0) - radius_vec,
-            center_ray.at(1.0) + radius_vec,
-        );
-        let bbox = AABB::from_boxes(&box1, &box2);
-        Self {
-            center: center_ray,
-            radius: radius.max(0.0),
-            material_idx,
-            bbox,
-        }
+    pub fn get_bbox(&self) -> AABB {
+        let radius_vec: Vec3 = Vec3::splat(self.radius);
+
+        let bbox = AABB::from_points(self.center - radius_vec, self.center + radius_vec);
+        bbox
     }
     #[inline]
     pub fn hit(&self, ray: &mut Ray, ray_t: Interval) {
-        let current_center = self.center.at(ray.hit.t);
-        let origin_to_center = current_center - ray.origin;
+        let origin_to_center = self.center - ray.origin;
         let a = ray.direction.length_squared();
         let h = ray.direction.dot(origin_to_center);
         let c = origin_to_center.length_squared() - self.radius * self.radius;
@@ -73,7 +55,7 @@ impl Sphere {
 
         let point = ray.at(root);
         let t = root;
-        let outward_normal = (point - current_center) / self.radius;
+        let outward_normal = (point - self.center) / self.radius;
         let (u, v) = Self::get_uv(outward_normal);
         ray.hit.t = t;
         ray.hit.u = u;
