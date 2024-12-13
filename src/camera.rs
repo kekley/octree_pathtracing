@@ -1,10 +1,14 @@
 use fastrand::Rng;
 use rayon::prelude::*;
-use std::{cmp::max, f32::INFINITY, io::Write, sync::atomic::AtomicU32};
+use std::{
+    cmp::max,
+    f32::INFINITY,
+    io::Write,
+    sync::{atomic::AtomicU32, Arc},
+};
 
 use crate::{
-    bvh::BVHTree,
-    hittable::{HitList, Hittable},
+    hittable::Hittable,
     interval::Interval,
     ray::Ray,
     util::{
@@ -67,7 +71,7 @@ impl Camera {
             defocus_disk_v: Vec3::ZERO,
         }
     }
-    pub fn render(&mut self, world: &Hittable, materials: TextureManager) -> Vec<u8> {
+    pub fn render(&mut self, world: &Hittable, materials: Arc<TextureManager>) -> Vec<u8> {
         self.initialize();
         let mut buf = Vec::with_capacity((self.image_height * self.image_height * 11) as usize);
         buf.write(format!("P3\n{}\n{}\n255\n", self.image_width, self.image_height,).as_bytes())
@@ -87,7 +91,11 @@ impl Camera {
         }
         buf
     }
-    pub fn multi_threaded_render(mut self, world: &Hittable, materials: TextureManager) -> Vec<u8> {
+    pub fn multi_threaded_render(
+        mut self,
+        world: &Hittable,
+        materials: &TextureManager,
+    ) -> Vec<u8> {
         self.initialize();
         let mut buf = Vec::with_capacity((self.image_height * self.image_width * 11) as usize);
         buf.write(format!("P3\n{}\n{}\n255\n", self.image_width, self.image_height).as_bytes())
@@ -138,6 +146,90 @@ impl Camera {
         for row in &rows {
             for color in row {
                 write_rgb8_color_as_text_to_stream(&color, &mut buf);
+            }
+        }
+
+        buf
+    }
+
+    pub fn multi_threaded_render_tiled(
+        mut self,
+        world: &Hittable,
+        materials: &TextureManager,
+    ) -> Vec<u8> {
+        self.initialize();
+        let mut buf = Vec::with_capacity((self.image_height * self.image_width * 11) as usize);
+        buf.write(format!("P3\n{}\n{}\n255\n", self.image_width, self.image_height).as_bytes())
+            .unwrap();
+
+        // Tile dimensions
+        let tile_size = 32;
+        let tiles_x = (self.image_width + tile_size - 1) / tile_size;
+        let tiles_y = (self.image_height + tile_size - 1) / tile_size;
+
+        let tiles_done = AtomicU32::new(0);
+
+        // Collect pixel data for each tile
+        let tiles: Vec<Vec<Vec<Vec3>>> = (0..tiles_y)
+            .into_par_iter()
+            .map(|tile_y| {
+                (0..tiles_x)
+                    .into_par_iter()
+                    .map(|tile_x| {
+                        let res = (0..tile_size)
+                            .flat_map(|dy| {
+                                (0..tile_size).map({
+                                    let mut rng = Rng::new();
+                                    let mat = materials.clone();
+
+                                    {
+                                        move |dx| {
+                                            let x = tile_x * tile_size + dx;
+                                            let y = tile_y * tile_size + dy;
+                                            let mut pixel_color = Vec3::ZERO;
+                                            for _ in 0..self.samples_per_pixel {
+                                                let mut ray = Camera::thread_safe_get_ray(
+                                                    self.center,
+                                                    self.pixel_delta_u,
+                                                    self.pixel_delta_v,
+                                                    self.pixel00_loc,
+                                                    self.defocus_angle,
+                                                    self.defocus_disk_u,
+                                                    self.defocus_disk_v,
+                                                    &mut rng,
+                                                    x,
+                                                    y,
+                                                );
+                                                pixel_color += Camera::ray_color(
+                                                    &mut rng,
+                                                    &mut ray,
+                                                    self.max_depth,
+                                                    &world,
+                                                    &mat,
+                                                );
+                                            }
+                                            pixel_color * self.pixel_sample_scale
+                                        }
+                                    }
+                                })
+                            })
+                            .collect::<Vec<_>>();
+                        let prev = tiles_done.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        println!(
+                            "{}% done.",
+                            ((prev + 1) as f32 / (tiles_x * tiles_y) as f32) * 100.0
+                        );
+                        res
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+
+        for tile in &tiles {
+            for row in tile {
+                for color in row {
+                    write_rgb8_color_as_text_to_stream(color, &mut buf);
+                }
             }
         }
 

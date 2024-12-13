@@ -1,28 +1,18 @@
 extern crate ray_tracing;
-use core::str;
 use std::error::Error;
-use std::fs;
-use std::io::{Cursor, Read};
-use std::sync::Mutex;
+use std::io::Read;
+use std::sync::{Arc, Mutex};
 use std::{fs::File, io::Write, time::Instant};
 
-use fastrand::Rng;
 use ray_tracing::Camera;
 use ray_tracing::Cuboid;
-use ray_tracing::Material;
-use ray_tracing::RTWImage;
-use ray_tracing::Sphere;
-use ray_tracing::Texture;
 use ray_tracing::Vec3;
 use ray_tracing::AABB;
-use ray_tracing::{random_float, random_float_in_range, random_vec};
 use ray_tracing::{BVHTree, TextureManager};
 use ray_tracing::{HitList, Hittable};
-use rayon::iter::{
-    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
-};
-use rayon::{result, vec};
-use spider_eye::{Chunk, ChunkCoords, Region, SpiderEyeError, World, WorldCoords};
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+use rayon::ThreadPoolBuilder;
+use spider_eye::{ChunkCoords, World, WorldCoords};
 
 pub const ASPECT_RATIO: f32 = 1.5;
 
@@ -227,75 +217,24 @@ fn cube() {
 }
  */
 
-fn world() -> Result<(), Box<dyn Error>> {
-    let mut hitlist = HitList::new();
-    let mut material_manager = TextureManager::new();
-    let mut camera = Camera::new();
-
-    camera.aspect_ratio = 16.0 / 9.0;
-    camera.image_width = 400;
-    camera.samples_per_pixel = 4;
-    camera.max_depth = 10;
-    camera.v_fov = 70.0;
-    camera.look_from = Vec3::new(0.0, -57.0, 0.0);
-    camera.look_at = Vec3::new(10.0, -59.0, 10.0);
-    camera.v_up = Vec3::new(0.0, 1.0, 0.0);
-
-    camera.defocus_angle = 0.0;
-
-    //world stuff here
-    let mut world = World::new("./biggerworld");
-
-    let chunk_view_distance: i32 = 500;
-    let starting_chunk_x = (camera.look_from.x as i32) >> 4;
-    let starting_chunk_z = (camera.look_from.z as i32) >> 4;
-    // Estimate the number of regions based on chunk view distance
-    let estimated_regions = (chunk_view_distance * chunk_view_distance) as usize;
-    let result = Vec::with_capacity(200);
-    let mutex = Mutex::new(result);
-    (-100..100).for_each(|z| {
-        let a: Vec<_> = (-100..100)
-            .into_par_iter()
-            .filter_map(|x| world.get_chunk(ChunkCoords::new(x, z)))
-            .collect();
-        let mut result = mutex.lock().unwrap();
-        result.extend(a);
-    });
-
-    println!("{:?}", world.global_palette);
-    let result = mutex.into_inner().unwrap();
-    println!("{:?}", result.len());
-
-    //let tree = BVHTree::from_hit_list(&hitlist);
-
-    //let buf = camera.multi_threaded_render(&Hittable::BVH(tree), material_manager.clone());
-
-    //file to write to
-    //let mut file = File::create("./output.ppm").unwrap();
-
-    //file.write(&buf[..]).unwrap();
-
-    Ok(())
-}
-
 fn blocks() -> Result<(), Box<dyn Error>> {
     let mut hitlist = HitList::new();
     let mut material_manager = TextureManager::new();
     let mut camera = Camera::new();
 
     camera.aspect_ratio = 16.0 / 9.0;
-    camera.image_width = 800;
+    camera.image_width = 400;
     camera.samples_per_pixel = 32;
     camera.max_depth = 10;
-    camera.v_fov = 70.0;
-    camera.look_from = Vec3::new(-10.0, 90.0, -10.0);
-    camera.look_at = Vec3::new(0.0, 80.0, 0.0);
+    camera.v_fov = 90.0;
+    camera.look_from = Vec3::new(-751.0, 161.0, 574.0);
+    camera.look_at = Vec3::new(-788.0, 158.0, 550.0);
     camera.v_up = Vec3::new(0.0, 1.0, 0.0);
 
     camera.defocus_angle = 0.0;
 
     //world stuff here
-    let world = World::new("./biggerworld");
+    let mut world = World::new("./hous");
 
     let chunk_view_distance: i32 = 500;
     let starting_chunk_x = (camera.look_from.x as i32) >> 4;
@@ -303,9 +242,14 @@ fn blocks() -> Result<(), Box<dyn Error>> {
     // Estimate the number of regions based on chunk view distance
     let estimated_regions = (chunk_view_distance * chunk_view_distance) as usize;
 
-    (64..80).for_each(|y| {
-        (0..16).for_each(|x| {
-            (0..16).for_each(|z| {
+    let builder = ThreadPoolBuilder::new().num_threads(8);
+    builder.build_global().unwrap();
+    (135..192).for_each(|y| {
+        (-817..-773).for_each(|x| {
+            (490..580).for_each(|z| {
+                if (x == -808 && z == 507 && y == 144) {
+                    println!("lol");
+                }
                 let block = world.get_block(WorldCoords { x: x, y: y, z: z });
                 let mat = material_manager.get_or_make_material_idx(
                     world
@@ -325,17 +269,20 @@ fn blocks() -> Result<(), Box<dyn Error>> {
                             ind,
                         )));
                     }
-                    Err(_) => {}
+                    Err(path) => {
+                        //println!("{}", path)
+                    }
                 }
             });
         });
     });
 
     println!("{:?}", world.global_palette);
+    println!("hitlist: {}", hitlist.objects.len());
 
     let tree = BVHTree::from_hit_list(&hitlist);
 
-    let buf = camera.multi_threaded_render(&Hittable::BVH(tree), material_manager.clone());
+    let buf = camera.multi_threaded_render(&Hittable::BVH(tree), &material_manager);
 
     //file to write to
     let mut file = File::create("./output.ppm").unwrap();

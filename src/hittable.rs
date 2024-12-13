@@ -68,7 +68,7 @@ impl HitList {
     }
 
     pub fn add(&mut self, object: Hittable) {
-        self.bbox = AABB::from_boxes(&self.bbox, &object.get_bbox());
+        self.bbox = AABB::from_aabb(&self.bbox, &object.get_bbox());
         self.objects.push(object);
     }
 

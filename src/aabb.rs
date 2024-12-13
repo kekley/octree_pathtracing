@@ -1,104 +1,109 @@
 use core::f32;
-use std::f32::INFINITY;
+use std::{
+    arch::x86_64::{
+        _mm_cmple_ps, _mm_cvtss_f32, _mm_max_ps, _mm_min_ps, _mm_movemask_ps, _mm_mul_ps,
+        _mm_set1_ps, _mm_sub_ps,
+    },
+    f32::{INFINITY, NEG_INFINITY},
+};
 
 use crate::{
-    hittable::HitRecord,
-    interval::{self, Interval},
+    interval::Interval,
     ray::Ray,
     vec3::{Axis, Vec3},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct AABB {
-    pub x_interval: Interval,
-    pub y_interval: Interval,
-    pub z_interval: Interval,
+    pub min: Vec3,
+    pub max: Vec3,
 }
 
 impl Default for AABB {
     fn default() -> Self {
         AABB {
-            x_interval: Interval::EMPTY,
-            y_interval: Interval::EMPTY,
-            z_interval: Interval::EMPTY,
+            min: Vec3::ZERO,
+            max: Vec3::ZERO,
         }
     }
 }
 
 impl AABB {
-    pub const EMPTY: AABB = AABB::new(Interval::EMPTY, Interval::EMPTY, Interval::EMPTY);
-    pub const UNIVERSE: AABB =
-        AABB::new(Interval::UNIVERSE, Interval::UNIVERSE, Interval::UNIVERSE);
+    pub const EMPTY: AABB = AABB::new(
+        Vec3::new(INFINITY, INFINITY, INFINITY),
+        Vec3::new(NEG_INFINITY, NEG_INFINITY, NEG_INFINITY),
+    );
+    pub const UNIVERSE: AABB = AABB::new(
+        Vec3::new(NEG_INFINITY, NEG_INFINITY, NEG_INFINITY),
+        Vec3::new(INFINITY, INFINITY, INFINITY),
+    );
+
+    #[inline]
+    pub const fn new(min: Vec3, max: Vec3) -> Self {
+        Self { min, max }
+    }
+
     #[inline]
     pub fn longest_axis(&self) -> Axis {
-        let longest = self.x_interval.size().max(self.y_interval.size());
-        let longest = longest.max(self.z_interval.size());
-        if longest == self.x_interval.size() {
+        let extents = self.extent();
+        if extents.x > extents.y && extents.x > extents.z {
             Axis::X
-        } else if longest == self.y_interval.size() {
+        } else if extents.y > extents.x && extents.y > extents.z {
             Axis::Y
         } else {
             Axis::Z
         }
     }
+
     #[inline]
     pub fn area(&self) -> f32 {
-        let size_x = self.x_interval.size();
-        let size_y = self.y_interval.size();
-        let size_z = self.z_interval.size();
-        2.0 * (size_x * size_y + size_x * size_z + size_y * size_z)
+        let e = self.extent();
+        2.0 * (e.x * e.y + e.x * e.z + e.y * e.z)
     }
+
     #[inline]
     pub fn centroid(&self, axis: Axis) -> f32 {
-        self.get_interval(axis).max - self.get_interval(axis).min
+        (self.get_interval(axis).min + self.get_interval(axis).max) / 2.0
     }
+
     #[inline]
-    pub const fn new(interval_x: Interval, interval_y: Interval, interval_z: Interval) -> Self {
-        Self {
-            x_interval: interval_x,
-            y_interval: interval_y,
-            z_interval: interval_z,
+    pub fn from_aabb(a: &AABB, b: &AABB) -> Self {
+        AABB {
+            min: Vec3::new(
+                a.min.x.min(b.min.x),
+                a.min.y.min(b.min.y),
+                a.min.z.min(b.min.z),
+            ),
+            max: Vec3::new(
+                a.max.x.max(b.max.x),
+                a.max.y.max(b.max.y),
+                a.max.z.max(b.max.z),
+            ),
         }
     }
-    #[inline]
-    pub fn from_boxes(a: &AABB, b: &AABB) -> Self {
-        let x = Interval::from_intervals(&a.x_interval, &b.x_interval);
-        let y = Interval::from_intervals(&a.y_interval, &b.y_interval);
-        let z = Interval::from_intervals(&a.z_interval, &b.z_interval);
-        Self {
-            x_interval: x,
-            y_interval: y,
-            z_interval: z,
-        }
-    }
+
     #[inline]
     pub fn from_points(a: Vec3, b: Vec3) -> Self {
-        let x_interval = Interval::new(f32::min(a.x, b.x), f32::max(a.x, b.x));
-        let y_interval = Interval::new(f32::min(a.y, b.y), f32::max(a.y, b.y));
-        let z_interval = Interval::new(f32::min(a.z, b.z), f32::max(a.z, b.z));
-
-        Self {
-            x_interval,
-            y_interval,
-            z_interval,
+        AABB {
+            min: Vec3::new(a.x.min(b.x), a.y.min(b.y), a.z.min(b.z)),
+            max: Vec3::new(a.x.max(b.x), a.y.max(b.y), a.z.max(b.z)),
         }
     }
+
     #[inline]
     pub fn extent(&self) -> Vec3 {
-        Vec3::new(
-            self.x_interval.size(),
-            self.y_interval.size(),
-            self.z_interval.size(),
-        )
+        self.max - self.min
     }
+
     #[inline]
-    pub fn get_interval(&self, axis: Axis) -> &Interval {
+    pub fn get_interval(&self, axis: Axis) -> Interval {
         match axis {
-            Axis::X => &self.x_interval,
-            Axis::Y => &self.y_interval,
-            Axis::Z => &self.z_interval,
+            Axis::X => Interval::new(self.min.x, self.max.x),
+            Axis::Y => Interval::new(self.min.y, self.max.y),
+            Axis::Z => Interval::new(self.min.z, self.max.z),
         }
     }
+
     #[inline]
     pub fn intersects(&self, ray: &Ray, mut ray_t: Interval) -> f32 {
         for axis in Axis::iter() {
@@ -110,17 +115,49 @@ impl AABB {
 
             if t0 < t1 {
                 ray_t.min = t0.max(ray_t.min);
-
                 ray_t.max = t1.min(ray_t.max);
             } else {
                 ray_t.min = t1.max(ray_t.min);
-
                 ray_t.max = t0.min(ray_t.max);
             }
+
             if ray_t.max <= ray_t.min {
                 return INFINITY;
             }
         }
-        return ray_t.min;
+        ray_t.min
+    }
+    #[inline]
+    pub fn intersects_sse(&self, ray: &Ray, mut ray_t: Interval) -> f32 {
+        unsafe {
+            let ray_t_min = _mm_set1_ps(ray_t.min);
+            let ray_t_max = _mm_set1_ps(ray_t.max);
+            let mut t_min = ray_t_min;
+            let mut t_max = ray_t_max;
+
+            for axis in Axis::iter() {
+                let axis_interval = self.get_interval(*axis);
+                let axis_dir_inverse = _mm_set1_ps(ray.inv_dir.get_axis(*axis));
+                let ray_origin_axis = _mm_set1_ps(ray.origin.get_axis(*axis));
+
+                let t0 = _mm_mul_ps(
+                    _mm_sub_ps(_mm_set1_ps(axis_interval.min), ray_origin_axis),
+                    axis_dir_inverse,
+                );
+                let t1 = _mm_mul_ps(
+                    _mm_sub_ps(_mm_set1_ps(axis_interval.max), ray_origin_axis),
+                    axis_dir_inverse,
+                );
+
+                t_min = _mm_max_ps(t_min, _mm_min_ps(t0, t1));
+                t_max = _mm_min_ps(t_max, _mm_max_ps(t0, t1));
+
+                let cmp = _mm_cmple_ps(t_max, t_min);
+                if _mm_movemask_ps(cmp) != 0 {
+                    return INFINITY;
+                }
+            }
+            _mm_cvtss_f32(t_min)
+        }
     }
 }

@@ -3,7 +3,6 @@ use std::f32::INFINITY;
 use fastrand::Rng;
 
 use crate::{
-    hittable::HitRecord,
     ray::Ray,
     texture::Texture,
     util::{random_float, random_unit_vec},

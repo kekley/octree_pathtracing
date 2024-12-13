@@ -94,12 +94,12 @@ impl Vec3 {
     #[inline]
     pub fn get_unit_dir(dir: Direction) -> Vec3 {
         match dir {
-            (Direction::Left) => Self::LEFT,
-            (Direction::Right) => Self::RIGHT,
-            (Direction::Down) => Self::DOWN,
-            (Direction::Up) => Self::UP,
-            (Direction::Back) => Self::BACK,
-            (Direction::Forward) => Self::FORWARD,
+            Direction::Left => Self::LEFT,
+            Direction::Right => Self::RIGHT,
+            Direction::Down => Self::DOWN,
+            Direction::Up => Self::UP,
+            Direction::Back => Self::BACK,
+            Direction::Forward => Self::FORWARD,
         }
     }
     #[inline]

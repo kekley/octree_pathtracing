@@ -1,13 +1,9 @@
-use std::f32::INFINITY;
 
 use crate::{
     aabb::AABB,
-    hittable::HitRecord,
     interval::Interval,
-    material::{self, Material},
     ray::Ray,
     vec3::{Axis, Vec3},
-    TextureManager,
 };
 
 pub enum Face {

@@ -45,10 +45,10 @@ impl BVHTree {
             let obj = &objects[indices[node.left_node_idx as usize + i as usize] as usize];
             if obj.get_bbox().centroid(axis) < pos {
                 left_count += 1;
-                left_box = AABB::from_boxes(&left_box, &obj.get_bbox());
+                left_box = AABB::from_aabb(&left_box, &obj.get_bbox());
             } else {
                 right_count += 1;
-                right_box = AABB::from_boxes(&right_box, &obj.get_bbox());
+                right_box = AABB::from_aabb(&right_box, &obj.get_bbox());
             }
         });
 
@@ -146,7 +146,7 @@ impl BVHTree {
                 ..nodes[left_child_idx].first_hittable_idx + nodes[left_child_idx].hittable_count
             {
                 let obj_index = indices[i as usize];
-                nodes[left_child_idx].bbox = AABB::from_boxes(
+                nodes[left_child_idx].bbox = AABB::from_aabb(
                     &nodes[left_child_idx].bbox,
                     &objects[obj_index as usize].get_bbox(),
                 );
@@ -162,7 +162,7 @@ impl BVHTree {
                 ..nodes[right_child_idx].first_hittable_idx + nodes[right_child_idx].hittable_count
             {
                 let obj_index = indices[i as usize];
-                nodes[right_child_idx].bbox = AABB::from_boxes(
+                nodes[right_child_idx].bbox = AABB::from_aabb(
                     &nodes[right_child_idx].bbox,
                     &objects[obj_index as usize].get_bbox(),
                 );
@@ -180,7 +180,7 @@ impl BVHTree {
         root_node.hittable_count = objects.len() as u32;
         let mut bbox = AABB::EMPTY;
         for obj in &objects {
-            bbox = AABB::from_boxes(&bbox, &obj.get_bbox())
+            bbox = AABB::from_aabb(&bbox, &obj.get_bbox())
         }
 
         root_node.bbox = bbox;
@@ -228,8 +228,8 @@ impl BVHTree {
             let mut child_1 = &self.nodes[node.left_node_idx as usize];
             let mut child_2 = &self.nodes[node.left_node_idx as usize + 1];
 
-            let mut dist_1 = child_1.bbox.intersects(ray, ray_t);
-            let mut dist_2 = child_2.bbox.intersects(ray, ray_t);
+            let mut dist_1 = child_1.bbox.intersects_sse(ray, ray_t);
+            let mut dist_2 = child_2.bbox.intersects_sse(ray, ray_t);
 
             if dist_1 > dist_2 {
                 swap(&mut dist_1, &mut dist_2);
