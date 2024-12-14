@@ -8,6 +8,14 @@ use crate::{
     vec3::Axis,
 };
 #[derive(Debug, Clone)]
+pub struct HittableBVH {
+    bvh: Box<BVHTree>,
+    bbox: AABB,
+}
+
+impl HittableBVH {}
+
+#[derive(Debug, Clone)]
 pub struct BVHTree {
     nodes: Vec<BVHNode>,
     objects: Vec<Hittable>,

@@ -11,6 +11,7 @@ mod rtw_image;
 mod sphere;
 mod texture;
 mod texture_manager;
+mod translation;
 mod util;
 mod vec3;
 mod voxel_scene;

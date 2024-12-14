@@ -31,7 +31,6 @@ impl Default for HitRecord {
 pub enum Hittable {
     Sphere(Sphere),
     Box(Cuboid),
-    BVH(BVHTree),
 }
 
 impl Hittable {
@@ -40,7 +39,6 @@ impl Hittable {
         match self {
             Hittable::Sphere(sphere) => sphere.hit(ray, ray_t),
             Hittable::Box(cuboid) => cuboid.hit(ray, ray_t),
-            Hittable::BVH(bvh) => bvh.hit(ray, ray_t),
         }
     }
     #[inline]
@@ -48,7 +46,6 @@ impl Hittable {
         match self {
             Hittable::Sphere(sphere) => sphere.get_bbox(),
             Hittable::Box(cuboid) => cuboid.bbox.clone(),
-            Hittable::BVH(bvh) => bvh.bbox().clone(),
         }
     }
 }

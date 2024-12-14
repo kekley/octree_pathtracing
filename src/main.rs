@@ -224,7 +224,7 @@ fn blocks() -> Result<(), Box<dyn Error>> {
 
     camera.aspect_ratio = 16.0 / 9.0;
     camera.image_width = 400;
-    camera.samples_per_pixel = 32;
+    camera.samples_per_pixel = 8;
     camera.max_depth = 10;
     camera.v_fov = 90.0;
     camera.look_from = Vec3::new(-751.0, 161.0, 574.0);
@@ -234,7 +234,7 @@ fn blocks() -> Result<(), Box<dyn Error>> {
     camera.defocus_angle = 0.0;
 
     //world stuff here
-    let mut world = World::new("./hous");
+    let mut world = World::new("./world");
 
     let chunk_view_distance: i32 = 500;
     let starting_chunk_x = (camera.look_from.x as i32) >> 4;
@@ -245,11 +245,8 @@ fn blocks() -> Result<(), Box<dyn Error>> {
     let builder = ThreadPoolBuilder::new().num_threads(8);
     builder.build_global().unwrap();
     (135..192).for_each(|y| {
-        (-817..-773).for_each(|x| {
-            (490..580).for_each(|z| {
-                if (x == -808 && z == 507 && y == 144) {
-                    println!("lol");
-                }
+        (490..580).for_each(|z| {
+            (-817..-773).for_each(|x| {
                 let block = world.get_block(WorldCoords { x: x, y: y, z: z });
                 let mat = material_manager.get_or_make_material_idx(
                     world
