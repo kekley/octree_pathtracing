@@ -1,4 +1,3 @@
-
 use crate::{
     aabb::AABB,
     interval::Interval,
@@ -17,7 +16,7 @@ pub enum Face {
 #[derive(Debug, Clone)]
 pub struct Cuboid {
     pub bbox: AABB,
-    material_idx: u16,
+    resource_idx: u32,
 }
 pub const EPSILON: f32 = 0.00000000001;
 
@@ -25,13 +24,16 @@ impl Cuboid {
     pub fn get_bbox(&self) -> AABB {
         self.bbox.clone()
     }
-    pub fn new(bbox: AABB, material_idx: u16) -> Self {
-        Self { bbox, material_idx }
-    }
-    pub fn new_multi_texture(bbox: AABB, materials_idx: u16) -> Self {
+    pub fn new(bbox: AABB, material_idx: u32) -> Self {
         Self {
             bbox,
-            material_idx: materials_idx,
+            resource_idx: material_idx,
+        }
+    }
+    pub fn new_multi_texture(bbox: AABB, materials_idx: u32) -> Self {
+        Self {
+            bbox,
+            resource_idx: materials_idx,
         }
     }
 
@@ -133,6 +135,6 @@ impl Cuboid {
         ray.hit.v = v;
         ray.hit.t = interval.min;
         ray.hit.outward_normal = normal;
-        ray.hit.mat_idx = self.material_idx;
+        ray.hit.mat_idx = self.resource_idx;
     }
 }

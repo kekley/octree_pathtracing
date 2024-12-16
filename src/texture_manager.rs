@@ -9,8 +9,8 @@ const ASSET_PATH: &str = "./assets/default_resource_pack/assets/minecraft/textur
 pub struct TextureManager {
     loaded_textures: Vec<Texture>,
     created_materials: Vec<Material>,
-    num_materials: u16,
-    resource_map: HashMap<SmolStr, u16>,
+    num_materials: u32,
+    resource_map: HashMap<SmolStr, u32>,
 }
 
 impl TextureManager {
@@ -22,7 +22,7 @@ impl TextureManager {
             resource_map: HashMap::default(),
         }
     }
-    pub fn get_or_make_material_idx(&mut self, resource_name: &str) -> Result<u16, String> {
+    pub fn get_or_make_material_idx(&mut self, resource_name: &str) -> Result<u32, String> {
         let mut replacement_string = resource_name.to_owned();
         if replacement_string.contains("leaves")
             || replacement_string.contains("vine")
@@ -39,7 +39,7 @@ impl TextureManager {
         replacement_string = replacement_string.replace("slab", "planks");
 
         if self.resource_map.contains_key(replacement_string.as_str()) {
-            return Ok(*self.resource_map.get(replacement_string.as_str()).unwrap());
+            return Ok((*self.resource_map.get(replacement_string.as_str()).unwrap()).into());
         } else {
             let image = RTWImage::load(
                 &(ASSET_PATH.to_owned()
@@ -69,7 +69,7 @@ impl TextureManager {
         }
     }
 
-    pub fn get_material(&self, idx: u16) -> &Material {
+    pub fn get_material(&self, idx: u32) -> &Material {
         &self.created_materials[idx as usize]
     }
 }

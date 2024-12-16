@@ -8,11 +8,11 @@ use crate::{interval::Interval, ray::Ray, vec3::Vec3};
 pub struct Sphere {
     center: Vec3,
     radius: f32,
-    material_idx: u16,
+    material_idx: u32,
 }
 
 impl Sphere {
-    pub fn new(center: Vec3, radius: f32, material_idx: u16) -> Self {
+    pub fn new(center: Vec3, radius: f32, material_idx: u32) -> Self {
         Self {
             center: center,
             radius: radius,
@@ -20,7 +20,7 @@ impl Sphere {
         }
     }
 
-    pub fn get_bbox(&self) -> AABB {
+    pub fn bbox(&self) -> AABB {
         let radius_vec: Vec3 = Vec3::splat(self.radius);
 
         let bbox = AABB::from_points(self.center - radius_vec, self.center + radius_vec);

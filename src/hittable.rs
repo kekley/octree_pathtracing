@@ -6,12 +6,56 @@ use crate::{
     aabb::AABB, bvh::BVHTree, cuboid::Cuboid, interval::Interval, ray::Ray, sphere::Sphere,
     vec3::Vec3,
 };
+
+#[derive(Debug, Clone)]
+pub struct HittableBVH {
+    bvh: Box<BVHTree>,
+}
+
+impl HittableBVH {
+    pub fn new(bvh: BVHTree) -> Self {
+        let bbox = *bvh.bbox();
+
+        Self {
+            bvh: Box::from(bvh),
+        }
+    }
+
+    pub fn hit(&self, ray: &mut Ray, ray_t: Interval) {
+        self.bvh.hit(ray, ray_t);
+    }
+    pub fn bbox(&self) -> AABB {
+        *self.bvh.bbox()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct HittableHitList {
+    hit_list: Box<HitList>,
+}
+
+impl HittableHitList {
+    pub fn new(hitlist: HitList) -> Self {
+        let bbox = hitlist.bbox.clone();
+        Self {
+            hit_list: Box::from(hitlist),
+        }
+    }
+
+    pub fn hit(&self, ray: &mut Ray, ray_t: Interval) {
+        self.hit_list.hit(ray, ray_t);
+    }
+    pub fn bbox(&self) -> AABB {
+        self.hit_list.bbox
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct HitRecord {
     pub t: f32,
     pub u: f32,
     pub v: f32,
-    pub mat_idx: u16,
+    pub mat_idx: u32,
     pub outward_normal: Vec3,
 }
 
@@ -31,6 +75,8 @@ impl Default for HitRecord {
 pub enum Hittable {
     Sphere(Sphere),
     Box(Cuboid),
+    BVHTree(HittableBVH),
+    HitList(HittableHitList),
 }
 
 impl Hittable {
@@ -39,13 +85,17 @@ impl Hittable {
         match self {
             Hittable::Sphere(sphere) => sphere.hit(ray, ray_t),
             Hittable::Box(cuboid) => cuboid.hit(ray, ray_t),
+            Hittable::BVHTree(bvh) => bvh.hit(ray, ray_t),
+            Hittable::HitList(hittable_hit_list) => hittable_hit_list.hit(ray, ray_t),
         }
     }
     #[inline]
     pub fn get_bbox(&self) -> AABB {
         match self {
-            Hittable::Sphere(sphere) => sphere.get_bbox(),
+            Hittable::Sphere(sphere) => sphere.bbox(),
             Hittable::Box(cuboid) => cuboid.bbox.clone(),
+            Hittable::BVHTree(bvh) => bvh.bbox(),
+            Hittable::HitList(hittable_hit_list) => hittable_hit_list.bbox(),
         }
     }
 }

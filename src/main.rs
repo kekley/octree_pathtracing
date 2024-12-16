@@ -4,11 +4,11 @@ use std::io::Read;
 use std::sync::{Arc, Mutex};
 use std::{fs::File, io::Write, time::Instant};
 
-use ray_tracing::Camera;
 use ray_tracing::Cuboid;
 use ray_tracing::Vec3;
 use ray_tracing::AABB;
 use ray_tracing::{BVHTree, TextureManager};
+use ray_tracing::{Camera, HittableBVH};
 use ray_tracing::{HitList, Hittable};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use rayon::ThreadPoolBuilder;
@@ -223,7 +223,7 @@ fn blocks() -> Result<(), Box<dyn Error>> {
     let mut camera = Camera::new();
 
     camera.aspect_ratio = 16.0 / 9.0;
-    camera.image_width = 400;
+    camera.image_width = 2560;
     camera.samples_per_pixel = 8;
     camera.max_depth = 10;
     camera.v_fov = 90.0;
@@ -234,7 +234,7 @@ fn blocks() -> Result<(), Box<dyn Error>> {
     camera.defocus_angle = 0.0;
 
     //world stuff here
-    let mut world = World::new("./world");
+    let mut world = World::new("./hous");
 
     let chunk_view_distance: i32 = 500;
     let starting_chunk_x = (camera.look_from.x as i32) >> 4;
@@ -277,9 +277,9 @@ fn blocks() -> Result<(), Box<dyn Error>> {
     println!("{:?}", world.global_palette);
     println!("hitlist: {}", hitlist.objects.len());
 
-    let tree = BVHTree::from_hit_list(&hitlist);
+    let tree = HittableBVH::new(BVHTree::from_hit_list(&hitlist));
 
-    let buf = camera.multi_threaded_render(&Hittable::BVH(tree), &material_manager);
+    let buf = camera.multi_threaded_render(&Hittable::BVHTree(tree), &material_manager);
 
     //file to write to
     let mut file = File::create("./output.ppm").unwrap();
