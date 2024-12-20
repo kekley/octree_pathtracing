@@ -224,7 +224,7 @@ fn blocks() -> Result<(), Box<dyn Error>> {
 
     camera.aspect_ratio = 16.0 / 9.0;
     camera.image_width = 2560;
-    camera.samples_per_pixel = 8;
+    camera.samples_per_pixel = 100;
     camera.max_depth = 10;
     camera.v_fov = 90.0;
     camera.look_from = Vec3::new(-751.0, 161.0, 574.0);
