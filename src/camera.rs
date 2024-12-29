@@ -323,7 +323,7 @@ impl Camera {
         center + (p.x * disc_u) + (p.y * disc_v)
     }
 
-    fn thread_safe_get_ray(
+    pub fn thread_safe_get_ray(
         center: Vec3,
         pixel_delta_u: Vec3,
         pixel_delta_v: Vec3,

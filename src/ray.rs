@@ -10,6 +10,9 @@ pub struct Ray {
 }
 
 impl Ray {
+    pub const EPSILON: f32 = 0.00000005;
+    pub const OFFSET: f32 = 0.000001;
+
     #[inline]
     pub fn at(&self, t: f32) -> Vec3 {
         self.origin + self.direction * t

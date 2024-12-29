@@ -223,9 +223,9 @@ fn blocks() -> Result<(), Box<dyn Error>> {
     let mut camera = Camera::new();
 
     camera.aspect_ratio = 16.0 / 9.0;
-    camera.image_width = 2560;
-    camera.samples_per_pixel = 100;
-    camera.max_depth = 10;
+    camera.image_width = 400;
+    camera.samples_per_pixel = 1;
+    camera.max_depth = 5;
     camera.v_fov = 90.0;
     camera.look_from = Vec3::new(-751.0, 161.0, 574.0);
     camera.look_at = Vec3::new(-788.0, 158.0, 550.0);
@@ -279,7 +279,7 @@ fn blocks() -> Result<(), Box<dyn Error>> {
 
     let tree = HittableBVH::new(BVHTree::from_hit_list(&hitlist));
 
-    let buf = camera.multi_threaded_render(&Hittable::BVHTree(tree), &material_manager);
+    let buf = camera.multi_threaded_render(&Hittable::BVHTree(tree), &(material_manager));
 
     //file to write to
     let mut file = File::create("./output.ppm").unwrap();

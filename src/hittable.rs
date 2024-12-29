@@ -57,6 +57,8 @@ pub struct HitRecord {
     pub v: f32,
     pub mat_idx: u32,
     pub outward_normal: Vec3,
+    pub geom_normal: Vec3,
+    pub prev_material: M
 }
 
 impl Default for HitRecord {

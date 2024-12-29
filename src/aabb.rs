@@ -128,7 +128,7 @@ impl AABB {
         ray_t.min
     }
     #[inline]
-    pub fn intersects_sse(&self, ray: &Ray, mut ray_t: Interval) -> f32 {
+    pub fn intersects_sse(&self, ray: &Ray, ray_t: Interval) -> f32 {
         unsafe {
             let ray_t_min = _mm_set1_ps(ray_t.min);
             let ray_t_max = _mm_set1_ps(ray_t.max);

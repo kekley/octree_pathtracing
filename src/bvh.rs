@@ -40,18 +40,17 @@ impl BVHTree {
         let mut left_box = AABB::EMPTY;
         let mut right_box = AABB::EMPTY;
 
-        let mut left_count = 0;
-        let mut right_count = 0;
-        (0..node.hittable_count).for_each(|i| {
-            let obj = &objects[indices[node.left_node_idx as usize + i as usize] as usize];
-            if obj.get_bbox().centroid(axis) < pos {
-                left_count += 1;
-                left_box = AABB::from_aabb(&left_box, &obj.get_bbox());
-            } else {
-                right_count += 1;
-                right_box = AABB::from_aabb(&right_box, &obj.get_bbox());
-            }
-        });
+        let (left_count, right_count) =
+            (0..node.hittable_count).fold((0, 0), |(left_count, right_count), i| {
+                let obj = &objects[indices[node.left_node_idx as usize + i as usize] as usize];
+                if obj.get_bbox().centroid(axis) < pos {
+                    left_box = AABB::from_aabb(&left_box, &obj.get_bbox());
+                    (left_count + 1, right_count)
+                } else {
+                    right_box = AABB::from_aabb(&right_box, &obj.get_bbox());
+                    (left_count, right_count + 1)
+                }
+            });
 
         let cost = left_count as f32 * left_box.area() + right_count as f32 * right_box.area();
         if cost > 0.0 {
@@ -81,18 +80,17 @@ impl BVHTree {
             let mut best_axis = Axis::X;
             let mut best_cost = INFINITY;
             let mut best_pos = 0.0;
+
             for axis in Axis::iter() {
-                (0..nodes[node_idx].hittable_count).for_each(|i| {
+                for i in 0..nodes[node_idx].hittable_count {
                     let obj = &objects[indices
-                        [nodes[node_idx as usize].first_hittable_idx as usize + i as usize]
+                        [nodes[node_idx].first_hittable_idx as usize + i as usize]
                         as usize];
-
                     let candidate_pos = obj.get_bbox().centroid(*axis);
-
                     let cost = BVHTree::evaluate_sah(
                         objects,
                         &indices,
-                        &nodes[indices[node_idx as usize] as usize],
+                        &nodes[node_idx],
                         *axis,
                         candidate_pos,
                     );
@@ -101,8 +99,9 @@ impl BVHTree {
                         best_cost = cost;
                         best_pos = candidate_pos;
                     }
-                });
+                }
             }
+
             let axis = best_axis;
             let split_pos = best_pos;
 
