@@ -199,18 +199,17 @@ impl BVHTree {
         }
     }
 
-    pub fn hit(&self, ray: &mut Ray, ray_t: Interval) {
+    pub fn hit(&self, ray: &mut Ray) -> bool {
         let mut node = &self.nodes[0];
         let mut stack_idx = 0 as usize;
         let mut stack = [node; 64];
-        let mut closest_hit = ray_t.max;
+        let mut closest_hit = ray.hit.t;
         loop {
             if node.is_leaf() {
                 (node.first_hittable_idx..node.first_hittable_idx + node.hittable_count).for_each(
                     |i| {
                         let obj_idx = self.indices[i as usize];
-                        self.objects[obj_idx as usize]
-                            .hit(ray, Interval::new(ray_t.min, closest_hit));
+                        self.objects[obj_idx as usize].hit(ray);
 
                         if ray.hit.t < closest_hit {
                             closest_hit = ray.hit.t;
@@ -218,7 +217,7 @@ impl BVHTree {
                     },
                 );
                 if stack_idx == 0 {
-                    break;
+                    break false;
                 } else {
                     stack_idx -= 1;
                     node = stack[stack_idx];
@@ -228,8 +227,8 @@ impl BVHTree {
             let mut child_1 = &self.nodes[node.left_node_idx as usize];
             let mut child_2 = &self.nodes[node.left_node_idx as usize + 1];
 
-            let mut dist_1 = child_1.bbox.intersects(ray, ray_t);
-            let mut dist_2 = child_2.bbox.intersects(ray, ray_t);
+            let mut dist_1 = child_1.bbox.intersects(ray);
+            let mut dist_2 = child_2.bbox.intersects(ray);
 
             if dist_1 > dist_2 {
                 swap(&mut dist_1, &mut dist_2);

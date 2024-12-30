@@ -18,7 +18,7 @@ use crate::{
     util::{
         degrees_to_rads, random_float, random_in_unit_disk, write_rgb8_color_as_text_to_stream,
     },
-    HitRecord, TextureManager,
+    HitRecord,
 };
 
 #[derive(Debug, Clone)]
@@ -307,6 +307,7 @@ impl Camera {
             direction: new_dir,
             inv_dir: 1.0 / new_dir,
             hit: HitRecord::default(),
+            distance_travelled: 0.0,
         }
     }
 }

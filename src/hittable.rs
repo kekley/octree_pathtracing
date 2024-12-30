@@ -21,8 +21,8 @@ impl HittableBVH {
         }
     }
 
-    pub fn hit(&self, ray: &mut Ray, ray_t: Interval) {
-        self.bvh.hit(ray, ray_t);
+    pub fn hit(&self, ray: &mut Ray) -> bool {
+        self.bvh.hit(ray);
     }
     pub fn bbox(&self) -> AABB {
         *self.bvh.bbox()
@@ -55,10 +55,10 @@ pub struct HitRecord {
     pub t: f32,
     pub u: f32,
     pub v: f32,
-    pub mat_idx: u32,
+    pub current_material: u32,
     pub outward_normal: Vec3,
     pub geom_normal: Vec3,
-    pub prev_material: u32,
+    pub previous_material: u32,
 }
 
 impl Default for HitRecord {
@@ -67,10 +67,10 @@ impl Default for HitRecord {
             t: INFINITY,
             u: 0.0,
             v: 0.0,
-            mat_idx: 0,
+            current_material: 0,
             outward_normal: Vec3::ZERO,
             geom_normal: todo!(),
-            prev_material: todo!(),
+            previous_material: todo!(),
         }
     }
 }
@@ -85,12 +85,12 @@ pub enum Hittable {
 
 impl Hittable {
     #[inline]
-    pub fn hit(&self, ray: &mut Ray, ray_t: Interval) {
+    pub fn hit(&self, ray: &mut Ray) -> bool {
         match self {
-            Hittable::Sphere(sphere) => sphere.hit(ray, ray_t),
-            Hittable::Box(cuboid) => cuboid.hit(ray, ray_t),
-            Hittable::BVHTree(bvh) => bvh.hit(ray, ray_t),
-            Hittable::HitList(hittable_hit_list) => hittable_hit_list.hit(ray, ray_t),
+            Hittable::Sphere(sphere) => sphere.hit(ray),
+            Hittable::Box(cuboid) => cuboid.hit(ray),
+            Hittable::BVHTree(bvh) => bvh.hit(ray),
+            Hittable::HitList(hittable_hit_list) => hittable_hit_list.hit(ray),
         }
     }
     #[inline]

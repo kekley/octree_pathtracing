@@ -31,4 +31,14 @@ impl Scene {
     pub fn add_bvh(&mut self, bvh: BVHTree) {
         self.bvhs.push(bvh);
     }
+
+    pub fn hit(&self, ray: &mut Ray) -> bool {
+        let mut hit = false;
+
+        for sphere in &self.spheres {
+            hit |= sphere.hit(ray);
+        }
+
+        true
+    }
 }

@@ -28,7 +28,7 @@ impl Sphere {
         bbox
     }
     #[inline]
-    pub fn hit(&self, ray: &mut Ray, ray_t: Interval) {
+    pub fn hit(&self, ray: &mut Ray) -> bool {
         let origin_to_center = self.center - ray.origin;
         let a = ray.direction.length_squared();
         let h = ray.direction.dot(origin_to_center);
@@ -38,7 +38,7 @@ impl Sphere {
 
         if discriminant < 0f32 {
             ray.hit.t = INFINITY;
-            return;
+            return false;
         }
 
         let sqrt_discriminant = discriminant.sqrt();
@@ -62,7 +62,7 @@ impl Sphere {
         ray.hit.u = u;
         ray.hit.v = v;
         ray.hit.outward_normal = outward_normal;
-        ray.hit.mat_idx = self.material_idx;
+        ray.hit.current_material = self.material_idx;
     }
 
     pub fn get_uv(point: Vec3) -> (f32, f32) {

@@ -1,6 +1,5 @@
 use core::f32;
 
-use fastrand::Rng;
 use glam::Vec3A as Vec3;
 
 use crate::{axis::Axis, interval::Interval};

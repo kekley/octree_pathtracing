@@ -1,9 +1,10 @@
 use crate::{Ray, Scene};
 use glam::Vec3A as Vec3;
+use rand::{rngs::StdRng, SeedableRng};
 
 pub fn path_trace(ray: &mut Ray, first_reflection: bool) {
     let hit: bool = false;
-    let mut rng = Rng::new();
+    let mut rng = StdRng::from_entropy();
     let ray_origin = ray.origin;
     let ray_direction = ray.direction;
 
@@ -13,5 +14,5 @@ pub fn path_trace(ray: &mut Ray, first_reflection: bool) {
 }
 
 pub fn next_intersection(scene: Scene, ray: &mut Ray) -> bool {
-    let ray = 
+    ray.hit.previous_material = ray.hit.current_material;
 }

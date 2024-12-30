@@ -101,26 +101,20 @@ impl AABB {
     }
 
     #[inline]
-    pub fn intersects(&self, ray: &Ray, mut ray_t: Interval) -> f32 {
+    pub fn intersects(&self, ray: &Ray) -> f32 {
         for axis in Axis::iter() {
-            let axis_interval = self.get_interval(*axis);
-            let axis_dir_inverse = get_axis(&ray.inv_dir, *axis);
+            let box_axis_interval = self.get_interval(*axis);
+            let ray_dir_axis_inverse = get_axis(&ray.inv_dir, *axis);
 
-            let t0 = (axis_interval.min - get_axis(&ray.origin, *axis)) * axis_dir_inverse;
-            let t1 = (axis_interval.max - get_axis(&ray.origin, *axis)) * axis_dir_inverse;
+            if ray.direction.x>=0{
+                let t0 = (box_axis_interval.min - get_axis(&ray.origin, *axis)) * ray_dir_axis_inverse;
+                let t1 = (box_axis_interval.max - get_axis(&ray.origin, *axis)) * ray_dir_axis_inverse;
 
-            if t0 < t1 {
-                ray_t.min = t0.max(ray_t.min);
-                ray_t.max = t1.min(ray_t.max);
-            } else {
-                ray_t.min = t1.max(ray_t.min);
-                ray_t.max = t0.min(ray_t.max);
+            }else{
+                let t0 = (box_axis_interval.max - get_axis(&ray.origin, *axis)) * ray_dir_axis_inverse;
+                let t1 = (box_axis_interval.min - get_axis(&ray.origin, *axis)) * ray_dir_axis_inverse;
             }
+            
 
-            if ray_t.max <= ray_t.min {
-                return INFINITY;
-            }
-        }
-        ray_t.min
     }
 }

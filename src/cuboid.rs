@@ -39,9 +39,7 @@ impl Cuboid {
         }
     }
 
-    pub fn hit(&self, ray: &mut Ray, ray_t: Interval) {
-        let mut interval = ray_t.clone();
-
+    pub fn hit(&self, ray: &mut Ray) -> bool {
         for axis in Axis::iter() {
             let box_axis_min = self.bbox.get_interval(*axis).min;
             let box_axis_max = self.bbox.get_interval(*axis).max;
@@ -59,7 +57,7 @@ impl Cuboid {
                 interval.max = t0.min(interval.max);
             }
             if interval.max <= interval.min {
-                return;
+                return false;
             }
         }
 
@@ -137,6 +135,7 @@ impl Cuboid {
         ray.hit.v = v;
         ray.hit.t = interval.min;
         ray.hit.outward_normal = normal;
-        ray.hit.mat_idx = self.resource_idx;
+        ray.hit.current_material = self.resource_idx;
+        return true;
     }
 }

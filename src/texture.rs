@@ -1,9 +1,9 @@
 use crate::{interval::Interval, rtw_image::RTWImage};
-use glam::Vec3A as Vec3;
+use glam::{Vec3A as Vec3, Vec4};
 
 #[derive(Debug, Clone)]
 pub enum Texture {
-    Color(Vec3),
+    Color(Vec4),
     Image(RTWImage),
     CheckerBoard {
         inv_scale: f32,
@@ -13,12 +13,14 @@ pub enum Texture {
 }
 
 impl Texture {
-    pub fn value(&self, u: f32, v: f32, point: &Vec3) -> Vec3 {
+    pub const DEFAULT_TEXTURE: Self = Texture::Color(Vec4::new(1.0, 0.0, 1.0, 1.0));
+
+    pub fn value(&self, u: f32, v: f32, point: &Vec3) -> Vec4 {
         match self {
             Texture::Color(color) => return *color,
             Texture::Image(image) => {
                 if image.image_height <= 0 {
-                    return Vec3::new(0.0, 1.0, 1.0);
+                    return Vec4::new(1.0, 1.0, 1.0, 1.0);
                 }
 
                 let u = Interval::new(0.0, 1.0).clamp(u);

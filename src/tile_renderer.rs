@@ -1,6 +1,5 @@
 use std::{sync::Arc, thread};
 
-use fastrand::Rng;
 
 use crate::{path_tracer::*, scene, Camera, Ray, Scene};
 struct Tile {
