@@ -4,12 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-fastrand = "2.2.0"
 rayon = "1.10.0"
 stb_image = "0.3.0"
 spider_eye = { path = "../spider_eye" }
 smol_str = "0.3.2"
 fast-math = "0.1.1"
+glam = "0.29.2"
+rand_distr = "0.4.3"
+rand = "0.8.5"
 
 [profile.release-with-debug]
 inherits = "release"

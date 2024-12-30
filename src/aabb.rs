@@ -7,12 +7,8 @@ use std::{
     f32::{INFINITY, NEG_INFINITY},
 };
 
-use crate::{
-    interval::Interval,
-    ray::Ray,
-    vec3::{Axis, Vec3},
-};
-
+use crate::{axis::Axis, get_axis, interval::Interval, ray::Ray};
+use glam::Vec3A as Vec3;
 #[derive(Debug, Clone, Copy)]
 pub struct AABB {
     pub min: Vec3,
@@ -108,10 +104,10 @@ impl AABB {
     pub fn intersects(&self, ray: &Ray, mut ray_t: Interval) -> f32 {
         for axis in Axis::iter() {
             let axis_interval = self.get_interval(*axis);
-            let axis_dir_inverse = ray.inv_dir.get_axis(*axis);
+            let axis_dir_inverse = get_axis(&ray.inv_dir, *axis);
 
-            let t0 = (axis_interval.min - ray.origin.get_axis(*axis)) * axis_dir_inverse;
-            let t1 = (axis_interval.max - ray.origin.get_axis(*axis)) * axis_dir_inverse;
+            let t0 = (axis_interval.min - get_axis(&ray.origin, *axis)) * axis_dir_inverse;
+            let t1 = (axis_interval.max - get_axis(&ray.origin, *axis)) * axis_dir_inverse;
 
             if t0 < t1 {
                 ray_t.min = t0.max(ray_t.min);
@@ -126,38 +122,5 @@ impl AABB {
             }
         }
         ray_t.min
-    }
-    #[inline]
-    pub fn intersects_sse(&self, ray: &Ray, ray_t: Interval) -> f32 {
-        unsafe {
-            let ray_t_min = _mm_set1_ps(ray_t.min);
-            let ray_t_max = _mm_set1_ps(ray_t.max);
-            let mut t_min = ray_t_min;
-            let mut t_max = ray_t_max;
-
-            for axis in Axis::iter() {
-                let axis_interval = self.get_interval(*axis);
-                let axis_dir_inverse = _mm_set1_ps(ray.inv_dir.get_axis(*axis));
-                let ray_origin_axis = _mm_set1_ps(ray.origin.get_axis(*axis));
-
-                let t0 = _mm_mul_ps(
-                    _mm_sub_ps(_mm_set1_ps(axis_interval.min), ray_origin_axis),
-                    axis_dir_inverse,
-                );
-                let t1 = _mm_mul_ps(
-                    _mm_sub_ps(_mm_set1_ps(axis_interval.max), ray_origin_axis),
-                    axis_dir_inverse,
-                );
-
-                t_min = _mm_max_ps(t_min, _mm_min_ps(t0, t1));
-                t_max = _mm_min_ps(t_max, _mm_max_ps(t0, t1));
-
-                let cmp = _mm_cmple_ps(t_max, t_min);
-                if _mm_movemask_ps(cmp) != 0 {
-                    return INFINITY;
-                }
-            }
-            _mm_cvtss_f32(t_min)
-        }
     }
 }

@@ -1,4 +1,5 @@
-use crate::{HittableIdx, Interval, Ray, Vec3};
+use crate::{HittableIdx, Interval, Ray};
+use glam::Vec3A as Vec3;
 
 pub struct Translation {
     hittable_idx: HittableIdx,

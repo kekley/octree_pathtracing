@@ -1,7 +1,6 @@
-use fastrand::Rng;
-
 use crate::{BVHTree, Camera, Cuboid, Ray, Sphere};
 
+use glam::Vec3A as Vec3;
 pub struct Scene {
     spheres: Vec<Sphere>,
     cubes: Vec<Cuboid>,
@@ -10,12 +9,14 @@ pub struct Scene {
 }
 
 impl Scene {
+    const SKY_COLOR: Vec3 = Vec3::new(0.5, 0.7, 1.0);
+
     pub fn new() -> Self {
         Self {
             spheres: Vec::new(),
             cubes: Vec::new(),
             bvhs: Vec::new(),
-            camera: Camera::new(),
+            camera: Camera::default(),
         }
     }
 

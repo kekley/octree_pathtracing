@@ -1,8 +1,9 @@
 use core::f32;
 
 use fastrand::Rng;
+use glam::Vec3A as Vec3;
 
-use crate::{interval::Interval, vec3::Vec3};
+use crate::{axis::Axis, interval::Interval};
 
 pub const PI: f32 = std::f32::consts::PI;
 #[inline]
@@ -96,4 +97,23 @@ pub fn write_rgb8_color_as_text_to_stream(vec: &Vec3, stream: &mut dyn std::io::
     stream
         .write(format!("{} {} {}\n", r_byte, g_byte, b_byte).as_bytes())
         .expect("Unable to write to stream");
+}
+
+pub fn near_zero(vec3: &Vec3) -> bool {
+    let s = 1e-8;
+    vec3.x.abs() < s && vec3.y.abs() < s && vec3.z.abs() < s
+}
+
+pub fn get_axis(vec3: &Vec3, axis: Axis) -> f32 {
+    vec3.as_ref()[axis as usize]
+}
+
+pub fn defocus_disk_sample(rng: &mut Rng, center: Vec3, disc_u: Vec3, disc_v: Vec3) -> Vec3 {
+    let p = random_in_unit_disk(rng);
+    center + (p.x * disc_u) + (p.y * disc_v)
+}
+
+#[inline]
+pub fn sample_square(rng: &mut Rng) -> Vec3 {
+    Vec3::new(random_float(rng) - 0.5f32, random_float(rng) - 0.5f32, 0.0)
 }

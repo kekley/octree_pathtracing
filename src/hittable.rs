@@ -1,11 +1,11 @@
 use std::f32::INFINITY;
 
 pub type HittableIdx = u32;
-
 use crate::{
     aabb::AABB, bvh::BVHTree, cuboid::Cuboid, interval::Interval, ray::Ray, sphere::Sphere,
-    vec3::Vec3,
+    Material,
 };
+use glam::Vec3A as Vec3;
 
 #[derive(Debug, Clone)]
 pub struct HittableBVH {
@@ -58,7 +58,7 @@ pub struct HitRecord {
     pub mat_idx: u32,
     pub outward_normal: Vec3,
     pub geom_normal: Vec3,
-    pub prev_material: M
+    pub prev_material: u32,
 }
 
 impl Default for HitRecord {
@@ -69,6 +69,8 @@ impl Default for HitRecord {
             v: 0.0,
             mat_idx: 0,
             outward_normal: Vec3::ZERO,
+            geom_normal: todo!(),
+            prev_material: todo!(),
         }
     }
 }

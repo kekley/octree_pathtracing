@@ -2,10 +2,10 @@ use std::{cmp::Ordering, f32::INFINITY, mem::swap};
 
 use crate::{
     aabb::AABB,
+    axis::Axis,
     hittable::{HitList, Hittable},
     interval::Interval,
     ray::Ray,
-    vec3::Axis,
 };
 
 #[derive(Debug, Clone)]
@@ -228,8 +228,8 @@ impl BVHTree {
             let mut child_1 = &self.nodes[node.left_node_idx as usize];
             let mut child_2 = &self.nodes[node.left_node_idx as usize + 1];
 
-            let mut dist_1 = child_1.bbox.intersects_sse(ray, ray_t);
-            let mut dist_2 = child_2.bbox.intersects_sse(ray, ray_t);
+            let mut dist_1 = child_1.bbox.intersects(ray, ray_t);
+            let mut dist_2 = child_2.bbox.intersects(ray, ray_t);
 
             if dist_1 > dist_2 {
                 swap(&mut dist_1, &mut dist_2);

@@ -1,6 +1,7 @@
 use std::f32::INFINITY;
 
-use crate::{vec3::Vec3, HitRecord};
+use crate::HitRecord;
+use glam::Vec3A as Vec3;
 #[derive(Debug, Clone, Default)]
 pub struct Ray {
     pub origin: Vec3,
@@ -39,6 +40,8 @@ impl Ray {
                 v: 0.0,
                 mat_idx: 0,
                 outward_normal: Vec3::ZERO,
+                geom_normal: todo!(),
+                prev_material: todo!(),
             },
         }
     }

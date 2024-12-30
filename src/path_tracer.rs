@@ -1,5 +1,5 @@
-use crate::{Ray, Scene, Vec3};
-use fastrand::Rng;
+use crate::{Ray, Scene};
+use glam::Vec3A as Vec3;
 
 pub fn path_trace(ray: &mut Ray, first_reflection: bool) {
     let hit: bool = false;

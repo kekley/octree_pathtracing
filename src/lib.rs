@@ -1,4 +1,5 @@
 mod aabb;
+mod axis;
 mod bvh;
 mod camera;
 mod cuboid;
@@ -16,11 +17,9 @@ mod texture_manager;
 mod tile_renderer;
 mod translation;
 mod util;
-mod vec3;
-mod vec4;
 mod voxel_scene;
 pub use {
     aabb::*, bvh::*, camera::*, cuboid::*, hittable::*, interval::*, material::*,
     minecraft_textures::*, path_tracer::*, ray::*, rtw_image::*, scene::*, sphere::*, texture::*,
-    texture_manager::TextureManager, translation::*, util::*, vec3::*, vec4::*, voxel_scene::*,
+    texture_manager::TextureManager, translation::*, util::*, voxel_scene::*,
 };

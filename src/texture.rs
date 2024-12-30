@@ -1,4 +1,5 @@
-use crate::{interval::Interval, rtw_image::RTWImage, vec3::Vec3};
+use crate::{interval::Interval, rtw_image::RTWImage};
+use glam::Vec3A as Vec3;
 
 #[derive(Debug, Clone)]
 pub enum Texture {

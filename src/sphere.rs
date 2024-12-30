@@ -2,7 +2,8 @@ use std::f32::INFINITY;
 
 use crate::aabb::AABB;
 use crate::util::PI;
-use crate::{interval::Interval, ray::Ray, vec3::Vec3};
+use crate::{interval::Interval, ray::Ray};
+use glam::Vec3A as Vec3;
 
 #[derive(Debug, Clone)]
 pub struct Sphere {

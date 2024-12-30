@@ -1,9 +1,11 @@
 use crate::{
     aabb::AABB,
+    axis::{Axis, BACK, DOWN, FORWARD, LEFT, RIGHT, UP},
+    get_axis,
     interval::Interval,
     ray::Ray,
-    vec3::{Axis, Vec3},
 };
+use glam::Vec3A as Vec3;
 
 pub enum Face {
     Top,
@@ -43,8 +45,8 @@ impl Cuboid {
         for axis in Axis::iter() {
             let box_axis_min = self.bbox.get_interval(*axis).min;
             let box_axis_max = self.bbox.get_interval(*axis).max;
-            let ray_axis_origin = ray.origin.get_axis(*axis);
-            let ray_axis_dir_inverse = ray.inv_dir.get_axis(*axis);
+            let ray_axis_origin = get_axis(&ray.origin, *axis);
+            let ray_axis_dir_inverse = get_axis(&ray.inv_dir, *axis);
 
             let t0 = (box_axis_min - ray_axis_origin) * ray_axis_dir_inverse;
             let t1 = (box_axis_max - ray_axis_origin) * ray_axis_dir_inverse;
@@ -64,25 +66,25 @@ impl Cuboid {
         let point = ray.at(interval.min);
         let mut u = 0.0;
         let mut v = 0.0;
-        let mut normal = Vec3::UP;
+        let mut normal = UP;
         let mut mat_index: usize = 0;
         Axis::iter()
             .find(|&&axis| {
                 let distance_to_min =
-                    (point.get_axis(axis) - self.bbox.get_interval(axis).min).abs();
+                    (get_axis(&point, axis) - self.bbox.get_interval(axis).min).abs();
                 let distance_to_max =
-                    (point.get_axis(axis) - self.bbox.get_interval(axis).max).abs();
+                    (get_axis(&point, axis) - self.bbox.get_interval(axis).max).abs();
                 distance_to_min < EPSILON || distance_to_max < EPSILON
             })
             .map(|&axis| {
                 let distance_to_min =
-                    (point.get_axis(axis) - self.bbox.get_interval(axis).min).abs();
+                    (get_axis(&point, axis) - self.bbox.get_interval(axis).min).abs();
                 let is_min_face = distance_to_min < EPSILON;
 
                 match (is_min_face, axis) {
                     (true, Axis::X) => {
                         mat_index = 2;
-                        normal = Vec3::LEFT;
+                        normal = LEFT;
                         u = (point.z - self.bbox.get_interval(Axis::Z).min)
                             / self.bbox.get_interval(Axis::Z).size();
                         v = (point.y - self.bbox.get_interval(Axis::Y).min)
@@ -90,7 +92,7 @@ impl Cuboid {
                     }
                     (true, Axis::Y) => {
                         mat_index = 1;
-                        normal = Vec3::DOWN;
+                        normal = DOWN;
                         u = (point.x - self.bbox.get_interval(Axis::X).min)
                             / self.bbox.get_interval(Axis::X).size();
                         v = (point.z - self.bbox.get_interval(Axis::Z).min)
@@ -98,7 +100,7 @@ impl Cuboid {
                     }
                     (true, Axis::Z) => {
                         mat_index = 5;
-                        normal = Vec3::BACK;
+                        normal = BACK;
                         u = (point.x - self.bbox.get_interval(Axis::X).min)
                             / self.bbox.get_interval(Axis::X).size();
                         v = (point.y - self.bbox.get_interval(Axis::Y).min)
@@ -106,7 +108,7 @@ impl Cuboid {
                     }
                     (false, Axis::X) => {
                         mat_index = 3;
-                        normal = Vec3::RIGHT;
+                        normal = RIGHT;
                         u = (point.z - self.bbox.get_interval(Axis::Z).min)
                             / self.bbox.get_interval(Axis::Z).size();
                         v = (point.y - self.bbox.get_interval(Axis::Y).min)
@@ -114,7 +116,7 @@ impl Cuboid {
                     }
                     (false, Axis::Y) => {
                         mat_index = 0;
-                        normal = Vec3::UP;
+                        normal = UP;
                         u = (point.x - self.bbox.get_interval(Axis::X).min)
                             / self.bbox.get_interval(Axis::X).size();
                         v = (point.z - self.bbox.get_interval(Axis::Z).min)
@@ -122,7 +124,7 @@ impl Cuboid {
                     }
                     (false, Axis::Z) => {
                         mat_index = 4;
-                        normal = Vec3::FORWARD;
+                        normal = FORWARD;
                         u = (point.x - self.bbox.get_interval(Axis::X).min)
                             / self.bbox.get_interval(Axis::X).size();
                         v = (point.y - self.bbox.get_interval(Axis::Y).min)

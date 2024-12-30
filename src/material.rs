@@ -3,11 +3,12 @@ use std::f32::INFINITY;
 use fastrand::Rng;
 
 use crate::{
+    near_zero,
     ray::Ray,
     texture::Texture,
     util::{random_float, random_unit_vec},
-    vec3::Vec3,
 };
+use glam::Vec3A as Vec3;
 
 #[derive(Debug, Clone)]
 pub enum Material {
@@ -33,7 +34,7 @@ impl Material {
         match self {
             Material::Lambertian { texture } => {
                 let mut scatter_direction = ray_in.hit.outward_normal + random_unit_vec(rng);
-                if scatter_direction.near_zero() {
+                if near_zero(&scatter_direction) {
                     scatter_direction = ray_in.hit.outward_normal;
                 }
                 let point = ray_in.at(ray_in.hit.t);
