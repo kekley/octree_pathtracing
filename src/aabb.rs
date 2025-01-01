@@ -7,7 +7,11 @@ use std::{
     f32::{INFINITY, NEG_INFINITY},
 };
 
-use crate::{axis::Axis, get_axis, interval::Interval, ray::Ray};
+use crate::{
+    axis::{Axis, AxisOps},
+    interval::Interval,
+    ray::Ray,
+};
 use glam::Vec3A as Vec3;
 #[derive(Debug, Clone, Copy)]
 pub struct AABB {
@@ -102,19 +106,27 @@ impl AABB {
 
     #[inline]
     pub fn intersects(&self, ray: &Ray) -> f32 {
-        for axis in Axis::iter() {
-            let box_axis_interval = self.get_interval(*axis);
-            let ray_dir_axis_inverse = get_axis(&ray.inv_dir, *axis);
+        let mut t_min = NEG_INFINITY;
+        let mut t_max = INFINITY;
+        for &axis in Axis::iter() {
+            let box_axis_interval = self.get_interval(axis);
+            let ray_dir_axis_inverse = ray.inv_dir.get_axis(axis);
 
-            if ray.direction.x>=0{
-                let t0 = (box_axis_interval.min - get_axis(&ray.origin, *axis)) * ray_dir_axis_inverse;
-                let t1 = (box_axis_interval.max - get_axis(&ray.origin, *axis)) * ray_dir_axis_inverse;
+            let (t0, t1) = if ray_dir_axis_inverse >= 0.0 {
+                (
+                    (box_axis_interval.min - ray.origin.get_axis(axis)) * ray_dir_axis_inverse,
+                    (box_axis_interval.max - ray.origin.get_axis(axis)) * ray_dir_axis_inverse,
+                )
+            } else {
+                (
+                    (box_axis_interval.max - ray.origin.get_axis(axis)) * ray_dir_axis_inverse,
+                    (box_axis_interval.min - ray.origin.get_axis(axis)) * ray_dir_axis_inverse,
+                )
+            };
 
-            }else{
-                let t0 = (box_axis_interval.max - get_axis(&ray.origin, *axis)) * ray_dir_axis_inverse;
-                let t1 = (box_axis_interval.min - get_axis(&ray.origin, *axis)) * ray_dir_axis_inverse;
-            }
-            
-
+            t_min = t_min.max(t0);
+            t_max = t_max.min(t1);
+        }
+        t_min
     }
 }

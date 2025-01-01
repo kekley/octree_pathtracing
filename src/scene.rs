@@ -1,15 +1,18 @@
-use crate::{BVHTree, Camera, Cuboid, Ray, Sphere};
+use crate::{BVHTree, Camera, Cuboid, Material, Ray, Sphere};
 
 use glam::Vec3A as Vec3;
 pub struct Scene {
     spheres: Vec<Sphere>,
     cubes: Vec<Cuboid>,
     bvhs: Vec<BVHTree>,
-    camera: Camera,
+    pub materials: Vec<Material>,
+    pub spp: u32,
+    pub branch_count: u32,
+    pub camera: Camera,
 }
 
 impl Scene {
-    const SKY_COLOR: Vec3 = Vec3::new(0.5, 0.7, 1.0);
+    pub const SKY_COLOR: Vec3 = Vec3::new(0.5, 0.7, 1.0);
 
     pub fn new() -> Self {
         Self {
@@ -17,6 +20,9 @@ impl Scene {
             cubes: Vec::new(),
             bvhs: Vec::new(),
             camera: Camera::default(),
+            materials: Vec::new(),
+            spp: todo!(),
+            branch_count: todo!(),
         }
     }
 
@@ -40,5 +46,17 @@ impl Scene {
         }
 
         true
+    }
+
+    pub fn get_current_branch_count(&self) -> u32 {
+        if self.spp < self.branch_count {
+            if self.spp as f32 <= (self.branch_count as f32).sqrt() {
+                return 1;
+            } else {
+                return self.branch_count - self.spp;
+            }
+        } else {
+            return self.branch_count;
+        }
     }
 }

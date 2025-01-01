@@ -1,7 +1,8 @@
 use std::{sync::Arc, thread};
 
+use rand::{rngs::StdRng, SeedableRng};
 
-use crate::{path_tracer::*, scene, Camera, Ray, Scene};
+use crate::{path_tracer::*, Camera, Ray, Scene};
 struct Tile {
     x0: u32,
     y0: u32,
@@ -27,11 +28,11 @@ impl TileRenderer {
     pub fn render(&self) {}
 
     fn render_tile(tile: Tile, scene: &Scene) {
-        let mut rng = Rng::new();
+        let mut rng = StdRng::from_entropy();
         for y in tile.y0..tile.y1 {
             for x in tile.x0..tile.x1 {
-                let mut ray = Camera::thread_safe_get_ray(center, pixel_delta_u, pixel_delta_v, pixel00_loc, defocus_angle, disc_u, disc_v, &mut rng, x, y)
-                path_trace(&mut ray, true);
+                let mut ray = scene.camera.get_ray(&mut rng, x, y);
+                path_trace(scene, &mut ray, true);
             }
         }
     }

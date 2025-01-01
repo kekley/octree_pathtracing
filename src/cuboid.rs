@@ -1,10 +1,6 @@
-use crate::{
-    aabb::AABB,
-    axis::{Axis, BACK, DOWN, FORWARD, LEFT, RIGHT, UP},
-    get_axis,
-    interval::Interval,
-    ray::Ray,
-};
+use std::f32::INFINITY;
+
+use crate::{aabb::AABB, ray::Ray};
 use glam::Vec3A as Vec3;
 
 pub enum Face {
@@ -40,102 +36,127 @@ impl Cuboid {
     }
 
     pub fn hit(&self, ray: &mut Ray) -> bool {
-        for axis in Axis::iter() {
-            let box_axis_min = self.bbox.get_interval(*axis).min;
-            let box_axis_max = self.bbox.get_interval(*axis).max;
-            let ray_axis_origin = get_axis(&ray.origin, *axis);
-            let ray_axis_dir_inverse = get_axis(&ray.inv_dir, *axis);
+        ray.hit.t = INFINITY;
+        let t = self.bbox.intersects(ray);
+        if t == INFINITY {
+            return false;
+        } else {
+            true
+        }
+    }
+    pub fn intersect(&self, ray: &mut Ray) -> bool {
+        let ix = ray.origin.x - (ray.origin.x + ray.direction.x * Ray::OFFSET).floor();
+        let iy = ray.origin.y - (ray.origin.y + ray.direction.y * Ray::OFFSET).floor();
+        let iz = ray.origin.z - (ray.origin.z + ray.direction.z * Ray::OFFSET).floor();
+        let mut t;
+        let mut u;
+        let mut v;
+        let mut hit = false;
 
-            let t0 = (box_axis_min - ray_axis_origin) * ray_axis_dir_inverse;
-            let t1 = (box_axis_max - ray_axis_origin) * ray_axis_dir_inverse;
+        ray.hit.t_next = ray.hit.t;
 
-            if t0 < t1 {
-                interval.min = t0.max(interval.min);
-                interval.max = t1.min(interval.max);
-            } else {
-                interval.min = t1.max(interval.min);
-                interval.max = t0.min(interval.max);
-            }
-            if interval.max <= interval.min {
-                return false;
+        t = (self.bbox.min.x - ix) / ray.direction.x;
+        if t < ray.hit.t_next && t > -Ray::EPSILON {
+            u = iz + ray.direction.z * t;
+            v = iy + ray.direction.y * t;
+            if u >= self.bbox.min.z
+                && u <= self.bbox.max.z
+                && v >= self.bbox.min.y
+                && v <= self.bbox.max.y
+            {
+                hit = true;
+                ray.hit.t_next = t;
+                ray.hit.u = u;
+                ray.hit.v = v;
+                ray.hit.outward_normal = Vec3::new(-1.0, 0.0, 0.0);
             }
         }
 
-        let point = ray.at(interval.min);
-        let mut u = 0.0;
-        let mut v = 0.0;
-        let mut normal = UP;
-        let mut mat_index: usize = 0;
-        Axis::iter()
-            .find(|&&axis| {
-                let distance_to_min =
-                    (get_axis(&point, axis) - self.bbox.get_interval(axis).min).abs();
-                let distance_to_max =
-                    (get_axis(&point, axis) - self.bbox.get_interval(axis).max).abs();
-                distance_to_min < EPSILON || distance_to_max < EPSILON
-            })
-            .map(|&axis| {
-                let distance_to_min =
-                    (get_axis(&point, axis) - self.bbox.get_interval(axis).min).abs();
-                let is_min_face = distance_to_min < EPSILON;
+        t = (self.bbox.max.x - ix) / ray.direction.x;
+        if t < ray.hit.t_next && t > -Ray::EPSILON {
+            u = iz + ray.direction.z * t;
+            v = iy + ray.direction.y * t;
+            if u >= self.bbox.min.z
+                && u <= self.bbox.max.z
+                && v >= self.bbox.min.y
+                && v <= self.bbox.max.y
+            {
+                hit = true;
+                ray.hit.t_next = t;
+                ray.hit.u = 1.0 - u;
+                ray.hit.v = v;
+                ray.hit.outward_normal = Vec3::new(1.0, 0.0, 0.0);
+            }
+        }
 
-                match (is_min_face, axis) {
-                    (true, Axis::X) => {
-                        mat_index = 2;
-                        normal = LEFT;
-                        u = (point.z - self.bbox.get_interval(Axis::Z).min)
-                            / self.bbox.get_interval(Axis::Z).size();
-                        v = (point.y - self.bbox.get_interval(Axis::Y).min)
-                            / self.bbox.get_interval(Axis::Y).size();
-                    }
-                    (true, Axis::Y) => {
-                        mat_index = 1;
-                        normal = DOWN;
-                        u = (point.x - self.bbox.get_interval(Axis::X).min)
-                            / self.bbox.get_interval(Axis::X).size();
-                        v = (point.z - self.bbox.get_interval(Axis::Z).min)
-                            / self.bbox.get_interval(Axis::Z).size();
-                    }
-                    (true, Axis::Z) => {
-                        mat_index = 5;
-                        normal = BACK;
-                        u = (point.x - self.bbox.get_interval(Axis::X).min)
-                            / self.bbox.get_interval(Axis::X).size();
-                        v = (point.y - self.bbox.get_interval(Axis::Y).min)
-                            / self.bbox.get_interval(Axis::Y).size();
-                    }
-                    (false, Axis::X) => {
-                        mat_index = 3;
-                        normal = RIGHT;
-                        u = (point.z - self.bbox.get_interval(Axis::Z).min)
-                            / self.bbox.get_interval(Axis::Z).size();
-                        v = (point.y - self.bbox.get_interval(Axis::Y).min)
-                            / self.bbox.get_interval(Axis::Y).size();
-                    }
-                    (false, Axis::Y) => {
-                        mat_index = 0;
-                        normal = UP;
-                        u = (point.x - self.bbox.get_interval(Axis::X).min)
-                            / self.bbox.get_interval(Axis::X).size();
-                        v = (point.z - self.bbox.get_interval(Axis::Z).min)
-                            / self.bbox.get_interval(Axis::Z).size();
-                    }
-                    (false, Axis::Z) => {
-                        mat_index = 4;
-                        normal = FORWARD;
-                        u = (point.x - self.bbox.get_interval(Axis::X).min)
-                            / self.bbox.get_interval(Axis::X).size();
-                        v = (point.y - self.bbox.get_interval(Axis::Y).min)
-                            / self.bbox.get_interval(Axis::Y).size();
-                    }
-                };
-            });
+        t = (self.bbox.min.y - iy) / ray.direction.y;
+        if t < ray.hit.t_next && t > -Ray::EPSILON {
+            u = ix + ray.direction.x * t;
+            v = iz + ray.direction.z * t;
+            if u >= self.bbox.min.x
+                && u <= self.bbox.max.x
+                && v >= self.bbox.min.z
+                && v <= self.bbox.max.z
+            {
+                hit = true;
+                ray.hit.t_next = t;
+                ray.hit.u = u;
+                ray.hit.v = v;
+                ray.hit.outward_normal = Vec3::new(0.0, -1.0, 0.0);
+            }
+        }
 
-        ray.hit.u = u;
-        ray.hit.v = v;
-        ray.hit.t = interval.min;
-        ray.hit.outward_normal = normal;
-        ray.hit.current_material = self.resource_idx;
-        return true;
+        t = (self.bbox.max.y - iy) / ray.direction.y;
+        if t < ray.hit.t_next && t > -Ray::EPSILON {
+            u = ix + ray.direction.x * t;
+            v = iz + ray.direction.z * t;
+            if u >= self.bbox.min.x
+                && u <= self.bbox.max.x
+                && v >= self.bbox.min.z
+                && v <= self.bbox.max.z
+            {
+                hit = true;
+                ray.hit.t_next = t;
+                ray.hit.u = u;
+                ray.hit.v = v;
+                ray.hit.outward_normal = Vec3::new(0.0, 1.0, 0.0);
+            }
+        }
+
+        t = (self.bbox.min.z - iz) / ray.direction.z;
+        if t < ray.hit.t_next && t > -Ray::EPSILON {
+            u = ix + ray.direction.x * t;
+            v = iy + ray.direction.y * t;
+            if u >= self.bbox.min.x
+                && u <= self.bbox.max.x
+                && v >= self.bbox.min.y
+                && v <= self.bbox.max.y
+            {
+                hit = true;
+                ray.hit.t_next = t;
+                ray.hit.u = 1.0 - u;
+                ray.hit.v = v;
+                ray.hit.outward_normal = Vec3::new(0.0, 0.0, -1.0);
+            }
+        }
+
+        t = (self.bbox.max.z - iz) / ray.direction.z;
+        if t < ray.hit.t_next && t > -Ray::EPSILON {
+            u = ix + ray.direction.x * t;
+            v = iy + ray.direction.y * t;
+            if u >= self.bbox.min.x
+                && u <= self.bbox.max.x
+                && v >= self.bbox.min.y
+                && v <= self.bbox.max.y
+            {
+                hit = true;
+                ray.hit.t_next = t;
+                ray.hit.u = u;
+                ray.hit.v = v;
+                ray.hit.outward_normal = Vec3::new(0.0, 0.0, 1.0);
+            }
+        }
+
+        hit
     }
 }

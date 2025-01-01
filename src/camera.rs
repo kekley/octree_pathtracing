@@ -2,24 +2,9 @@ use glam::Vec3A as Vec3;
 
 use rand::{rngs::StdRng, Rng};
 use rand_distr::UnitDisc;
-use rayon::prelude::*;
-use std::{
-    cmp::max,
-    f32::{consts::FRAC_PI_6, INFINITY},
-    io::Write,
-    sync::{atomic::AtomicU32, Arc},
-};
+use std::f32::{consts::FRAC_PI_6, INFINITY};
 
-use crate::{
-    axis::UP,
-    hittable::Hittable,
-    interval::Interval,
-    ray::Ray,
-    util::{
-        degrees_to_rads, random_float, random_in_unit_disk, write_rgb8_color_as_text_to_stream,
-    },
-    HitRecord,
-};
+use crate::{axis::UP, ray::Ray, HitRecord};
 
 #[derive(Debug, Clone)]
 pub struct Camera {
@@ -288,19 +273,20 @@ impl Camera {
         Vec3::ZERO
     } */
 
-    fn get_ray(&self, rng: &mut StdRng, x: f32, y: f32) -> Ray {
+    pub fn get_ray(&self, rng: &mut StdRng, x: u32, y: u32) -> Ray {
         let distance_to_image_plane = (self.fov / 2.0).tan().recip();
 
         let right = self.direction.cross(self.up).normalize();
 
         let mut origin = self.position;
-        let mut new_dir = distance_to_image_plane * self.direction + x * right + y * self.up;
+        let mut new_dir =
+            distance_to_image_plane * self.direction + x as f32 * right + y as f32 * self.up;
 
         if self.aperture > 0.0 {
             let focal_point = origin + new_dir.normalize() * self.focus_dist;
             let [x, y]: [f32; 2] = rng.sample(UnitDisc);
             origin += (x * right + y * self.up) * self.aperture;
-            new_dir = (focal_point - origin);
+            new_dir = focal_point - origin;
         }
         Ray {
             origin: origin,

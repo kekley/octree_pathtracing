@@ -236,7 +236,7 @@ impl BVHTree {
             }
             if dist_1 == INFINITY {
                 if stack_idx == 0 {
-                    break;
+                    break false;
                 } else {
                     stack_idx -= 1;
                     node = stack[stack_idx];

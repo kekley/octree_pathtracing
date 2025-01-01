@@ -5,7 +5,7 @@ use crate::{
     aabb::AABB, bvh::BVHTree, cuboid::Cuboid, interval::Interval, ray::Ray, sphere::Sphere,
     Material,
 };
-use glam::Vec3A as Vec3;
+use glam::{Vec3A as Vec3, Vec4};
 
 #[derive(Debug, Clone)]
 pub struct HittableBVH {
@@ -22,7 +22,7 @@ impl HittableBVH {
     }
 
     pub fn hit(&self, ray: &mut Ray) -> bool {
-        self.bvh.hit(ray);
+        self.bvh.hit(ray)
     }
     pub fn bbox(&self) -> AABB {
         *self.bvh.bbox()
@@ -42,8 +42,8 @@ impl HittableHitList {
         }
     }
 
-    pub fn hit(&self, ray: &mut Ray, ray_t: Interval) {
-        self.hit_list.hit(ray, ray_t);
+    pub fn hit(&self, ray: &mut Ray) -> bool {
+        self.hit_list.hit(ray)
     }
     pub fn bbox(&self) -> AABB {
         self.hit_list.bbox
@@ -52,13 +52,16 @@ impl HittableHitList {
 
 #[derive(Debug, Clone)]
 pub struct HitRecord {
-    pub t: f32,
+    pub t: f32, // closest hit
+    pub t_next: f32,
     pub u: f32,
     pub v: f32,
     pub current_material: u32,
     pub outward_normal: Vec3,
     pub geom_normal: Vec3,
     pub previous_material: u32,
+    pub color: Vec4,
+    pub depth: u32,
 }
 
 impl Default for HitRecord {
@@ -71,6 +74,9 @@ impl Default for HitRecord {
             outward_normal: Vec3::ZERO,
             geom_normal: todo!(),
             previous_material: todo!(),
+            t_next: todo!(),
+            color: todo!(),
+            depth: todo!(),
         }
     }
 }
@@ -126,14 +132,16 @@ impl HitList {
     pub fn clear(&mut self) {
         self.objects.clear();
     }
-    pub fn hit(&self, ray: &mut Ray, ray_t: Interval) {
-        let mut closest_hit = ray_t.max;
-
+    pub fn hit(&self, ray: &mut Ray) -> bool {
+        //FIXME: This is not the correct way to do this
+        let mut closest_hit = ray.hit.t;
+        let mut hit = false;
         for object in &self.objects {
-            object.hit(ray, Interval::new(ray_t.min, closest_hit));
+            hit = object.hit(ray);
             if ray.hit.t < closest_hit {
                 closest_hit = ray.hit.t;
             }
         }
+        hit
     }
 }

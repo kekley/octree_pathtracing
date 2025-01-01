@@ -14,6 +14,7 @@ pub enum Axis {
     Z = 2,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum Direction {
     Up,
     Down,
@@ -43,5 +44,20 @@ impl Axis {
         static AXES: [Axis; 3] = [Axis::X, Axis::Y, Axis::Z];
 
         AXES.iter()
+    }
+}
+
+pub trait AxisOps {
+    fn get_axis(&self, axis: Axis) -> f32;
+}
+
+impl AxisOps for Vec3 {
+    #[inline]
+    fn get_axis(&self, axis: Axis) -> f32 {
+        match axis {
+            Axis::X => self.x,
+            Axis::Y => self.y,
+            Axis::Z => self.z,
+        }
     }
 }

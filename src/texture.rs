@@ -32,10 +32,11 @@ impl Texture {
 
                 let color = image.pixel_data(i, j);
 
-                let val = Vec3::new(
+                let val = Vec4::new(
                     RTWImage::byte_to_float(color[0]) as f32,
                     RTWImage::byte_to_float(color[1]) as f32,
                     RTWImage::byte_to_float(color[2]) as f32,
+                    RTWImage::byte_to_float(color[3]) as f32,
                 );
                 val
             }

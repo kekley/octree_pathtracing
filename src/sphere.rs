@@ -29,6 +29,7 @@ impl Sphere {
     }
     #[inline]
     pub fn hit(&self, ray: &mut Ray) -> bool {
+        todo!("Implement Sphere::hit");
         let origin_to_center = self.center - ray.origin;
         let a = ray.direction.length_squared();
         let h = ray.direction.dot(origin_to_center);
@@ -44,15 +45,6 @@ impl Sphere {
         let sqrt_discriminant = discriminant.sqrt();
 
         let mut root = (h - sqrt_discriminant) / a;
-
-        if !ray_t.surrounds(root) {
-            root = (h + sqrt_discriminant) / a;
-
-            if !ray_t.surrounds(root) {
-                ray.hit.t = INFINITY;
-                return;
-            }
-        }
 
         let point = ray.at(root);
         let t = root;
