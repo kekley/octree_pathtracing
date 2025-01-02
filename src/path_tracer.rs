@@ -4,8 +4,104 @@ use std::{f32::INFINITY, path};
 use crate::{material, Material, MaterialFlags, Ray, Scene};
 use glam::{Vec3A as Vec3, Vec4, Vec4Swizzles};
 use rand::{rngs::StdRng, Rng, SeedableRng};
-
 pub fn path_trace(scene: &Scene, ray: &mut Ray, first_reflection: bool) -> bool {
+    let mut hit: bool = false;
+    let mut rng = StdRng::from_entropy();
+
+    loop {
+        if !next_intersection(scene, ray) {
+            ray.hit.color = Vec4::new(
+                Scene::SKY_COLOR.x,
+                Scene::SKY_COLOR.y,
+                Scene::SKY_COLOR.z,
+                1.0,
+            );
+            break;
+        }
+
+        let current_material = ray.hit.current_material;
+        let prev_material = ray.hit.previous_material;
+
+        let specular = scene.materials[current_material as usize].specular;
+        let diffuse = ray.hit.color.w;
+        let absorb = ray.hit.color.w;
+
+        let ior1 = scene.materials[current_material as usize].index_of_refraction;
+        let ior2 = scene.materials[prev_material as usize].index_of_refraction;
+
+        if ray.hit.color.w + specular < Ray::EPSILON && (ior1 - ior2).abs() < Ray::EPSILON {
+            continue;
+        }
+
+        if ray.hit.depth + 1 >= 5 {
+            break;
+        }
+        ray.hit.depth += 1;
+
+        let mut cumm_color = Vec4::splat(0.0);
+        let mut next = Ray::default();
+
+        let metal = scene.materials[current_material as usize].metalness;
+
+        let count = if first_reflection {
+            scene.get_current_branch_count()
+        } else {
+            1
+        };
+
+        for _ in 0..count {
+            let do_metal = metal > Ray::EPSILON && rng.gen::<f32>() < metal;
+            if do_metal || (specular > Ray::EPSILON && rng.gen::<f32>() < specular) {
+                hit |= do_specular_reflection(
+                    ray,
+                    &mut next,
+                    &mut cumm_color,
+                    do_metal,
+                    &mut rng,
+                    scene,
+                );
+            } else if rng.gen::<f32>() < diffuse {
+                hit |= do_diffuse_reflection(
+                    ray,
+                    &mut next,
+                    &mut cumm_color,
+                    &scene.materials[current_material as usize],
+                    &mut rng,
+                    scene,
+                );
+            } else if (ior1 - ior2).abs() >= Ray::EPSILON {
+                hit |= do_refraction(
+                    ray,
+                    &mut next,
+                    &scene.materials[current_material as usize],
+                    &scene.materials[prev_material as usize],
+                    &mut cumm_color,
+                    ior1,
+                    ior2,
+                    absorb,
+                    &mut rng,
+                    scene,
+                );
+            } else {
+                hit |= do_transmission(ray, &mut next, &mut cumm_color, absorb, scene)
+            }
+        }
+
+        ray.hit.color = cumm_color / count as f32;
+
+        break;
+    }
+
+    if !hit {
+        ray.hit.color = Vec4::new(0.0, 0.0, 0.0, 1.0);
+        if first_reflection {
+            let air_distance = ray.distance_travelled;
+        }
+    }
+    hit
+}
+
+pub fn path_trace_old(scene: &Scene, ray: &mut Ray, first_reflection: bool) -> bool {
     let mut hit: bool = false;
     let mut rng = StdRng::from_entropy();
     let ray_origin = ray.origin.clone();
@@ -31,8 +127,8 @@ pub fn path_trace(scene: &Scene, ray: &mut Ray, first_reflection: bool) -> bool 
                     1.0,
                 );
                 hit = true;
+                break;
             }
-            break;
         }
         let current_material = ray.hit.current_material;
         let prev_material = ray.hit.previous_material;
@@ -132,13 +228,13 @@ pub fn do_specular_reflection(
 
     if path_trace(scene, next, false) {
         if do_metal {
-            cumulative_color.x = ray.hit.color.x * next.hit.color.x;
-            cumulative_color.y = ray.hit.color.y * next.hit.color.y;
-            cumulative_color.z = ray.hit.color.z * next.hit.color.z;
+            cumulative_color.x += ray.hit.color.x * next.hit.color.x;
+            cumulative_color.y += ray.hit.color.y * next.hit.color.y;
+            cumulative_color.z += ray.hit.color.z * next.hit.color.z;
         } else {
-            cumulative_color.x = next.hit.color.x;
-            cumulative_color.y = next.hit.color.y;
-            cumulative_color.z = next.hit.color.z;
+            cumulative_color.x += next.hit.color.x;
+            cumulative_color.y += next.hit.color.y;
+            cumulative_color.z += next.hit.color.z;
         }
         hit = true;
     }
@@ -166,9 +262,14 @@ pub fn do_diffuse_reflection(
     hit = path_trace(scene, next, false) || hit;
 
     if hit {
-        cumulative_color.x = ray_color.x * next.hit.color.x;
-        cumulative_color.y = ray_color.y * next.hit.color.y;
-        cumulative_color.z = ray_color.z * next.hit.color.z;
+        cumulative_color.x += ray_color.x * next.hit.color.x;
+        cumulative_color.y += ray_color.y * next.hit.color.y;
+        cumulative_color.z += ray_color.z * next.hit.color.z;
+    } else {
+        hit = true;
+        cumulative_color.x += ray_color.x * Scene::SKY_COLOR.x;
+        cumulative_color.y += ray_color.y * Scene::SKY_COLOR.y;
+        cumulative_color.z += ray_color.z * Scene::SKY_COLOR.z;
     }
 
     ray.hit.color = ray_color;
@@ -204,9 +305,9 @@ pub fn do_refraction(
         *next = ray.specular_reflection(current_material.roughness, rng);
         if path_trace(scene, next, false) {
             hit = true;
-            cumulative_color.x = next.hit.color.x;
-            cumulative_color.y = next.hit.color.y;
-            cumulative_color.z = next.hit.color.z;
+            cumulative_color.x += next.hit.color.x;
+            cumulative_color.y += next.hit.color.y;
+            cumulative_color.z += next.hit.color.z;
         }
     } else {
         *next = ray.clone();
@@ -222,9 +323,9 @@ pub fn do_refraction(
             *next = ray.specular_reflection(current_material.roughness, rng);
             if path_trace(scene, next, false) {
                 hit = true;
-                cumulative_color.x = next.hit.color.x;
-                cumulative_color.y = next.hit.color.y;
-                cumulative_color.z = next.hit.color.z;
+                cumulative_color.x += next.hit.color.x;
+                cumulative_color.y += next.hit.color.y;
+                cumulative_color.z += next.hit.color.z;
             }
         } else if do_refraction {
             let t2 = radicand.sqrt();
@@ -292,19 +393,14 @@ pub fn translucent_ray_color(
 
     *cumulative_color += output_color;
 }
-
 pub fn next_intersection(scene: &Scene, ray: &mut Ray) -> bool {
     ray.hit.previous_material = ray.hit.current_material;
     ray.hit.t = INFINITY;
-    let mut hit = false;
+    ray.hit.current_material = 0;
     if scene.hit(ray) {
-        return true;
-    }
-    if hit {
         ray.distance_travelled += ray.hit.t;
         ray.origin = ray.at(ray.hit.t);
         return true;
-    } else {
-        return false;
     }
+    return false;
 }

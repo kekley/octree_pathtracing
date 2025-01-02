@@ -56,13 +56,14 @@ impl Cuboid {
         let color = scene.materials[material_idx as usize].albedo.value(
             ray.hit.u,
             ray.hit.v,
-            &ray.at(ray.hit.t),
+            &ray.at(ray.hit.t_next),
         );
         if color.w > Ray::EPSILON {
+            assert!(color.w == 1.0);
             ray.hit.color = color;
-            println!("Color: {:?}", color);
             true
         } else {
+            println!("something went wrong");
             false
         }
     }

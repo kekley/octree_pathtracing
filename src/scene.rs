@@ -104,9 +104,8 @@ impl Scene {
         }
     }
 
-    pub fn trace_ray(&self, x: u32, y: u32, rng: &mut StdRng) -> Vec4 {
+    pub fn trace_ray(&self, x: f32, y: f32, rng: &mut StdRng) -> Vec4 {
         let mut ray = self.camera.get_ray(rng, x, y);
-        println!("ray: {:?}", ray);
         path_trace(&self, &mut ray, true);
         ray.hit.color
     }

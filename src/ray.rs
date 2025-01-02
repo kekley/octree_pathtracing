@@ -134,7 +134,7 @@ impl Ray {
         self.origin = self.at(Ray::EPSILON);
     }
 
-    pub fn diffuse_reflection(&self, rng: &mut StdRng) -> Self {
+    pub fn diffuse_reflection_old(&self, rng: &mut StdRng) -> Self {
         let mut tmp = self.clone();
 
         let x1 = rng.gen::<f32>();
@@ -165,6 +165,38 @@ impl Ray {
 
         tmp.origin = tmp.at(Ray::EPSILON);
 
+        tmp.hit.current_material = tmp.hit.previous_material;
+
+        tmp
+    }
+
+    pub fn diffuse_reflection(&self, rng: &mut StdRng) -> Self {
+        let mut tmp = self.clone();
+
+        let x1 = rng.gen::<f32>();
+        let x2 = rng.gen::<f32>();
+
+        let r = x1.sqrt();
+        let theta = 2.0 * PI * x2;
+
+        let tx = r * theta.cos();
+        let ty = r * theta.sin();
+        let tz = (1.0 - tx * tx - ty * ty).sqrt();
+
+        let tangent = if self.hit.outward_normal.x.abs() > 0.1 {
+            Vec3::new(0.0, 1.0, 0.0)
+        } else {
+            Vec3::new(1.0, 0.0, 0.0)
+        };
+
+        let u = tangent.cross(self.hit.outward_normal).normalize();
+        let v = self.hit.outward_normal.cross(u);
+
+        let rotation_matrix = Mat3::from_cols(u, v, self.hit.outward_normal);
+        let new_dir = rotation_matrix * Vec3::new(tx, ty, tz);
+
+        tmp.direction = new_dir;
+        tmp.origin = tmp.at(Ray::EPSILON);
         tmp.hit.current_material = tmp.hit.previous_material;
 
         tmp

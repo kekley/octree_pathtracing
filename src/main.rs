@@ -6,17 +6,15 @@ use std::{fs::File, io::Write, time::Instant};
 
 use anyhow::Ok;
 use glam::Vec3A as Vec3;
-use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
-use ray_tracing::{BVHTree, Scene};
+use ray_tracing::{BVHTree, MaterialFlags, RTWImage, Scene, Texture};
 use ray_tracing::{Camera, HittableBVH};
 use ray_tracing::{Cuboid, Material};
 use ray_tracing::{HitList, Hittable};
 use ray_tracing::{TileRenderer, AABB};
-use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
-use rayon::ThreadPoolBuilder;
 use spider_eye::{ChunkCoords, World, WorldCoords};
 pub const ASPECT_RATIO: f32 = 1.5;
+use glam::Vec4;
+use rand::Rng;
 
 fn main() -> Result<(), anyhow::Error> {
     let start = Instant::now();
@@ -225,20 +223,46 @@ fn blocks() -> Result<(), anyhow::Error> {
 
     let chunk_view_distance: i32 = 500;
     let camera = Camera::look_at(
-        Vec3::splat(0.0),
-        Vec3::new(0.0, 0.0, 1.0),
+        Vec3::new(0.0, -0.0, -10.0),
+        Vec3::new(0.0, 0.0, 0.0),
         Vec3::new(0.0, 1.0, 0.0),
-        70.0,
+        120.0,
     );
     let mut scene = Scene::new().branch_count(1).camera(camera).spp(1).build();
-    let materials = vec![Material::default()];
-    scene.add_cube(Cuboid::new(
-        AABB::from_points(Vec3::new(-1.0, 0.0, 0.0), Vec3::new(1.0, 0.0, 0.0)),
-        0,
-    ));
+    let tex_image = RTWImage::load("./assets/earthmap.jpg").unwrap();
+    let tex = Texture::Image(tex_image);
+    let checkerboard = Texture::CheckerBoard {
+        inv_scale: 1.0,
+        a: Box::new(Texture::Color(Vec4::new(0.6, 0.6, 0.6, 1.0))),
+        b: Box::new(Texture::Color(Vec4::splat(1.0))),
+    };
+    let mat = Material {
+        name: "earth".into(),
+        index_of_refraction: 1.0,
+        material_flags: MaterialFlags::OPAQUE | MaterialFlags::SOLID,
+        specular: 0.0,
+        emittance: 0.0,
+        roughness: 0.0,
+        metalness: 0.0,
+        albedo: checkerboard,
+    };
+    let materials = vec![mat];
     scene.materials = materials;
-    let mut rng = StdRng::from_entropy();
-    let a = TileRenderer::new((500, 500), 8, scene);
-    a.render();
+    let start = Vec3::new(-2.0, -2.0, 20.0);
+    let bounds = AABB::from_points(start, start + 2.0);
+    scene.add_cube(Cuboid::new(bounds, 0));
+
+    let mut rng = rand::thread_rng();
+    for _ in 0..10 {
+        let x = rng.gen_range(-5.0..5.0);
+        let y = rng.gen_range(-5.0..5.0);
+        let z = rng.gen_range(10.0..20.0);
+        let start = Vec3::new(x, y, z);
+        let bounds = AABB::from_points(start, start + 2.0);
+        scene.add_cube(Cuboid::new(bounds, 0));
+    }
+    let a = TileRenderer::new((500, 500), 1, scene);
+
+    a.single_thread_render();
     Ok(())
 }
