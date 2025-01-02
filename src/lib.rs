@@ -18,7 +18,7 @@ mod translation;
 mod util;
 mod voxel_scene;
 pub use {
-    aabb::*, bvh::*, camera::*, cuboid::*, hittable::*, interval::*, material::*,
-    minecraft_textures::*, path_tracer::*, ray::*, rtw_image::*, scene::*, sphere::*, texture::*,
-    translation::*, util::*, voxel_scene::*,
+    aabb::*, bvh::*, camera::*, cuboid::*, hittable::*, interval::*, material::*, path_tracer::*,
+    ray::*, rtw_image::*, scene::*, sphere::*, texture::*, tile_renderer::*, translation::*,
+    util::*, voxel_scene::*,
 };

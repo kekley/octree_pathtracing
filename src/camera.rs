@@ -291,7 +291,6 @@ impl Camera {
         Ray {
             origin: origin,
             direction: new_dir,
-            inv_dir: 1.0 / new_dir,
             hit: HitRecord::default(),
             distance_travelled: 0.0,
         }

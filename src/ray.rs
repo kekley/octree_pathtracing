@@ -6,11 +6,10 @@ use rand::{rngs::StdRng, Rng};
 
 #[derive(Debug, Clone, Default)]
 pub struct Ray {
-    pub origin: Vec3,
-    pub direction: Vec3,
-    pub inv_dir: Vec3,
-    pub distance_travelled: f32,
-    pub hit: HitRecord,
+    pub(crate) origin: Vec3,
+    pub(crate) direction: Vec3,
+    pub(crate) distance_travelled: f32,
+    pub(crate) hit: HitRecord,
 }
 
 impl Ray {
@@ -22,12 +21,10 @@ impl Ray {
         self.origin + self.direction * t
     }
     #[inline]
-
     pub fn new(point: Vec3, direction: Vec3) -> Self {
         Self {
             origin: point,
             direction,
-            inv_dir: 1.0 / direction,
             hit: HitRecord::default(),
             distance_travelled: 0.0,
         }
@@ -37,10 +34,23 @@ impl Ray {
         Self {
             origin: self.origin,
             direction: self.direction,
-            inv_dir: self.inv_dir,
             distance_travelled: self.distance_travelled,
             hit: self.hit.clone(),
         }
+    }
+
+    pub fn set_normals(&mut self, normal: Vec3) {
+        self.hit.outward_normal = normal;
+        self.hit.geom_normal = normal;
+    }
+
+    pub fn orient_normal(&mut self, normal: Vec3) {
+        if self.direction.dot(normal) > 0.0 {
+            self.hit.outward_normal = -normal;
+        } else {
+            self.hit.outward_normal = normal;
+        }
+        self.hit.geom_normal = normal;
     }
 
     pub fn specular_reflection(&self, roughness: f32, rng: &mut StdRng) -> Self {
@@ -64,14 +74,14 @@ impl Ray {
             let ty = r * theta.sin();
             let tz = (1.0 - x1).sqrt();
 
-            let xx: Vec3;
+            let tangent: Vec3;
             if tmp.hit.outward_normal.x.abs() > 0.1 {
-                xx = Vec3::new(0.0, 1.0, 0.0);
+                tangent = Vec3::new(0.0, 1.0, 0.0);
             } else {
-                xx = Vec3::new(1.0, 0.0, 0.0);
+                tangent = Vec3::new(1.0, 0.0, 0.0);
             }
 
-            let u = xx.cross(tmp.hit.outward_normal).normalize();
+            let u = tangent.cross(tmp.hit.outward_normal).normalize();
             let v = tmp.hit.outward_normal.cross(u);
 
             let rotation_matrix = Mat3::from_cols(u, v, tmp.hit.outward_normal);
@@ -99,5 +109,64 @@ impl Ray {
         tmp
     }
 
-    pub fn scatter_normal() {}
+    pub fn scatter_normal(&mut self, rng: &mut StdRng) {
+        let x1 = rng.gen::<f32>();
+        let x2 = rng.gen::<f32>();
+
+        let r = x1.sqrt();
+        let theta = 2.0 * PI * x2;
+
+        let tangent = if self.hit.outward_normal.x.abs() > 0.1 {
+            Vec3::new(0.0, 1.0, 0.0)
+        } else {
+            Vec3::new(1.0, 0.0, 0.0)
+        };
+
+        let u = tangent.cross(self.hit.outward_normal).normalize();
+        let v = self.hit.outward_normal.cross(u);
+
+        let rotation_matrix = Mat3::from_cols(u, v, self.hit.outward_normal);
+
+        let new_dir =
+            rotation_matrix * Vec3::new(r * theta.cos(), r * theta.sin(), (1.0 - x1).sqrt());
+
+        self.direction = new_dir;
+        self.origin = self.at(Ray::EPSILON);
+    }
+
+    pub fn diffuse_reflection(&self, rng: &mut StdRng) -> Self {
+        let mut tmp = self.clone();
+
+        let x1 = rng.gen::<f32>();
+        let x2 = rng.gen::<f32>();
+
+        let r = x1.sqrt();
+
+        let theta = 2.0 * PI * x2;
+
+        let tx = r * theta.cos();
+        let ty = r * theta.sin();
+        let tz = (1.0 - tx * tx - ty * ty).sqrt();
+
+        let tangent = if self.hit.outward_normal.x.abs() > 0.1 {
+            Vec3::new(0.0, 1.0, 0.0)
+        } else {
+            Vec3::new(1.0, 0.0, 0.0)
+        };
+
+        let u = tangent.cross(self.hit.outward_normal).normalize();
+        let v = self.hit.outward_normal.cross(u);
+
+        let rotation_matrix = Mat3::from_cols(u, v, self.hit.outward_normal);
+
+        let new_dir = rotation_matrix * Vec3::new(tx, ty, tz);
+
+        tmp.direction = new_dir;
+
+        tmp.origin = tmp.at(Ray::EPSILON);
+
+        tmp.hit.current_material = tmp.hit.previous_material;
+
+        tmp
+    }
 }

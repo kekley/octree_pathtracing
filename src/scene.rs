@@ -1,6 +1,8 @@
-use crate::{BVHTree, Camera, Cuboid, Material, Ray, Sphere};
+use crate::{path_trace, BVHTree, Camera, Cuboid, Material, Ray, Sphere};
 
-use glam::Vec3A as Vec3;
+use bitflags::bitflags;
+use glam::{Vec3A as Vec3, Vec4};
+use rand::rngs::StdRng;
 pub struct Scene {
     spheres: Vec<Sphere>,
     cubes: Vec<Cuboid>,
@@ -11,20 +13,56 @@ pub struct Scene {
     pub camera: Camera,
 }
 
-impl Scene {
-    pub const SKY_COLOR: Vec3 = Vec3::new(0.5, 0.7, 1.0);
+pub struct SceneBuilder {
+    pub spp: Option<u32>,
+    pub branch_count: Option<u32>,
+    pub camera: Option<Camera>,
+}
 
-    pub fn new() -> Self {
-        Self {
+impl SceneBuilder {
+    pub fn build(self) -> Scene {
+        Scene {
             spheres: Vec::new(),
             cubes: Vec::new(),
             bvhs: Vec::new(),
-            camera: Camera::default(),
             materials: Vec::new(),
-            spp: todo!(),
-            branch_count: todo!(),
+            spp: self.spp.unwrap_or(1),
+            branch_count: self.branch_count.unwrap_or(1),
+            camera: self.camera.unwrap_or(Camera::default()),
         }
     }
+
+    pub fn spp(self, spp: u32) -> Self {
+        Self {
+            spp: Some(spp),
+            ..self
+        }
+    }
+
+    pub fn branch_count(self, branch_count: u32) -> Self {
+        Self {
+            branch_count: Some(branch_count),
+            ..self
+        }
+    }
+
+    pub fn camera(self, camera: Camera) -> Self {
+        Self {
+            camera: Some(camera),
+            ..self
+        }
+    }
+}
+
+impl Scene {
+    pub fn new() -> SceneBuilder {
+        SceneBuilder {
+            spp: None,
+            branch_count: None,
+            camera: None,
+        }
+    }
+    pub const SKY_COLOR: Vec3 = Vec3::new(0.5, 0.7, 1.0);
 
     pub fn add_sphere(&mut self, sphere: Sphere) {
         self.spheres.push(sphere);
@@ -41,11 +79,17 @@ impl Scene {
     pub fn hit(&self, ray: &mut Ray) -> bool {
         let mut hit = false;
 
-        for sphere in &self.spheres {
-            hit |= sphere.hit(ray);
+        for cube in &self.cubes {
+            if cube.intersect(ray, &self) {
+                hit = true;
+            }
         }
-
-        true
+        if hit {
+            ray.distance_travelled = ray.hit.t;
+            ray.origin = ray.at(ray.hit.t);
+            return true;
+        }
+        return false;
     }
 
     pub fn get_current_branch_count(&self) -> u32 {
@@ -58,5 +102,12 @@ impl Scene {
         } else {
             return self.branch_count;
         }
+    }
+
+    pub fn trace_ray(&self, x: u32, y: u32, rng: &mut StdRng) -> Vec4 {
+        let mut ray = self.camera.get_ray(rng, x, y);
+        println!("ray: {:?}", ray);
+        path_trace(&self, &mut ray, true);
+        ray.hit.color
     }
 }

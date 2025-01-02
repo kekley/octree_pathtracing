@@ -104,13 +104,105 @@ impl AABB {
         }
     }
 
+    pub fn intersect(&self, ray: &mut Ray) -> bool {
+        let ix = ray.origin.x - (ray.origin.x + ray.direction.x * Ray::OFFSET).floor();
+        let iy = ray.origin.y - (ray.origin.y + ray.direction.y * Ray::OFFSET).floor();
+        let iz = ray.origin.z - (ray.origin.z + ray.direction.z * Ray::OFFSET).floor();
+        let mut t;
+        let mut u;
+        let mut v;
+        let mut hit = false;
+
+        ray.hit.t_next = ray.hit.t;
+
+        t = (self.min.x - ix) / ray.direction.x;
+        if t < ray.hit.t_next && t > -Ray::EPSILON {
+            u = iz + ray.direction.z * t;
+            v = iy + ray.direction.y * t;
+            if u >= self.min.z && u <= self.max.z && v >= self.min.y && v <= self.max.y {
+                hit = true;
+                ray.hit.t_next = t;
+                ray.hit.u = u;
+                ray.hit.v = v;
+                ray.hit.outward_normal = Vec3::new(-1.0, 0.0, 0.0);
+            }
+        }
+
+        t = (self.max.x - ix) / ray.direction.x;
+        if t < ray.hit.t_next && t > -Ray::EPSILON {
+            u = iz + ray.direction.z * t;
+            v = iy + ray.direction.y * t;
+            if u >= self.min.z && u <= self.max.z && v >= self.min.y && v <= self.max.y {
+                hit = true;
+                ray.hit.t_next = t;
+                ray.hit.u = 1.0 - u;
+                ray.hit.v = v;
+                ray.hit.outward_normal = Vec3::new(1.0, 0.0, 0.0);
+            }
+        }
+
+        t = (self.min.y - iy) / ray.direction.y;
+        if t < ray.hit.t_next && t > -Ray::EPSILON {
+            u = ix + ray.direction.x * t;
+            v = iz + ray.direction.z * t;
+            if u >= self.min.x && u <= self.max.x && v >= self.min.z && v <= self.max.z {
+                hit = true;
+                ray.hit.t_next = t;
+                ray.hit.u = u;
+                ray.hit.v = v;
+                ray.hit.outward_normal = Vec3::new(0.0, -1.0, 0.0);
+            }
+        }
+
+        t = (self.max.y - iy) / ray.direction.y;
+        if t < ray.hit.t_next && t > -Ray::EPSILON {
+            u = ix + ray.direction.x * t;
+            v = iz + ray.direction.z * t;
+            if u >= self.min.x && u <= self.max.x && v >= self.min.z && v <= self.max.z {
+                hit = true;
+                ray.hit.t_next = t;
+                ray.hit.u = u;
+                ray.hit.v = v;
+                ray.hit.outward_normal = Vec3::new(0.0, 1.0, 0.0);
+            }
+        }
+
+        t = (self.min.z - iz) / ray.direction.z;
+        if t < ray.hit.t_next && t > -Ray::EPSILON {
+            u = ix + ray.direction.x * t;
+            v = iy + ray.direction.y * t;
+            if u >= self.min.x && u <= self.max.x && v >= self.min.y && v <= self.max.y {
+                hit = true;
+                ray.hit.t_next = t;
+                ray.hit.u = 1.0 - u;
+                ray.hit.v = v;
+                ray.hit.outward_normal = Vec3::new(0.0, 0.0, -1.0);
+            }
+        }
+
+        t = (self.max.z - iz) / ray.direction.z;
+        if t < ray.hit.t_next && t > -Ray::EPSILON {
+            u = ix + ray.direction.x * t;
+            v = iy + ray.direction.y * t;
+            if u >= self.min.x && u <= self.max.x && v >= self.min.y && v <= self.max.y {
+                hit = true;
+                ray.hit.t_next = t;
+                ray.hit.u = u;
+                ray.hit.v = v;
+                ray.hit.outward_normal = Vec3::new(0.0, 0.0, 1.0);
+            }
+        }
+
+        hit
+    }
+
     #[inline]
     pub fn intersects(&self, ray: &Ray) -> f32 {
         let mut t_min = NEG_INFINITY;
         let mut t_max = INFINITY;
         for &axis in Axis::iter() {
             let box_axis_interval = self.get_interval(axis);
-            let ray_dir_axis_inverse = ray.inv_dir.get_axis(axis);
+            let ray_dir_axis_inverse = (1.0 / ray.direction).get_axis(axis);
 
             let (t0, t1) = if ray_dir_axis_inverse >= 0.0 {
                 (

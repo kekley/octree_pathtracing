@@ -4,19 +4,21 @@ use std::io::Read;
 use std::sync::{Arc, Mutex};
 use std::{fs::File, io::Write, time::Instant};
 
-use ray_tracing::Cuboid;
-use ray_tracing::Vec3;
-use ray_tracing::AABB;
-use ray_tracing::{BVHTree, TextureManager};
+use anyhow::Ok;
+use glam::Vec3A as Vec3;
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
+use ray_tracing::{BVHTree, Scene};
 use ray_tracing::{Camera, HittableBVH};
+use ray_tracing::{Cuboid, Material};
 use ray_tracing::{HitList, Hittable};
+use ray_tracing::{TileRenderer, AABB};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use rayon::ThreadPoolBuilder;
 use spider_eye::{ChunkCoords, World, WorldCoords};
-
 pub const ASPECT_RATIO: f32 = 1.5;
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), anyhow::Error> {
     let start = Instant::now();
 
     blocks()?;
@@ -217,74 +219,26 @@ fn cube() {
 }
  */
 
-fn blocks() -> Result<(), Box<dyn Error>> {
+fn blocks() -> Result<(), anyhow::Error> {
     let mut hitlist = HitList::new();
-    let mut material_manager = TextureManager::new();
-    let mut camera = Camera::new();
-
-    camera.aspect_ratio = 16.0 / 9.0;
-    camera.image_width = 400;
-    camera.samples_per_pixel = 1;
-    camera.max_depth = 5;
-    camera.v_fov = 90.0;
-    camera.look_from = Vec3::new(-751.0, 161.0, 574.0);
-    camera.look_at = Vec3::new(-788.0, 158.0, 550.0);
-    camera.v_up = Vec3::new(0.0, 1.0, 0.0);
-
-    camera.defocus_angle = 0.0;
-
-    //world stuff here
     let mut world = World::new("./hous");
 
     let chunk_view_distance: i32 = 500;
-    let starting_chunk_x = (camera.look_from.x as i32) >> 4;
-    let starting_chunk_z = (camera.look_from.z as i32) >> 4;
-    // Estimate the number of regions based on chunk view distance
-    let estimated_regions = (chunk_view_distance * chunk_view_distance) as usize;
-
-    let builder = ThreadPoolBuilder::new().num_threads(8);
-    builder.build_global().unwrap();
-    (135..192).for_each(|y| {
-        (490..580).for_each(|z| {
-            (-817..-773).for_each(|x| {
-                let block = world.get_block(WorldCoords { x: x, y: y, z: z });
-                let mat = material_manager.get_or_make_material_idx(
-                    world
-                        .global_palette
-                        .read()
-                        .unwrap()
-                        .get_index(block as usize)
-                        .unwrap()
-                        .0,
-                );
-                match mat {
-                    Ok(ind) => {
-                        let start_pos = Vec3::new(x as f32, y as f32, z as f32);
-                        let end_pos = start_pos + 1.0;
-                        hitlist.add(Hittable::Box(Cuboid::new(
-                            AABB::from_points(start_pos, end_pos),
-                            ind,
-                        )));
-                    }
-                    Err(path) => {
-                        //println!("{}", path)
-                    }
-                }
-            });
-        });
-    });
-
-    println!("{:?}", world.global_palette);
-    println!("hitlist: {}", hitlist.objects.len());
-
-    let tree = HittableBVH::new(BVHTree::from_hit_list(&hitlist));
-
-    let buf = camera.multi_threaded_render(&Hittable::BVHTree(tree), &(material_manager));
-
-    //file to write to
-    let mut file = File::create("./output.ppm").unwrap();
-
-    file.write(&buf[..]).unwrap();
-
+    let camera = Camera::look_at(
+        Vec3::splat(0.0),
+        Vec3::new(0.0, 0.0, 1.0),
+        Vec3::new(0.0, 1.0, 0.0),
+        70.0,
+    );
+    let mut scene = Scene::new().branch_count(1).camera(camera).spp(1).build();
+    let materials = vec![Material::default()];
+    scene.add_cube(Cuboid::new(
+        AABB::from_points(Vec3::new(-1.0, 0.0, 0.0), Vec3::new(1.0, 0.0, 0.0)),
+        0,
+    ));
+    scene.materials = materials;
+    let mut rng = StdRng::from_entropy();
+    let a = TileRenderer::new((500, 500), 8, scene);
+    a.render();
     Ok(())
 }

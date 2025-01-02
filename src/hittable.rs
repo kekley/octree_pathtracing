@@ -62,6 +62,7 @@ pub struct HitRecord {
     pub previous_material: u32,
     pub color: Vec4,
     pub depth: u32,
+    pub specular: bool,
 }
 
 impl Default for HitRecord {
@@ -72,11 +73,12 @@ impl Default for HitRecord {
             v: 0.0,
             current_material: 0,
             outward_normal: Vec3::ZERO,
-            geom_normal: todo!(),
-            previous_material: todo!(),
-            t_next: todo!(),
-            color: todo!(),
-            depth: todo!(),
+            geom_normal: Vec3::ZERO,
+            previous_material: 0,
+            t_next: INFINITY,
+            color: Vec4::ZERO,
+            depth: 0,
+            specular: false,
         }
     }
 }
