@@ -218,10 +218,6 @@ fn cube() {
  */
 
 fn blocks() -> Result<(), anyhow::Error> {
-    let mut hitlist = HitList::new();
-    let mut world = World::new("./hous");
-
-    let chunk_view_distance: i32 = 500;
     let camera = Camera::look_at(
         Vec3::new(0.0, -0.0, -10.0),
         Vec3::new(0.0, 0.0, 0.0),
@@ -238,7 +234,7 @@ fn blocks() -> Result<(), anyhow::Error> {
     };
     let mat = Material {
         name: "earth".into(),
-        index_of_refraction: 1.0,
+        index_of_refraction: 1.000293,
         material_flags: MaterialFlags::OPAQUE | MaterialFlags::SOLID,
         specular: 0.0,
         emittance: 0.0,
@@ -249,16 +245,20 @@ fn blocks() -> Result<(), anyhow::Error> {
     let materials = vec![mat];
     scene.materials = materials;
     let start = Vec3::new(-2.0, -2.0, 20.0);
-    let bounds = AABB::from_points(start, start + 2.0);
-    scene.add_cube(Cuboid::new(bounds, 0));
+    let test = AABB {
+        min: Vec3::new(-4.0, -2.0, 19.0),
+        max: Vec3::new(-2.0, 0.0, 21.0),
+    };
+    scene.add_cube(Cuboid::new(test, 0));
 
     let mut rng = rand::thread_rng();
-    for _ in 0..10 {
+    for _ in 0..1 {
         let x = rng.gen_range(-5.0..5.0);
         let y = rng.gen_range(-5.0..5.0);
         let z = rng.gen_range(10.0..20.0);
         let start = Vec3::new(x, y, z);
         let bounds = AABB::from_points(start, start + 2.0);
+        println!("{:?}", bounds);
         scene.add_cube(Cuboid::new(bounds, 0));
     }
     let a = TileRenderer::new((500, 500), 1, scene);
