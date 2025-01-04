@@ -30,11 +30,11 @@ impl Default for Camera {
 }
 
 impl Camera {
-    pub fn look_at(look_from: Vec3, look_at: Vec3, up: Vec3, fov: f32) -> Self {
+    pub fn look_at(look_from: Vec3, look_at: Vec3, up: Vec3, fov_degrees: f32) -> Self {
         let direction = (look_at - look_from).normalize();
         let right = up.cross(direction).normalize();
         let up = direction.cross(right).normalize();
-
+        let fov = fov_degrees.to_radians();
         Self {
             fov,
             up,

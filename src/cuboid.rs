@@ -22,7 +22,8 @@ pub struct Cuboid {
     pub bbox: AABB,
     pub textures: [u16; 6],
 }
-pub const EPSILON: f32 = 0.00000000001;
+pub const EPSILON: f32 = 0.00000005;
+pub const OFFSET: f32 = 0.000001;
 
 impl Cuboid {
     pub fn get_bbox(&self) -> AABB {
@@ -44,7 +45,8 @@ impl Cuboid {
             true
         }
     }
-    pub fn intt(&self, ray: &mut Ray) -> bool {
+
+    pub fn my_intersect(&self, ray: &mut Ray) -> bool {
         let mut t_min = -INFINITY;
         let mut t_max = INFINITY;
         for &axis in Axis::iter() {
@@ -68,23 +70,34 @@ impl Cuboid {
             }
         }
 
+        //println!("hit");
+        if false || t_min == -INFINITY && t_max == INFINITY {
+            println!("ray {} {}", ray.origin, ray.direction);
+        }
+
+        ray.hit.t_next = t_min;
+        ray.hit.t = t_min;
         let point = ray.at(t_min);
+
         let mut u = 0.0;
         let mut v = 0.0;
         let mut normal = Vec3::ZERO;
         let mut mat_index: usize = 0;
+
         Axis::iter()
             .find(|&&axis| {
                 let distance_to_min =
-                    (point.get_axis(axis) - self.bbox.get_interval(axis).min).abs();
+                    (point.get_axis(axis).abs() - self.bbox.get_interval(axis).min.abs());
+
                 let distance_to_max =
-                    (point.get_axis(axis) - self.bbox.get_interval(axis).max).abs();
-                distance_to_min < EPSILON || distance_to_max < EPSILON
+                    (point.get_axis(axis).abs() - self.bbox.get_interval(axis).max.abs());
+
+                distance_to_min <= Ray::OFFSET || distance_to_max <= Ray::OFFSET
             })
             .map(|&axis| {
                 let distance_to_min =
                     (point.get_axis(axis) - self.bbox.get_interval(axis).min).abs();
-                let is_min_face = distance_to_min < EPSILON;
+                let is_min_face = distance_to_min < Ray::OFFSET;
 
                 match (is_min_face, axis) {
                     (true, Axis::X) => {
@@ -137,19 +150,23 @@ impl Cuboid {
                     }
                 };
             });
-
+        if normal == Vec3::ZERO {
+            println!("normal is zero");
+        }
         ray.hit.u = u;
         ray.hit.v = v;
+        ray.hit.t = t_min;
         ray.hit.t_next = t_min;
         ray.hit.outward_normal = normal;
         ray.hit.current_material = 0;
+
         return true;
     }
 
     pub fn intersect(&self, ray: &mut Ray, scene: &Scene) -> bool {
         let mut hit = false;
         ray.hit.t = INFINITY;
-        if self.intt(ray) {
+        if self.get_bbox().intersect(ray) {
             hit = Self::intersect_texture(ray, scene, self.textures[0]);
         }
         hit
@@ -159,10 +176,12 @@ impl Cuboid {
         let color = scene.materials[material_idx as usize].albedo.value(
             ray.hit.u,
             ray.hit.v,
-            &ray.at(ray.hit.t_next),
+            &ray.at(ray.hit.t),
         );
         if color.w > Ray::EPSILON {
             assert!(color.w == 1.0);
+            //println!("u: {}, v: {}", ray.hit.u, ray.hit.v);
+            //println!("color: {:?}", color);
             ray.hit.color = color;
             true
         } else {

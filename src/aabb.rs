@@ -192,6 +192,8 @@ impl AABB {
             }
         }
 
+        ray.hit.t = ray.hit.t_next;
+
         hit
     }
 
@@ -283,13 +285,18 @@ impl AABB {
                 ray.hit.outward_normal = Vec3::new(0.0, 0.0, 1.0);
             }
         }
+        if hit {
+            ray.hit.t = ray.hit.t_next;
+        }
 
+        ray.distance_travelled += ray.hit.t;
+        ray.origin = ray.at(ray.hit.t);
         hit
     }
 
     #[inline]
     pub fn intersects(&self, ray: &Ray) -> f32 {
-        let mut t_min = NEG_INFINITY;
+        let mut t_min = -INFINITY;
         let mut t_max = INFINITY;
         for &axis in Axis::iter() {
             let box_axis_interval = self.get_interval(axis);
@@ -310,6 +317,7 @@ impl AABB {
             t_min = t_min.max(t0);
             t_max = t_max.min(t1);
         }
+
         t_min
     }
 }

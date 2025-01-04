@@ -1,4 +1,4 @@
-use std::f32::{consts::PI, INFINITY};
+use std::f32::{consts::PI, INFINITY, NAN};
 
 use crate::HitRecord;
 use glam::{Mat3A as Mat3, Vec3A as Vec3};
@@ -41,7 +41,7 @@ impl Ray {
 
     pub fn set_normals(&mut self, normal: Vec3) {
         self.hit.outward_normal = normal;
-        self.hit.geom_normal = normal;
+        //self.hit.geom_normal = normal;
     }
 
     pub fn orient_normal(&mut self, normal: Vec3) {
@@ -50,7 +50,7 @@ impl Ray {
         } else {
             self.hit.outward_normal = normal;
         }
-        self.hit.geom_normal = normal;
+        //self.hit.geom_normal = normal;
     }
 
     pub fn specular_reflection(&self, roughness: f32, rng: &mut StdRng) -> Self {
@@ -90,19 +90,19 @@ impl Ray {
 
             tmp.direction = new_dir * roughness + specular_dir * (1.0 - roughness);
             tmp.direction = tmp.direction.normalize();
-            tmp.origin = tmp.at(Ray::EPSILON);
+            tmp.origin = tmp.at(Ray::OFFSET);
         } else {
             tmp.direction = self.direction
                 - 2.0 * self.direction.dot(self.hit.outward_normal) * self.hit.outward_normal;
-            tmp.origin = tmp.at(Ray::EPSILON);
+            tmp.origin = tmp.at(Ray::OFFSET);
         }
 
-        if tmp.hit.geom_normal.dot(tmp.direction).signum()
-            == tmp.hit.geom_normal.dot(self.direction).signum()
+        if tmp.hit.outward_normal.dot(tmp.direction).signum()
+            == tmp.hit.outward_normal.dot(self.direction).signum()
         {
-            let factor = tmp.hit.geom_normal.dot(self.direction) * -Ray::EPSILON
-                - tmp.direction.dot(tmp.hit.geom_normal);
-            tmp.direction += factor * tmp.hit.geom_normal;
+            let factor = tmp.hit.outward_normal.dot(self.direction) * -Ray::EPSILON
+                - tmp.direction.dot(tmp.hit.outward_normal);
+            tmp.direction += factor * tmp.hit.outward_normal;
             tmp.direction = tmp.direction.normalize();
         }
 
@@ -131,7 +131,7 @@ impl Ray {
             rotation_matrix * Vec3::new(r * theta.cos(), r * theta.sin(), (1.0 - x1).sqrt());
 
         self.direction = new_dir;
-        self.origin = self.at(Ray::EPSILON);
+        self.origin = self.at(Ray::OFFSET);
     }
 
     pub fn diffuse_reflection_old(&self, rng: &mut StdRng) -> Self {
@@ -163,7 +163,7 @@ impl Ray {
 
         tmp.direction = new_dir;
 
-        tmp.origin = tmp.at(Ray::EPSILON);
+        tmp.origin = tmp.at(Ray::OFFSET);
 
         tmp.hit.current_material = tmp.hit.previous_material;
 
@@ -196,9 +196,25 @@ impl Ray {
         let new_dir = rotation_matrix * Vec3::new(tx, ty, tz);
 
         tmp.direction = new_dir;
-        tmp.origin = tmp.at(Ray::EPSILON);
-        tmp.hit.current_material = tmp.hit.previous_material;
+        if tmp.direction.x == NAN {
+            println!("origin: {:?}", tmp.origin);
+        }
+        tmp.origin = tmp.at(Ray::OFFSET);
+        //println!("new_dir: {:?}", new_dir);
 
+        tmp.hit.current_material = tmp.hit.previous_material;
+        tmp.hit.specular = false;
+
+        if tmp.hit.outward_normal.dot(tmp.direction).signum()
+            == tmp.hit.outward_normal.dot(self.direction).signum()
+        {
+            let factor = tmp.hit.outward_normal.dot(self.direction).signum() * -Ray::EPSILON
+                - tmp.direction.dot(tmp.hit.outward_normal);
+            tmp.direction += factor * tmp.hit.outward_normal;
+            tmp.direction = tmp.direction.normalize();
+        }
+        //tmp.origin = self.at(self.hit.t);
+        //tmp.origin = tmp.at(Ray::OFFSET);
         tmp
     }
 }

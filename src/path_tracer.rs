@@ -16,6 +16,7 @@ pub fn path_trace(scene: &Scene, ray: &mut Ray, first_reflection: bool) -> bool 
                 Scene::SKY_COLOR.z,
                 1.0,
             );
+            hit = true;
             break;
         }
 
@@ -29,7 +30,7 @@ pub fn path_trace(scene: &Scene, ray: &mut Ray, first_reflection: bool) -> bool 
         let ior1 = scene.materials[current_material as usize].index_of_refraction;
         let ior2 = scene.materials[prev_material as usize].index_of_refraction;
 
-        if ray.hit.color.w + specular < Ray::EPSILON && (ior1 - ior2).abs() < Ray::EPSILON {
+        if ray.hit.color.w + specular < Ray::EPSILON && ior1 == ior2 {
             continue;
         }
 
@@ -51,7 +52,7 @@ pub fn path_trace(scene: &Scene, ray: &mut Ray, first_reflection: bool) -> bool 
 
         for _ in 0..count {
             let do_metal = metal > Ray::EPSILON && rng.gen::<f32>() < metal;
-            if do_metal || (specular > Ray::EPSILON && rng.gen::<f32>() < specular) {
+            if (do_metal || (specular > Ray::EPSILON && rng.gen::<f32>() < specular)) {
                 hit |= do_specular_reflection(
                     ray,
                     &mut next,
@@ -93,7 +94,7 @@ pub fn path_trace(scene: &Scene, ray: &mut Ray, first_reflection: bool) -> bool 
     }
 
     if !hit {
-        ray.hit.color = Vec4::new(0.0, 0.0, 0.0, 1.0);
+        ray.hit.color = Vec4::ZERO;
         if first_reflection {
             let air_distance = ray.distance_travelled;
         }
@@ -341,12 +342,12 @@ pub fn do_refraction(
             }
             next.direction = next.direction.normalize();
 
-            if next.hit.geom_normal.dot(next.direction).signum()
-                != next.hit.geom_normal.dot(ray.direction).signum()
+            if next.hit.outward_normal.dot(next.direction).signum()
+                != next.hit.outward_normal.dot(ray.direction).signum()
             {
-                let factor = next.hit.geom_normal.dot(ray.direction).signum() * -Ray::EPSILON
-                    - next.direction.dot(next.hit.geom_normal);
-                next.direction += factor * next.hit.geom_normal;
+                let factor = next.hit.outward_normal.dot(ray.direction).signum() * -Ray::EPSILON
+                    - next.direction.dot(next.hit.outward_normal);
+                next.direction += factor * next.hit.outward_normal;
                 next.direction = next.direction.normalize();
             }
             next.origin = next.at(Ray::OFFSET);
@@ -384,11 +385,11 @@ pub fn translucent_ray_color(
     cumulative_color: &mut Vec4,
     absorption: f32,
 ) {
-    let mut rgb_trans = Vec3::splat(1.0) - absorption;
+    let rgb_trans;
     //todo: implement fancy translucent ray color
     rgb_trans = Vec3::from(ray.hit.color.xyz()) * absorption;
 
-    let mut output_color = Vec4::splat(0.0);
+    let output_color;
     output_color = Vec4::new(rgb_trans.x, rgb_trans.y, rgb_trans.z, 1.0) * next.hit.color;
 
     *cumulative_color += output_color;
@@ -398,9 +399,8 @@ pub fn next_intersection(scene: &Scene, ray: &mut Ray) -> bool {
     ray.hit.t = INFINITY;
     ray.hit.current_material = 0;
     if scene.hit(ray) {
-        ray.distance_travelled += ray.hit.t;
-        ray.origin = ray.at(ray.hit.t);
         return true;
     }
+
     return false;
 }

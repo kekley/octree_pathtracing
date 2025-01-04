@@ -23,8 +23,13 @@ impl Texture {
                     return Vec4::new(1.0, 1.0, 1.0, 1.0);
                 }
 
-                let u = Interval::new(0.0, 1.0).clamp(u);
-                let v = 1.0 - Interval::new(0.0, 1.0).clamp(v);
+                let u = u % 1.0;
+                let u = if u < 0.0 { u + 1.0 } else { u };
+
+                let v = v % 1.0;
+                let v = if v < 0.0 { v + 1.0 } else { v };
+
+                let v = 1.0 - v; // Flip v coordinate
 
                 let i = (u * (image.image_width as f32)) as u32;
                 let j =

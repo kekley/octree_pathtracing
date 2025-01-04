@@ -62,7 +62,7 @@ impl Scene {
             camera: None,
         }
     }
-    pub const SKY_COLOR: Vec3 = Vec3::new(0.5, 0.7, 1.0);
+    pub const SKY_COLOR: Vec4 = Vec4::new(0.5, 0.7, 1.0, 1.0);
 
     pub fn add_sphere(&mut self, sphere: Sphere) {
         self.spheres.push(sphere);
@@ -78,18 +78,15 @@ impl Scene {
 
     pub fn hit(&self, ray: &mut Ray) -> bool {
         let mut hit = false;
-
         for cube in &self.cubes {
-            if cube.intersect(ray, &self) {
+            if cube.intersect(ray, self) {
                 hit = true;
             }
         }
         if hit {
-            ray.distance_travelled = ray.hit.t;
-            ray.origin = ray.at(ray.hit.t);
             return true;
         }
-        return false;
+        return hit;
     }
 
     pub fn get_current_branch_count(&self) -> u32 {
