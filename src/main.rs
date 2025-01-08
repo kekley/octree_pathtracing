@@ -5,23 +5,21 @@ use std::sync::{Arc, Mutex};
 use std::{fs::File, io::Write, time::Instant};
 
 use anyhow::Ok;
-use glam::Vec3A as Vec3;
+use glam::{UVec3, Vec3A as Vec3};
 use rand_distr::uniform::SampleUniform;
 use rand_distr::{Normal, UnitDisc};
-use ray_tracing::{BVHTree, MaterialFlags, RTWImage, Scene, Texture, PI};
+use ray_tracing::{BVHTree, MaterialFlags, Octree, RTWImage, Scene, Texture, PI};
 use ray_tracing::{Camera, HittableBVH};
 use ray_tracing::{Cuboid, Material};
 use ray_tracing::{HitList, Hittable};
 use ray_tracing::{TileRenderer, AABB};
-use spider_eye::{ChunkCoords, World, WorldCoords};
+use spider_eye::{Chunk, ChunkCoords, World, WorldCoords};
 pub const ASPECT_RATIO: f32 = 1.5;
 use glam::Vec4;
 use rand::Rng;
 
 fn main() -> Result<(), anyhow::Error> {
     let start = Instant::now();
-
-    blocks()?;
 
     let finish = Instant::now();
     let duration = finish - start;
@@ -221,10 +219,10 @@ fn cube() {
 
 fn blocks() -> Result<(), anyhow::Error> {
     let camera = Camera::look_at(
-        Vec3::new(0.0, 0.0, 10.0),
-        Vec3::new(0.0, 0.0, 0.0),
+        Vec3::new(0.0, 5.0, 10.0),
+        Vec3::new(-5.0, 0.0, -13.0),
         Vec3::new(0.0, 1.0, 0.0),
-        70.0,
+        10.0,
     );
     let mut scene = Scene::new().branch_count(1).camera(camera).spp(1).build();
     let tex_image = RTWImage::load("./assets/greasy.jpg").unwrap();
@@ -254,7 +252,7 @@ fn blocks() -> Result<(), anyhow::Error> {
     scene.add_cube(Cuboid::new(test, 0));
 
     let mut rng = rand::thread_rng();
-    for _ in 0..0 {
+    for _ in 0..5 {
         let x = rng.gen_range(-5..5);
         let y = rng.gen_range(-5..5);
         let z = rng.gen_range(-20..-10);

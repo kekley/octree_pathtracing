@@ -1,18 +1,12 @@
 use core::f32;
-use std::{
-    arch::x86_64::{
-        _mm_cmple_ps, _mm_cvtss_f32, _mm_max_ps, _mm_min_ps, _mm_movemask_ps, _mm_mul_ps,
-        _mm_set1_ps, _mm_sub_ps,
-    },
-    f32::{INFINITY, NEG_INFINITY},
-};
+use std::f32::{INFINITY, NEG_INFINITY};
 
 use crate::{
     axis::{Axis, AxisOps},
     interval::Interval,
     ray::Ray,
 };
-use glam::Vec3A as Vec3;
+use glam::{BVec3, Vec3A as Vec3, Vec3Swizzles};
 #[derive(Debug, Clone, Copy)]
 pub struct AABB {
     pub min: Vec3,
@@ -103,99 +97,6 @@ impl AABB {
             Axis::Z => Interval::new(self.min.z, self.max.z),
         }
     }
-    pub fn inter(&self, ray: &mut Ray) -> bool {
-        let ix = ray.origin.x - (ray.origin.x + ray.direction.x * Ray::OFFSET).floor();
-        let iy = ray.origin.y - (ray.origin.y + ray.direction.y * Ray::OFFSET).floor();
-        let iz = ray.origin.z - (ray.origin.z + ray.direction.z * Ray::OFFSET).floor();
-        let mut t;
-        let mut u;
-        let mut v;
-        let mut hit = false;
-
-        ray.hit.t_next = ray.hit.t;
-
-        t = (self.min.x - ix) / ray.direction.x;
-        if t < ray.hit.t_next && t >= Ray::EPSILON {
-            u = iz + ray.direction.z * t;
-            v = iy + ray.direction.y * t;
-            if u >= self.min.z && u <= self.max.z && v >= self.min.y && v <= self.max.y {
-                hit = true;
-                ray.hit.t_next = t;
-                ray.hit.u = u;
-                ray.hit.v = v;
-                ray.hit.outward_normal = Vec3::new(-1.0, 0.0, 0.0);
-            }
-        }
-
-        t = (self.max.x - ix) / ray.direction.x;
-        if t < ray.hit.t_next && t >= Ray::EPSILON {
-            u = iz + ray.direction.z * t;
-            v = iy + ray.direction.y * t;
-            if u >= self.min.z && u <= self.max.z && v >= self.min.y && v <= self.max.y {
-                hit = true;
-                ray.hit.t_next = t;
-                ray.hit.u = u;
-                ray.hit.v = v;
-                ray.hit.outward_normal = Vec3::new(1.0, 0.0, 0.0);
-            }
-        }
-
-        t = (self.min.y - iy) / ray.direction.y;
-        if t < ray.hit.t_next && t >= Ray::EPSILON {
-            u = ix + ray.direction.x * t;
-            v = iz + ray.direction.z * t;
-            if u >= self.min.x && u <= self.max.x && v >= self.min.z && v <= self.max.z {
-                hit = true;
-                ray.hit.t_next = t;
-                ray.hit.u = u;
-                ray.hit.v = v;
-                ray.hit.outward_normal = Vec3::new(0.0, -1.0, 0.0);
-            }
-        }
-
-        t = (self.max.y - iy) / ray.direction.y;
-        if t < ray.hit.t_next && t >= Ray::EPSILON {
-            u = ix + ray.direction.x * t;
-            v = iz + ray.direction.z * t;
-            if u >= self.min.x && u <= self.max.x && v >= self.min.z && v <= self.max.z {
-                hit = true;
-                ray.hit.t_next = t;
-                ray.hit.u = u;
-                ray.hit.v = v;
-                ray.hit.outward_normal = Vec3::new(0.0, 1.0, 0.0);
-            }
-        }
-
-        t = (self.min.z - iz) / ray.direction.z;
-        if t < ray.hit.t_next && t >= Ray::EPSILON {
-            u = ix + ray.direction.x * t;
-            v = iy + ray.direction.y * t;
-            if u >= self.min.x && u <= self.max.x && v >= self.min.y && v <= self.max.y {
-                hit = true;
-                ray.hit.t_next = t;
-                ray.hit.u = u;
-                ray.hit.v = v;
-                ray.hit.outward_normal = Vec3::new(0.0, 0.0, -1.0);
-            }
-        }
-
-        t = (self.max.z - iz) / ray.direction.z;
-        if t < ray.hit.t_next && t >= Ray::EPSILON {
-            u = ix + ray.direction.x * t;
-            v = iy + ray.direction.y * t;
-            if u >= self.min.x && u <= self.max.x && v >= self.min.y && v <= self.max.y {
-                hit = true;
-                ray.hit.t_next = t;
-                ray.hit.u = u;
-                ray.hit.v = v;
-                ray.hit.outward_normal = Vec3::new(0.0, 0.0, 1.0);
-            }
-        }
-
-        ray.hit.t = ray.hit.t_next;
-
-        hit
-    }
 
     pub fn intersect(&self, ray: &mut Ray) -> bool {
         let ix = ray.origin.x - (ray.origin.x + ray.direction.x * Ray::OFFSET).floor();
@@ -206,13 +107,17 @@ impl AABB {
         let mut v;
         let mut hit = false;
 
+        let a = AABB {
+            min: Vec3::ZERO,
+            max: Vec3::ONE,
+        };
         ray.hit.t_next = ray.hit.t;
 
-        t = (self.min.x - ix) / ray.direction.x;
+        t = (a.min.x - ix) / ray.direction.x;
         if t < ray.hit.t_next && t > -Ray::EPSILON {
             u = iz + ray.direction.z * t;
             v = iy + ray.direction.y * t;
-            if u >= self.min.z && u <= self.max.z && v >= self.min.y && v <= self.max.y {
+            if u >= a.min.z && u <= a.max.z && v >= a.min.y && v <= a.max.y {
                 hit = true;
                 ray.hit.t_next = t;
                 ray.hit.u = u;
@@ -221,11 +126,11 @@ impl AABB {
             }
         }
 
-        t = (self.max.x - ix) / ray.direction.x;
+        t = (a.max.x - ix) / ray.direction.x;
         if t < ray.hit.t_next && t > -Ray::EPSILON {
             u = iz + ray.direction.z * t;
             v = iy + ray.direction.y * t;
-            if u >= self.min.z && u <= self.max.z && v >= self.min.y && v <= self.max.y {
+            if u >= a.min.z && u <= a.max.z && v >= a.min.y && v <= a.max.y {
                 hit = true;
                 ray.hit.t_next = t;
                 ray.hit.u = 1.0 - u;
@@ -234,11 +139,11 @@ impl AABB {
             }
         }
 
-        t = (self.min.y - iy) / ray.direction.y;
+        t = (a.min.y - iy) / ray.direction.y;
         if t < ray.hit.t_next && t > -Ray::EPSILON {
             u = ix + ray.direction.x * t;
             v = iz + ray.direction.z * t;
-            if u >= self.min.x && u <= self.max.x && v >= self.min.z && v <= self.max.z {
+            if u >= a.min.x && u <= a.max.x && v >= a.min.z && v <= a.max.z {
                 hit = true;
                 ray.hit.t_next = t;
                 ray.hit.u = u;
@@ -247,11 +152,11 @@ impl AABB {
             }
         }
 
-        t = (self.max.y - iy) / ray.direction.y;
+        t = (a.max.y - iy) / ray.direction.y;
         if t < ray.hit.t_next && t > -Ray::EPSILON {
             u = ix + ray.direction.x * t;
             v = iz + ray.direction.z * t;
-            if u >= self.min.x && u <= self.max.x && v >= self.min.z && v <= self.max.z {
+            if u >= a.min.x && u <= a.max.x && v >= a.min.z && v <= a.max.z {
                 hit = true;
                 ray.hit.t_next = t;
                 ray.hit.u = u;
@@ -260,11 +165,11 @@ impl AABB {
             }
         }
 
-        t = (self.min.z - iz) / ray.direction.z;
+        t = (a.min.z - iz) / ray.direction.z;
         if t < ray.hit.t_next && t > -Ray::EPSILON {
             u = ix + ray.direction.x * t;
             v = iy + ray.direction.y * t;
-            if u >= self.min.x && u <= self.max.x && v >= self.min.y && v <= self.max.y {
+            if u >= a.min.x && u <= a.max.x && v >= a.min.y && v <= a.max.y {
                 hit = true;
                 ray.hit.t_next = t;
                 ray.hit.u = 1.0 - u;
@@ -273,11 +178,11 @@ impl AABB {
             }
         }
 
-        t = (self.max.z - iz) / ray.direction.z;
+        t = (a.max.z - iz) / ray.direction.z;
         if t < ray.hit.t_next && t > -Ray::EPSILON {
             u = ix + ray.direction.x * t;
             v = iy + ray.direction.y * t;
-            if u >= self.min.x && u <= self.max.x && v >= self.min.y && v <= self.max.y {
+            if u >= a.min.x && u <= a.max.x && v >= a.min.y && v <= a.max.y {
                 hit = true;
                 ray.hit.t_next = t;
                 ray.hit.u = u;
@@ -287,37 +192,63 @@ impl AABB {
         }
         if hit {
             ray.hit.t = ray.hit.t_next;
+            ray.distance_travelled += ray.hit.t;
+            ray.origin = ray.at(ray.hit.t);
         }
 
-        ray.distance_travelled += ray.hit.t;
-        ray.origin = ray.at(ray.hit.t);
         hit
     }
 
-    #[inline]
-    pub fn intersects(&self, ray: &Ray) -> f32 {
+    pub fn intersects(&self, ray: &mut Ray) -> bool {
         let mut t_min = -INFINITY;
         let mut t_max = INFINITY;
         for &axis in Axis::iter() {
-            let box_axis_interval = self.get_interval(axis);
-            let ray_dir_axis_inverse = (1.0 / ray.direction).get_axis(axis);
+            let box_axis_min = self.get_interval(axis).min;
+            let box_axis_max = self.get_interval(axis).max;
+            let ray_axis_origin = ray.origin.get_axis(axis);
+            let ray_axis_dir_inverse = (1.0 / ray.direction).get_axis(axis);
 
-            let (t0, t1) = if ray_dir_axis_inverse >= 0.0 {
-                (
-                    (box_axis_interval.min - ray.origin.get_axis(axis)) * ray_dir_axis_inverse,
-                    (box_axis_interval.max - ray.origin.get_axis(axis)) * ray_dir_axis_inverse,
-                )
+            let t0 = (box_axis_min - ray_axis_origin) * ray_axis_dir_inverse;
+            let t1 = (box_axis_max - ray_axis_origin) * ray_axis_dir_inverse;
+
+            if t0 < t1 {
+                t_max = t_max.min(t1);
+                t_min = t_min.max(t0);
             } else {
-                (
-                    (box_axis_interval.max - ray.origin.get_axis(axis)) * ray_dir_axis_inverse,
-                    (box_axis_interval.min - ray.origin.get_axis(axis)) * ray_dir_axis_inverse,
-                )
-            };
-
-            t_min = t_min.max(t0);
-            t_max = t_max.min(t1);
+                t_max = t_max.min(t0);
+                t_min = t_min.max(t1);
+            }
+            if t_max <= t_min {
+                println!("t_min: {}", t_min);
+                return false;
+            }
         }
 
-        t_min
+        true
+    }
+
+    #[inline]
+    pub fn intersects_new(&self, ray: &Ray) -> f32 {
+        let box_min = self.min;
+        let box_max = self.max;
+        let ray_origin = ray.origin;
+        let ray_inv_dir = 1.0 / ray.direction;
+
+        let t_bot = (box_min - ray_origin) * ray_inv_dir;
+        let t_top = (box_max - ray_origin) * ray_inv_dir;
+
+        let mins = t_bot.min(t_top);
+        let maxs = t_bot.max(t_top);
+
+        let mut t = mins.xx().max(mins.yz());
+        let t0 = t.max_element();
+        t = maxs.xx().min(maxs.yz());
+        let t1 = t.min_element();
+
+        if t0 < t1 && t0 > 0.0 {
+            return t0;
+        } else {
+            return INFINITY;
+        }
     }
 }

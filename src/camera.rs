@@ -69,9 +69,10 @@ impl Camera {
 
         Ray {
             origin,
-            direction: new_dir.normalize(),
+            direction: new_dir,
             hit: HitRecord::default(),
             distance_travelled: 0.0,
+            inv_dir: 1.0 / new_dir,
         }
     }
 }

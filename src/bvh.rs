@@ -227,8 +227,8 @@ impl BVHTree {
             let mut child_1 = &self.nodes[node.left_node_idx as usize];
             let mut child_2 = &self.nodes[node.left_node_idx as usize + 1];
 
-            let mut dist_1 = child_1.bbox.intersects(ray);
-            let mut dist_2 = child_2.bbox.intersects(ray);
+            let mut dist_1 = child_1.bbox.intersects_new(ray);
+            let mut dist_2 = child_2.bbox.intersects_new(ray);
 
             if dist_1 > dist_2 {
                 swap(&mut dist_1, &mut dist_2);

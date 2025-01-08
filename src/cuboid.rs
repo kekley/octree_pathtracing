@@ -6,15 +6,16 @@ use crate::{
     ray::Ray,
     scene, Scene, Texture,
 };
-use glam::Vec3A as Vec3;
+
+use glam::{BVec3, Vec3A as Vec3, Vec4};
 
 pub enum Face {
-    Top,
-    Bottom,
-    North,
-    South,
-    East,
-    West,
+    Top = 0,
+    Bottom = 1,
+    North = 2,
+    South = 3,
+    East = 4,
+    West = 5,
 }
 
 #[derive(Debug, Clone)]
@@ -39,150 +40,97 @@ impl Cuboid {
     pub fn hit(&self, ray: &mut Ray) -> bool {
         ray.hit.t = INFINITY;
         let t = self.bbox.intersects(ray);
-        if t == INFINITY {
+        if !t {
             return false;
         } else {
             true
         }
     }
 
-    pub fn my_intersect(&self, ray: &mut Ray) -> bool {
-        let mut t_min = -INFINITY;
-        let mut t_max = INFINITY;
-        for &axis in Axis::iter() {
-            let box_axis_min = self.bbox.get_interval(axis).min;
-            let box_axis_max = self.bbox.get_interval(axis).max;
-            let ray_axis_origin = ray.origin.get_axis(axis);
-            let ray_axis_dir_inverse = (1.0 / ray.direction).get_axis(axis);
-
-            let t0 = (box_axis_min - ray_axis_origin) * ray_axis_dir_inverse;
-            let t1 = (box_axis_max - ray_axis_origin) * ray_axis_dir_inverse;
-
-            if t0 < t1 {
-                t_max = t_max.min(t1);
-                t_min = t_min.max(t0);
-            } else {
-                t_max = t_max.min(t0);
-                t_min = t_min.max(t1);
-            }
-            if t_max <= t_min {
-                return false;
-            }
-        }
-
-        //println!("hit");
-        if false || t_min == -INFINITY && t_max == INFINITY {
-            println!("ray {} {}", ray.origin, ray.direction);
-        }
-
-        ray.hit.t_next = t_min;
-        ray.hit.t = t_min;
-        let point = ray.at(t_min);
-
-        let mut u = 0.0;
-        let mut v = 0.0;
-        let mut normal = Vec3::ZERO;
-        let mut mat_index: usize = 0;
-
-        Axis::iter()
-            .find(|&&axis| {
-                let distance_to_min =
-                    (point.get_axis(axis).abs() - self.bbox.get_interval(axis).min.abs());
-
-                let distance_to_max =
-                    (point.get_axis(axis).abs() - self.bbox.get_interval(axis).max.abs());
-
-                distance_to_min <= Ray::OFFSET || distance_to_max <= Ray::OFFSET
-            })
-            .map(|&axis| {
-                let distance_to_min =
-                    (point.get_axis(axis) - self.bbox.get_interval(axis).min).abs();
-                let is_min_face = distance_to_min < Ray::OFFSET;
-
-                match (is_min_face, axis) {
-                    (true, Axis::X) => {
-                        mat_index = 2;
-                        normal = Vec3::new(-1.0, 0.0, 0.0);
-                        u = (point.z - self.bbox.get_interval(Axis::Z).min)
-                            / self.bbox.get_interval(Axis::Z).size();
-                        v = (point.y - self.bbox.get_interval(Axis::Y).min)
-                            / self.bbox.get_interval(Axis::Y).size();
-                    }
-                    (true, Axis::Y) => {
-                        mat_index = 1;
-                        normal = Vec3::new(0.0, -1.0, 0.0);
-                        u = (point.x - self.bbox.get_interval(Axis::X).min)
-                            / self.bbox.get_interval(Axis::X).size();
-                        v = (point.z - self.bbox.get_interval(Axis::Z).min)
-                            / self.bbox.get_interval(Axis::Z).size();
-                    }
-                    (true, Axis::Z) => {
-                        mat_index = 5;
-                        normal = Vec3::new(0.0, 0.0, -1.0);
-                        u = (point.x - self.bbox.get_interval(Axis::X).min)
-                            / self.bbox.get_interval(Axis::X).size();
-                        v = (point.y - self.bbox.get_interval(Axis::Y).min)
-                            / self.bbox.get_interval(Axis::Y).size();
-                    }
-                    (false, Axis::X) => {
-                        mat_index = 3;
-                        normal = Vec3::new(1.0, 0.0, 0.0);
-                        u = (point.z - self.bbox.get_interval(Axis::Z).min)
-                            / self.bbox.get_interval(Axis::Z).size();
-                        v = (point.y - self.bbox.get_interval(Axis::Y).min)
-                            / self.bbox.get_interval(Axis::Y).size();
-                    }
-                    (false, Axis::Y) => {
-                        mat_index = 0;
-                        normal = Vec3::new(0.0, 1.0, 0.0);
-                        u = (point.x - self.bbox.get_interval(Axis::X).min)
-                            / self.bbox.get_interval(Axis::X).size();
-                        v = (point.z - self.bbox.get_interval(Axis::Z).min)
-                            / self.bbox.get_interval(Axis::Z).size();
-                    }
-                    (false, Axis::Z) => {
-                        mat_index = 4;
-                        normal = Vec3::new(0.0, 0.0, 1.0);
-                        u = (point.x - self.bbox.get_interval(Axis::X).min)
-                            / self.bbox.get_interval(Axis::X).size();
-                        v = (point.y - self.bbox.get_interval(Axis::Y).min)
-                            / self.bbox.get_interval(Axis::Y).size();
-                    }
-                };
-            });
-        if normal == Vec3::ZERO {
-            println!("normal is zero");
-        }
-        ray.hit.u = u;
-        ray.hit.v = v;
-        ray.hit.t = t_min;
-        ray.hit.t_next = t_min;
-        ray.hit.outward_normal = normal;
-        ray.hit.current_material = 0;
-
-        return true;
-    }
-
     pub fn intersect(&self, ray: &mut Ray, scene: &Scene) -> bool {
         let mut hit = false;
         ray.hit.t = INFINITY;
-        if self.get_bbox().intersect(ray) {
-            hit = Self::intersect_texture(ray, scene, self.textures[0]);
+        let pot_t = self.get_bbox().intersects_new(ray);
+        if pot_t != INFINITY {
+            let point = ray.at(pot_t);
+            let c = (self.bbox.min + self.bbox.max) * 0.5;
+            let p = point - c;
+            let d = (self.bbox.min - self.bbox.max) * 0.5;
+
+            let bias = 1.000001;
+
+            let normal = Vec3::new(
+                (p.x / d.x.abs() * bias).trunc(),
+                (p.y / d.y.abs() * bias).trunc(),
+                (p.z / d.z.abs() * bias).trunc(),
+            )
+            .normalize();
+
+            let size = self.bbox.max.abs() - self.bbox.min.abs();
+            let inv_size = Vec3::new(1.0 / size.x, 1.0 / size.y, 1.0 / size.z);
+            let uvw = (point - self.bbox.min) * inv_size;
+            let mat;
+            let normal_sign = normal.signum();
+            if normal == Vec3::X {
+                ray.hit.u = 1.0 - uvw.z;
+                ray.hit.v = uvw.y;
+                mat = self.textures[Face::East as usize];
+            } else if normal == Vec3::Y {
+                ray.hit.u = uvw.x;
+                ray.hit.v = uvw.z;
+                mat = self.textures[Face::Top as usize];
+            } else if normal == Vec3::Z {
+                ray.hit.u = uvw.x;
+                ray.hit.v = uvw.y;
+                mat = self.textures[Face::North as usize];
+            } else if normal == Vec3::NEG_X {
+                ray.hit.u = uvw.z;
+                ray.hit.v = uvw.y;
+                mat = self.textures[Face::West as usize];
+            } else if normal == Vec3::NEG_Y {
+                ray.hit.u = uvw.x;
+                ray.hit.v = 1.0 - uvw.z;
+                mat = self.textures[Face::Bottom as usize];
+            } else if normal == Vec3::NEG_Z {
+                ray.hit.u = uvw.x;
+                ray.hit.v = uvw.y;
+                mat = self.textures[Face::South as usize];
+            } else {
+                println!("pot_t: {:?}", pot_t);
+                println!("point: {:?}", point);
+                println!("normal: {:?}", normal);
+                panic!("bad normal");
+            }
+            ray.hit.outward_normal = normal;
+
+            hit = Cuboid::intersect_texture(ray, scene, mat);
+            if hit {
+                ray.hit.outward_normal = normal;
+
+                ray.hit.t = ray.hit.t_next;
+                ray.distance_travelled += ray.hit.t;
+                ray.origin = ray.at(ray.hit.t);
+            }
         }
         hit
     }
 
     pub fn intersect_texture(ray: &mut Ray, scene: &Scene, material_idx: u16) -> bool {
         let color = scene.materials[material_idx as usize].albedo.value(
-            ray.hit.u,
-            ray.hit.v,
+            ray.hit.u.abs(),
+            ray.hit.v.abs(),
             &ray.at(ray.hit.t),
         );
+        //println!("u:{} ,v: {}", ray.hit.u, ray.hit.v);
         if color.w > Ray::EPSILON {
             assert!(color.w == 1.0);
-            //println!("u: {}, v: {}", ray.hit.u, ray.hit.v);
-            //println!("color: {:?}", color);
             ray.hit.color = color;
+            /*             ray.hit.color = Vec4::new(
+                ray.hit.outward_normal.x,
+                ray.hit.outward_normal.y,
+                ray.hit.outward_normal.z,
+                1.0,
+            ); */
             true
         } else {
             println!("something went wrong");

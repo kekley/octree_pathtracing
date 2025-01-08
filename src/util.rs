@@ -83,7 +83,7 @@ pub fn random_in_unit_disk(rng: &mut StdRng) -> Vec3 {
         }
     }
 }
-pub fn write_rgb8_color_as_text_to_stream(vec: &glam::Vec3, stream: &mut dyn std::io::Write) {
+pub fn write_rgb8_color_as_text_to_stream(vec: &glam::Vec4, stream: &mut dyn std::io::Write) {
     let r = linear_to_gamma(vec.x);
     let g = linear_to_gamma(vec.y);
     let b = linear_to_gamma(vec.z);

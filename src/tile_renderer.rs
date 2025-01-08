@@ -1,3 +1,5 @@
+use glam::Vec3A as Vec3;
+use glam::Vec4;
 use std::{
     fs::File,
     io::{self, Write},
@@ -42,7 +44,7 @@ impl TileRenderer {
                 let (norm_x, norm_y) =
                     TileRenderer::normalize_coordinates(x, y, self.resolution.0, self.resolution.1);
                 let color = self.scene.trace_ray(norm_x, norm_y, &mut rng);
-                util::write_rgb8_color_as_text_to_stream(&color.xyz(), &mut buffer);
+                util::write_rgb8_color_as_text_to_stream(&color, &mut buffer);
             }
         }
         let mut stream = File::create("tile.ppm").unwrap();
@@ -85,7 +87,7 @@ impl TileRenderer {
             for x in tile.x0..tile.x1 {
                 let (norm_x, norm_y) = TileRenderer::normalize_coordinates(x, y, tile.x1, tile.y1);
                 let color = scene.trace_ray(norm_x, norm_y, &mut rng);
-                util::write_rgb8_color_as_text_to_stream(&color.xyz(), &mut buffer);
+                util::write_rgb8_color_as_text_to_stream(&color, &mut buffer);
             }
         }
         let mut stream = File::create("tile.ppm").unwrap();
