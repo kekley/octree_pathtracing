@@ -8,6 +8,7 @@ mod interval;
 mod material;
 mod minecraft_textures;
 mod octree;
+mod octree_traversal;
 mod path_tracer;
 mod ray;
 mod rtw_image;
