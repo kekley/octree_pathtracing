@@ -1,10 +1,11 @@
-use std::f32::INFINITY;
+use core::f32;
+use std::f32::{EPSILON, INFINITY};
 
 use crate::{
     aabb::AABB,
     axis::{Axis, AxisOps},
     ray::Ray,
-    scene, Scene, Texture,
+    scene, util, Material, Scene, Texture,
 };
 
 use glam::{BVec3, Vec3A as Vec3, Vec4};
@@ -23,7 +24,7 @@ pub struct Cuboid {
     pub bbox: AABB,
     pub textures: [u16; 6],
 }
-pub const EPSILON: f32 = 0.00000005;
+pub const MY_EPSILON: f32 = 0.00000005;
 pub const OFFSET: f32 = 0.000001;
 
 impl Cuboid {
@@ -47,30 +48,32 @@ impl Cuboid {
         }
     }
 
+    fn step(edge: f32, x: f32) -> f32 {
+        if x < edge {
+            0.0
+        } else {
+            1.0
+        }
+    }
+
     pub fn intersect(&self, ray: &mut Ray, scene: &Scene) -> bool {
         let mut hit = false;
         ray.hit.t = INFINITY;
         let pot_t = self.get_bbox().intersects_new(ray);
         if pot_t != INFINITY {
-            let point = ray.at(pot_t);
-            let c = (self.bbox.min + self.bbox.max) * 0.5;
-            let p = point - c;
-            let d = (self.bbox.min - self.bbox.max) * 0.5;
+            let point = ray.at(pot_t - OFFSET);
+            let center = (self.bbox.max + self.bbox.min) * 0.5;
+            let half_size = (self.bbox.max - self.bbox.min) * 0.5;
+            let center_to_point = center - point;
 
-            let bias = 1.000001;
-
-            let normal = Vec3::new(
-                (p.x / d.x.abs() * bias).trunc(),
-                (p.y / d.y.abs() * bias).trunc(),
-                (p.z / d.z.abs() * bias).trunc(),
-            )
+            let normal = (center_to_point.signum()
+                * util::step_vec(-1e-9, center_to_point.abs() - half_size))
             .normalize();
 
-            let size = self.bbox.max.abs() - self.bbox.min.abs();
+            let size = half_size * 2.0;
             let inv_size = Vec3::new(1.0 / size.x, 1.0 / size.y, 1.0 / size.z);
             let uvw = (point - self.bbox.min) * inv_size;
             let mat;
-            let normal_sign = normal.signum();
             if normal == Vec3::X {
                 ray.hit.u = 1.0 - uvw.z;
                 ray.hit.v = uvw.y;
@@ -103,24 +106,18 @@ impl Cuboid {
             }
             ray.hit.outward_normal = normal;
 
-            hit = Cuboid::intersect_texture(ray, scene, mat);
+            hit = Cuboid::intersect_texture(ray, &scene.materials[mat as usize]);
             if hit {
                 ray.hit.outward_normal = normal;
-
-                ray.hit.t = ray.hit.t_next;
-                ray.distance_travelled += ray.hit.t;
-                ray.origin = ray.at(ray.hit.t);
             }
         }
         hit
     }
 
-    pub fn intersect_texture(ray: &mut Ray, scene: &Scene, material_idx: u16) -> bool {
-        let color = scene.materials[material_idx as usize].albedo.value(
-            ray.hit.u.abs(),
-            ray.hit.v.abs(),
-            &ray.at(ray.hit.t),
-        );
+    pub fn intersect_texture(ray: &mut Ray, material: &Material) -> bool {
+        let color = material
+            .albedo
+            .value(ray.hit.u.abs(), ray.hit.v.abs(), &ray.at(ray.hit.t));
         //println!("u:{} ,v: {}", ray.hit.u, ray.hit.v);
         if color.w > Ray::EPSILON {
             assert!(color.w == 1.0);

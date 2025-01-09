@@ -9,11 +9,11 @@ use glam::Vec3A as Vec3;
 pub struct Sphere {
     center: Vec3,
     radius: f32,
-    material_idx: u32,
+    material_idx: u16,
 }
 
 impl Sphere {
-    pub fn new(center: Vec3, radius: f32, material_idx: u32) -> Self {
+    pub fn new(center: Vec3, radius: f32, material_idx: u16) -> Self {
         Self {
             center: center,
             radius: radius,

@@ -51,30 +51,30 @@ impl HittableHitList {
 }
 
 #[derive(Debug, Clone)]
-pub struct HitRecord {
+pub struct HitRecord<T> {
     pub t: f32, // closest hit
     pub t_next: f32,
     pub u: f32,
     pub v: f32,
-    pub current_material: u32,
+    pub current_material: T,
     pub outward_normal: Vec3,
     //    pub geom_normal: Vec3,
-    pub previous_material: u32,
+    pub previous_material: T,
     pub color: Vec4,
     pub depth: u32,
     pub specular: bool,
 }
 
-impl Default for HitRecord {
+impl<T: Default> Default for HitRecord<T> {
     fn default() -> Self {
         Self {
             t: INFINITY,
             u: 0.0,
             v: 0.0,
-            current_material: 0,
+            current_material: Default::default(),
             outward_normal: Vec3::ZERO,
             //     geom_normal: Vec3::ZERO,
-            previous_material: 0,
+            previous_material: Default::default(),
             t_next: INFINITY,
             color: Vec4::ZERO,
             depth: 0,

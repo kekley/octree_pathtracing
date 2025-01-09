@@ -1,4 +1,4 @@
-use crate::{path_trace, BVHTree, Camera, Cuboid, Material, Ray, Sphere};
+use crate::{path_trace, BVHTree, Camera, Cuboid, Material, Octree, Ray, Sphere};
 
 use bitflags::bitflags;
 use glam::{Vec3A as Vec3, Vec4};
@@ -7,6 +7,8 @@ pub struct Scene {
     spheres: Vec<Sphere>,
     cubes: Vec<Cuboid>,
     bvhs: Vec<BVHTree>,
+    pub octree: Octree<u32>,
+    pub octree_palette: Vec<Cuboid>,
     pub materials: Vec<Material>,
     pub spp: u32,
     pub branch_count: u32,
@@ -29,6 +31,8 @@ impl SceneBuilder {
             spp: self.spp.unwrap_or(1),
             branch_count: self.branch_count.unwrap_or(1),
             camera: self.camera.unwrap_or(Camera::default()),
+            octree: Octree::new(),
+            octree_palette: Vec::new(),
         }
     }
 
@@ -78,15 +82,8 @@ impl Scene {
 
     pub fn hit(&self, ray: &mut Ray) -> bool {
         let mut hit = false;
-        for cube in &self.cubes {
-            if cube.intersect(ray, self) {
-                hit = true;
-            }
-        }
-        if hit {
-            return true;
-        }
-        return hit;
+        self.octree
+            .intersect_octree(ray, 100.0, false, &self.cubes, &self.materials)
     }
 
     pub fn get_current_branch_count(&self) -> u32 {

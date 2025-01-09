@@ -232,8 +232,7 @@ impl AABB {
         let box_min = self.min;
         let box_max = self.max;
         let ray_origin = ray.origin;
-        let ray_inv_dir = 1.0 / ray.direction;
-
+        let ray_inv_dir = ray.inv_dir;
         let t_bot = (box_min - ray_origin) * ray_inv_dir;
         let t_top = (box_max - ray_origin) * ray_inv_dir;
 

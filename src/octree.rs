@@ -1,14 +1,15 @@
 use std::{
+    f32::EPSILON,
     fmt::Debug,
     hash::Hash,
     mem,
     ops::{Div, RemAssign},
 };
 
-use glam::{UVec3, Vec3A};
+use glam::{UVec3, Vec2, Vec3A};
 use rand_distr::num_traits::Pow;
 
-use crate::Ray;
+use crate::{scene, Cuboid, Material, Ray, Scene};
 
 pub type OctantId = u32;
 
@@ -31,7 +32,8 @@ pub trait Position:
 
 impl Position for UVec3 {
     fn idx(&self) -> u8 {
-        (self.x + self.y * 2 + self.z * 4) as u8
+        let val = (self.x + self.y * 2 + self.z * 4) as u8;
+        val
     }
     fn required_depth(&self) -> u8 {
         let depth = self.max_element();
@@ -188,7 +190,9 @@ impl<T> Octree<T> {
 
         while size >= 1 {
             size /= 2;
+
             let idx = (pos / size).idx();
+            println!("pos: {:?} idx: {},size: {}", pos, idx, size);
             pos.rem_assign(size);
 
             if size == 1 {
@@ -208,6 +212,7 @@ impl<T> Octree<T> {
         while size > 0 {
             size /= 2;
             let idx = pos.div(size).idx();
+            println!("pos: {:?} idx: {},size: {}", pos, idx, size);
             pos.rem_assign(size);
 
             let child = &self.octants[it as usize].children[idx as usize];
@@ -485,108 +490,15 @@ impl<T> Octree<T> {
     pub fn depth(&self) -> u8 {
         self.depth
     }
+}
 
-    const MAX_STEPS: usize = 1000;
-    const MAX_SCALE: usize = 23;
-    const EPSILON: f32 = 0.00000011920929;
-
-    pub fn intersect_octree(&self, ray: &mut Ray, max_dst: f32, do_translucensy: bool) {
-        let ptr_stack: [u32; 24] = [Default::default(); Self::MAX_SCALE + 1];
-        let parent_octant_idx_stack: [u32; 24] = [Default::default(); Self::MAX_SCALE + 1];
-        let t_max_stack: [f32; 24] = [Default::default(); Self::MAX_SCALE + 1];
-        let octree_scale: f32 = 2.0f32.pow(-(self.depth() as i32));
-
-        let mut ro: Vec3A = ray.origin * octree_scale;
-        let mut rd: Vec3A = ray.direction.normalize();
-        let max_dst: f32 = max_dst * octree_scale;
-
-        ro += 1.0;
-
-        let mut ptr: u32 = 0;
-        let mut parent_octant_idx: u32 = 0;
-
-        let scale = Self::MAX_SCALE - 1;
-        let scale_exp2: f32 = 0.5f32;
-
-        let last_leaf_value: u32 = -1i32 as u32;
-        let adjacent_leaf_count: u32 = 0;
-
-        let sign_mask: u32 = 1 << 31;
-        let epsilon_bits_without_sign = Self::EPSILON.to_bits() & !sign_mask;
-        if rd.x.abs() < Self::EPSILON {
-            rd.x = f32::from_bits(epsilon_bits_without_sign | (rd.x.to_bits() & sign_mask))
-        }
-        if rd.y.abs() < Self::EPSILON {
-            rd.y = f32::from_bits(epsilon_bits_without_sign | (rd.y.to_bits() & sign_mask))
-        }
-        if rd.x.abs() < Self::EPSILON {
-            rd.z = f32::from_bits(epsilon_bits_without_sign | (rd.z.to_bits() & sign_mask))
-        }
-
-        let t_coef: glam::Vec3A = 1.0 - rd.abs();
-        let mut t_bias = t_coef * ro;
-
-        let mut octant_mask: u32 = 0u32;
-        if rd.x > 0.0 {
-            octant_mask ^= 1;
-            t_bias.x = 3.0 * t_coef.x - t_bias.x;
-        }
-        if rd.y > 0.0 {
-            octant_mask ^= 1;
-            t_bias.y = 3.0 * t_coef.y - t_bias.y;
-        }
-        if rd.z > 0.0 {
-            octant_mask ^= 1;
-            t_bias.z = 3.0 * t_coef.z - t_bias.z;
-        }
-
-        let mut t_min = (2.0 * t_coef.x - t_bias.x)
-            .max(2.0 * t_coef.y - t_bias.y)
-            .max(2.0 * t_coef.z - t_bias.z);
-
-        t_min = 0.0f32.max(t_min);
-
-        let t_max = (t_coef.x - t_bias.x)
-            .min(t_coef.y - t_bias.y)
-            .min(t_coef.z - t_bias.z);
-        let h = t_max;
-
-        let mut idx = 0;
-
-        let mut pos = Vec3A::splat(1.0);
-
-        if t_min < 1.5 * t_coef.x - t_bias.x {
-            idx ^= 1;
-            pos.x = 1.5;
-        }
-        if t_min < 1.5 * t_coef.y - t_bias.y {
-            idx ^= 2;
-            pos.y = 1.5;
-        }
-        if t_min < 1.5 * t_coef.z - t_bias.z {
-            idx ^= 4;
-            pos.z = 1.5;
-        }
-
-        let mut it = self.root.unwrap();
-        for i in (0..Self::MAX_STEPS) {
-            if max_dst >= 0.0 && t_min > max_dst {
-                return;
-            }
-
-            let t_corner: Vec3A = pos * t_coef - t_bias;
-
-            let tc_max: f32 = t_corner.min_element();
-
-            let octant_idx: u32 = idx ^ octant_mask;
-            let bit: u32 = 1 << octant_idx;
-
-            let is_leaf = self.octants[it as usize].children[octant_idx as usize].is_leaf();
-            let is_child = !self.octants[it as usize].children[octant_idx as usize].is_none();
-
-            if is_child && t_min <= t_max {
-                
-            }
-        }
+fn find_msb(value: u32) -> Option<i32> {
+    if value == 0 {
+        return None;
     }
+    let mut msb: u32 = 31; // u32 has 32 bits
+    while (value & (1 << msb)) == 0 {
+        msb -= 1;
+    }
+    Some(msb as i32)
 }

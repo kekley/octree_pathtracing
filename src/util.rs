@@ -70,6 +70,18 @@ pub fn random_on_hemisphere(rng: &mut StdRng, normal: Vec3) -> Vec3 {
 }
 
 #[inline]
+pub fn step(edge: f32, x: f32) -> f32 {
+    match x <= edge {
+        true => 0.0,
+        false => 1.0,
+    }
+}
+
+pub fn step_vec(edge: f32, x: Vec3) -> Vec3 {
+    Vec3::new(step(edge, x.x), step(edge, x.y), step(edge, x.z))
+}
+
+#[inline]
 pub fn random_in_unit_disk(rng: &mut StdRng) -> Vec3 {
     loop {
         let p = Vec3::new(
