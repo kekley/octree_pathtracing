@@ -5,9 +5,34 @@ use glam::{UVec3, Vec3, Vec3A, Vec4};
 use crate::{
     axis::{Axis, AxisOps},
     interval::Interval,
-    Cuboid, HitRecord, Material, OctantId, Octree, Ray, Texture, AABB,
+    Cuboid, HitRecord, Material, OctantId, Octree, Position, Ray, Texture, AABB,
 };
+impl Position for Vec3A {
+    fn construct(pos: [u32; 3]) -> Self {
+        Self::new(pos.0 as f32, pos.1 as f32, pos.2 as f32)
+    }
 
+    fn idx(&self) -> u8 {
+        todo!()
+    }
+
+    fn required_depth(&self) -> u8 {
+        let depth = self.max_element();
+        depth.log2().floor() as u8+1
+    }
+
+    fn x(&self) -> u32 {
+        self.x as u32
+    }
+
+    fn y(&self) -> u32 {
+        self.y as u32
+    }
+
+    fn z(&self) -> u32 {
+        self.z as u32
+    }
+}
 pub struct Vec3Interval {
     min: Vec3A,
     max: Vec3A,
@@ -42,7 +67,6 @@ impl Octree<u32> {
         let mut h = t_max;
         let mut parent = self.root.unwrap();
 
-        let mut child_idx = Self::select_child(&pos, current_size, &ray, t_min);
         (pos, current_size) = Self::child_cube(pos, current_size, child_idx);
 
         for _ in 0..1000 {
@@ -50,7 +74,7 @@ impl Octree<u32> {
             let t_corner_min = t_corner_mins.min_element();
             let t_corner_max = t_corner_maxs.min_element();
 
-            let child = &self.octants[parent as usize].children[child_idx as usize];
+            let is_leaf = self.get_leaf()
 
             let is_leaf = child.is_leaf();
             let is_octant = !child.is_none();
@@ -94,27 +118,23 @@ impl Octree<u32> {
             //advance
             let mut old_pos = pos;
 
-            let possible_child = Self::select_child(&mut pos, current_size, ray, t_min);
+            let mut step_mask: u8 = 0;
+            if t_corner_max >= t_corner_mins.x {
+                step_mask ^= 1;
+            }
+            if t_corner_max >= t_corner_mins.y {
+                step_mask ^= 2;
+            }
+            if t_corner_max >= t_corner_mins.z {
+                step_mask ^= 4;
+            }
 
             t_min = t_corner_max;
+            child_idx ^= step_mask;
 
-            let mut disagress = false;
-
-            Axis::iter().for_each(|&axis| {
-                if ray.direction[axis as usize] > 0.0 {
-                    if ((possible_child >> axis as usize) & 1) != 1 {
-                        disagress = true
-                    }
-                } else if ray.direction[axis as usize] <= 0.0 {
-                    if ((possible_child >> axis as usize) & 1) != 0 {
-                        disagress = true;
-                    }
-                }
-            });
-            t_min = t_corner_max;
-
-            if disagress {
+            if (child_idx & step_mask) != 0 {
                 //pop
+                println!("pop!");
                 current_size = current_size * 2;
                 if current_size > max_size {
                     return false;
@@ -127,7 +147,9 @@ impl Octree<u32> {
     }
 
     #[inline]
-    pub fn step_along_ray(pos: &Vec3A, scale: u32, ray: &Ray) -> (Vec3A, u8) {}
+    pub fn step_along_ray(pos: &Vec3A, scale: u32, ray: &Ray) -> (Vec3A, u8) {
+        todo!()
+    }
 
     #[inline]
     pub fn select_child(origin: &Vec3A, child_size: u32, ray: &Ray, t_min: f32) -> u8 {
@@ -139,6 +161,13 @@ impl Octree<u32> {
                 println!("advancing on axis: {:?}", axis);
             }
         }
+        let expected_idx = (UVec3::new(
+            origin.x as u32 + child_size,
+            origin.y as u32 + child_size,
+            origin.z as u32 + child_size,
+        ) / child_size)
+            .idx();
+        println!("expected_idx: {}", expected_idx);
         println!("idx: {}", idx);
 
         idx
@@ -178,6 +207,7 @@ impl Octree<u32> {
         octree.set_leaf(UVec3::new(4, 0, 12), 0);
         let start = Vec3A::ZERO + 1.0;
         let end = Vec3A::new(4.1, 0.1, 12.1);
+        octree.get_leaf(UVec3::new(4, 0, 12));
 
         let dir = (end - start).normalize();
 

@@ -19,9 +19,7 @@ pub struct LeafId {
     pub idx: u8,
 }
 
-pub trait Position:
-    Div<u32, Output = Self> + RemAssign<u32> + Copy + Clone + Eq + PartialEq + Debug + Hash
-{
+pub trait Position: Copy + Clone + Debug {
     fn construct(pos: [u32; 3]) -> Self;
     fn idx(&self) -> u8;
     fn required_depth(&self) -> u8;
@@ -212,7 +210,7 @@ impl<T> Octree<T> {
         while size > 0 {
             size /= 2;
             let idx = pos.div(size).idx();
-            println!("pos: {:?} idx: {},size: {}", pos, idx, size);
+            println!("it: {}, pos: {:?} idx: {},size: {}", it, pos, idx, size);
             pos.rem_assign(size);
 
             let child = &self.octants[it as usize].children[idx as usize];
@@ -477,7 +475,7 @@ impl<T> Octree<T> {
             Child::None => {
                 let prev_id = it;
                 let next_id = self.new_octant(Some(prev_id));
-                let prev_octant = &mut self.octants[prev_id as usize];
+                let prev_octant: &mut Octant<T> = &mut self.octants[prev_id as usize];
                 prev_octant.set_child(idx, Child::Octant(next_id));
 
                 next_id
