@@ -58,7 +58,7 @@ impl Position for UVec3 {
 }
 
 #[derive(Debug, Default)]
-pub(super) enum Child<T> {
+pub enum Child<T> {
     #[default]
     None,
     Octant(OctantId),
@@ -118,10 +118,10 @@ impl<T: PartialEq> PartialEq for Child<T> {
 }
 
 #[derive(Debug, PartialEq)]
-pub(super) struct Octant<T> {
-    parent: Option<OctantId>,
-    child_count: u8,
-    pub(super) children: [Child<T>; 8],
+pub struct Octant<T> {
+    pub parent: Option<OctantId>,
+    pub child_count: u8,
+    pub children: [Child<T>; 8],
 }
 
 impl<T> Octant<T> {
@@ -143,7 +143,7 @@ impl<T> Octant<T> {
 #[derive(Debug)]
 pub struct Octree<T> {
     pub(super) root: Option<OctantId>,
-    pub(super) octants: Vec<Octant<T>>,
+    pub octants: Vec<Octant<T>>,
     free_list: Vec<OctantId>,
     depth: u8,
 }

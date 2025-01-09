@@ -21,7 +21,7 @@ use rand::Rng;
 fn main() -> Result<(), anyhow::Error> {
     let start = Instant::now();
 
-    test()?;
+    new_test();
     let finish = Instant::now();
     let duration = finish - start;
 
@@ -316,4 +316,8 @@ fn test() -> Result<(), anyhow::Error> {
 
     a.single_thread_render();
     Ok(())
+}
+
+fn new_test() {
+    Octree::oct_test();
 }

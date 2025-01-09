@@ -250,4 +250,6 @@ impl AABB {
             return INFINITY;
         }
     }
+    #[inline]
+
 }
