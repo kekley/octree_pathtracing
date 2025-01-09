@@ -4,9 +4,20 @@ use glam::{UVec3, Vec3, Vec3A, Vec4};
 
 use crate::{
     axis::{Axis, AxisOps},
+    interval::Interval,
     Cuboid, HitRecord, Material, OctantId, Octree, Ray, Texture, AABB,
 };
 
+pub struct Vec3Interval {
+    min: Vec3A,
+    max: Vec3A,
+}
+
+impl Vec3Interval {
+    pub fn intersect() -> Self {
+        todo!()
+    }
+}
 impl Octree<u32> {
     const MAX_STEPS: usize = 1000;
     const MAX_SCALE: u32 = 23;
@@ -23,26 +34,28 @@ impl Octree<u32> {
         let mut stack: Vec<(OctantId, f32)> = Vec::new();
         let (mut t_min, mut t_max) = (0.0, INFINITY);
         let mut pos = Vec3A::ZERO;
-        let mut size = 2f32.powi(self.depth() as i32) as u32;
-        let (t0, t1) = Self::project_cube(&pos, size, &ray);
-        t_min = t0.max_element();
-        t_max = t0.min_element();
+        let max_size = 2f32.powi(self.depth() as i32) as u32;
+        let mut current_size = max_size;
+        let (t0, t1) = Self::project_cube(&pos, current_size, &ray);
+        t_min = t0.max_element().max(t_min);
+        t_max = t1.min_element().min(t_max);
         let mut h = t_max;
         let mut parent = self.root.unwrap();
 
-        let mut child_idx = Self::select_child(&mut pos, &mut size, ray, t_min);
+        let mut child_idx = Self::select_child(&pos, current_size, &ray, t_min);
+        (pos, current_size) = Self::child_cube(pos, current_size, child_idx);
 
         for _ in 0..1000 {
-            let (t0, t1) = Self::project_cube(&pos, size, ray);
-            let t_corner = t1;
-            let t_corner_max = t_corner.min_element();
+            let (t_corner_mins, t_corner_maxs) = Self::project_cube(&pos, current_size, ray);
+            let t_corner_min = t_corner_mins.min_element();
+            let t_corner_max = t_corner_maxs.min_element();
 
             let child = &self.octants[parent as usize].children[child_idx as usize];
 
             let is_leaf = child.is_leaf();
             let is_octant = !child.is_none();
 
-            if is_octant && t_max <= t_max {
+            if is_octant && t_min <= t_max {
                 if is_leaf && t_min == 0.0 {
                     //FIXME: inside voxel
                 }
@@ -54,20 +67,21 @@ impl Octree<u32> {
                     println!("value: {}", val);
                 } else {
                     //descend
+                    let tv_min = t_corner_min.max(t_min);
                     let tv_max = t_corner_max.min(t_max);
 
                     if t_min <= tv_max {
                         //push
 
                         if t_corner_max < h {
-                            stack.push((parent, t_min));
+                            stack.push((parent, t_max));
                         }
                         h = t_corner_max;
 
                         parent = child.get_octant_value().unwrap();
 
-                        child_idx = Self::select_child(&mut pos, &mut size, ray, t_min);
-
+                        child_idx = Self::select_child(&mut pos, current_size / 2, ray, t_min);
+                        (pos, current_size) = Self::child_cube(pos, current_size, child_idx);
                         t_max = tv_max;
 
                         continue;
@@ -79,36 +93,69 @@ impl Octree<u32> {
 
             //advance
             let mut old_pos = pos;
-            let mut size_copy = size;
 
-            let possible_child = Self::select_child(&mut pos, &mut size_copy, ray, t_min);
+            let possible_child = Self::select_child(&mut pos, current_size, ray, t_min);
 
             t_min = t_corner_max;
 
-            child_idx ^= possible_child;
+            let mut disagress = false;
 
-            if (child_idx & possible_child) != 0 {
+            Axis::iter().for_each(|&axis| {
+                if ray.direction[axis as usize] > 0.0 {
+                    if ((possible_child >> axis as usize) & 1) != 1 {
+                        disagress = true
+                    }
+                } else if ray.direction[axis as usize] <= 0.0 {
+                    if ((possible_child >> axis as usize) & 1) != 0 {
+                        disagress = true;
+                    }
+                }
+            });
+            t_min = t_corner_max;
+
+            if disagress {
                 //pop
+                current_size = current_size * 2;
+                if current_size > max_size {
+                    return false;
+                }
+                (parent, t_max) = stack.pop().unwrap();
+                h = 0.0;
             }
         }
         false
     }
-    pub fn select_child(origin: &mut Vec3A, size: &mut u32, ray: &Ray, t_min: f32) -> (u8) {
-        *size /= 2;
-        let (mins, maxs) = Self::project_cube(&origin, *size, ray);
-        let t_cmax = maxs.min_element();
+
+    #[inline]
+    pub fn step_along_ray(pos: &Vec3A, scale: u32, ray: &Ray) -> (Vec3A, u8) {}
+
+    #[inline]
+    pub fn select_child(origin: &Vec3A, child_size: u32, ray: &Ray, t_min: f32) -> u8 {
+        let (mins, maxs) = Self::project_cube(origin, child_size, ray);
         let mut idx: u8 = 0;
         for &axis in Axis::iter() {
-            let a = maxs.get_axis(axis);
-            idx |= 1 << axis as usize;
-            if a == t_cmax {
-                println!("advance! axis{:?}", axis);
-                println!("idx: {}", idx);
-                origin[axis as usize] = origin.get_axis(axis) + *size as f32;
-            };
+            if t_min < maxs[axis as usize] {
+                idx |= 1 << axis as usize;
+                println!("advancing on axis: {:?}", axis);
+            }
         }
+        println!("idx: {}", idx);
+
         idx
     }
+
+    #[inline]
+    pub fn child_cube(pos: Vec3A, size: u32, idx: u8) -> (Vec3A, u32) {
+        let mut new_pos = pos;
+        let new_size = size / 2;
+        Axis::iter().for_each(|&axis| {
+            if ((idx >> axis as usize) & 1) == 1 {
+                new_pos[axis as usize] += new_size as f32;
+            }
+        });
+        (new_pos, new_size)
+    }
+    #[inline]
     pub fn project_cube(origin: &Vec3A, size: u32, ray: &Ray) -> (Vec3A, Vec3A) {
         let box_min = origin;
         let box_max = *origin + size as f32;
