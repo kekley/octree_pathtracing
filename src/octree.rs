@@ -1,13 +1,7 @@
-use std::{
-    f32::EPSILON,
-    fmt::Debug,
-    hash::Hash,
-    mem,
-    ops::{Div, RemAssign},
-};
+use std::{f32::EPSILON, fmt::Debug, hash::Hash, mem};
 
 use glam::{UVec3, Vec2, Vec3A};
-use rand_distr::num_traits::Pow;
+use rand_distr::num_traits::{self, Pow};
 
 use crate::{scene, Cuboid, Material, Ray, Scene};
 
@@ -26,6 +20,8 @@ pub trait Position: Copy + Clone + Debug {
     fn x(&self) -> u32;
     fn y(&self) -> u32;
     fn z(&self) -> u32;
+    fn div(&self, rhs: u32) -> Self;
+    fn rem_assign(&mut self, rhs: u32);
 }
 
 impl Position for UVec3 {
@@ -52,6 +48,14 @@ impl Position for UVec3 {
 
     fn z(&self) -> u32 {
         self.z
+    }
+
+    fn div(&self, rhs: u32) -> Self {
+        *self / rhs
+    }
+
+    fn rem_assign(&mut self, rhs: u32) {
+        *self %= rhs;
     }
 }
 
@@ -125,7 +129,7 @@ pub struct Octant<T> {
 impl<T> Octant<T> {
     fn set_child(&mut self, idx: u8, child: Child<T>) -> Child<T> {
         let idx = idx as usize;
-        if self.children[idx].is_none() && child.is_none() {
+        if self.children[idx].is_none() && !child.is_none() {
             self.child_count += 1;
         }
         if !self.children[idx].is_none() && child.is_none() {
@@ -189,8 +193,7 @@ impl<T> Octree<T> {
         while size >= 1 {
             size /= 2;
 
-            let idx = (pos / size).idx();
-            println!("pos: {:?} idx: {},size: {}", pos, idx, size);
+            let idx = pos.div(size).idx();
             pos.rem_assign(size);
 
             if size == 1 {
@@ -210,11 +213,12 @@ impl<T> Octree<T> {
         while size > 0 {
             size /= 2;
             let idx = pos.div(size).idx();
-            println!("it: {}, pos: {:?} idx: {},size: {}", it, pos, idx, size);
+            //println!("it: {}, pos: {:?} idx: {},size: {}", it, pos, idx, size);
             pos.rem_assign(size);
 
             let child = &self.octants[it as usize].children[idx as usize];
             if child.is_none() {
+                //println!("is none! size:{}", size);
                 break;
             }
 
@@ -288,8 +292,8 @@ impl<T> Octree<T> {
 
         while size >= 1 {
             size /= 2;
-            let idx = (pos / size).idx();
-            pos %= size;
+            let idx = pos.div(size).idx();
+            pos.rem_assign(size);
 
             if size == 1 {
                 //leaf replaced with itself
@@ -330,8 +334,8 @@ impl<T> Octree<T> {
 
         while size >= 1 {
             size /= 2;
-            let idx = (pos / size).idx();
-            pos %= size;
+            let idx = pos.div(size).idx();
+            pos.rem_assign(size);
 
             match &self.octants[it as usize].children[idx as usize] {
                 Child::None => break,

@@ -308,8 +308,10 @@ fn test() -> Result<(), anyhow::Error> {
 
     let mut octree: Octree<u32> = Octree::new();
     octree.set_leaf(UVec3::new(4, 0, 12), 0);
-    let a = octree.get_leaf(UVec3::new(4, 0, 12)).unwrap().clone();
-    println!("{}", a);
+    println!("zero:");
+    let a = octree.get_leaf(UVec3::new(0, 0, 0)).unwrap().clone();
+    println!("midpoint:");
+    let b = octree.get_leaf(UVec3::splat(8)).unwrap();
 
     scene.octree = octree;
     let a = TileRenderer::new((1000, 1000), 1, scene);
