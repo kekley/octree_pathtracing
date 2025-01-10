@@ -1,4 +1,3 @@
-use std::default;
 
 use stb_image::image::load;
 

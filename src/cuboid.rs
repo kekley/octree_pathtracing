@@ -1,14 +1,12 @@
 use core::f32;
-use std::f32::{EPSILON, INFINITY};
+use std::f32::INFINITY;
 
 use crate::{
     aabb::AABB,
-    axis::{Axis, AxisOps},
-    ray::Ray,
-    scene, util, Material, Scene, Texture,
+    ray::Ray, util, Material, Scene,
 };
 
-use glam::{BVec3, Vec3A as Vec3, Vec4};
+use glam::Vec3A as Vec3;
 
 pub enum Face {
     Top = 0,

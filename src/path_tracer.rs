@@ -1,5 +1,5 @@
 use core::f32;
-use std::{f32::INFINITY, path};
+use std::f32::INFINITY;
 
 use crate::{material, Material, MaterialFlags, Ray, Scene};
 use glam::{Vec3A as Vec3, Vec4, Vec4Swizzles};
@@ -52,7 +52,7 @@ pub fn path_trace(scene: &Scene, ray: &mut Ray, first_reflection: bool) -> bool 
 
         for _ in 0..count {
             let do_metal = metal > Ray::EPSILON && rng.gen::<f32>() < metal;
-            if (do_metal || (specular > Ray::EPSILON && rng.gen::<f32>() < specular)) {
+            if do_metal || (specular > Ray::EPSILON && rng.gen::<f32>() < specular) {
                 hit |= do_specular_reflection(
                     ray,
                     &mut next,

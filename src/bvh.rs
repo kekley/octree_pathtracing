@@ -4,7 +4,6 @@ use crate::{
     aabb::AABB,
     axis::Axis,
     hittable::{HitList, Hittable},
-    interval::Interval,
     ray::Ray,
 };
 

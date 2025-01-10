@@ -1,7 +1,7 @@
-use std::f32::{consts::PI, INFINITY, NAN};
+use std::f32::{consts::PI, INFINITY};
 
 use crate::HitRecord;
-use glam::{DMat3, Mat3A, Vec3A as Vec3, Vec4};
+use glam::{Mat3A, Vec3A as Vec3, Vec4};
 use rand::{rngs::StdRng, Rng};
 
 #[derive(Debug, Clone, Default)]

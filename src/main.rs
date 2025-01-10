@@ -1,22 +1,14 @@
 extern crate ray_tracing;
-use std::error::Error;
-use std::io::Read;
-use std::sync::{Arc, Mutex};
-use std::{fs::File, io::Write, time::Instant};
+use std::time::Instant;
 
 use anyhow::Ok;
 use glam::{UVec3, Vec3A as Vec3};
-use rand_distr::uniform::SampleUniform;
-use rand_distr::{Normal, UnitDisc};
-use ray_tracing::{BVHTree, MaterialFlags, Octree, Position, RTWImage, Scene, Texture, PI};
-use ray_tracing::{Camera, HittableBVH};
-use ray_tracing::{Cuboid, Material};
-use ray_tracing::{HitList, Hittable};
-use ray_tracing::{TileRenderer, AABB};
-use spider_eye::{Chunk, ChunkCoords, World, WorldCoords};
+use ray_tracing::{MaterialFlags, Octree, Position, RTWImage, Scene, Texture};
+use ray_tracing::Camera;
+use ray_tracing::Material;
+use ray_tracing::TileRenderer;
+use spider_eye::{World, WorldCoords};
 pub const ASPECT_RATIO: f32 = 1.5;
-use glam::Vec4;
-use rand::Rng;
 
 fn main() -> Result<(), anyhow::Error> {
     blocks()?;

@@ -2,7 +2,7 @@ use glam::Vec3A as Vec3;
 
 use rand::{rngs::StdRng, Rng};
 use rand_distr::UnitDisc;
-use std::f32::{consts::FRAC_PI_6, INFINITY};
+use std::f32::consts::FRAC_PI_6;
 
 use crate::{axis::UP, ray::Ray, HitRecord};
 
@@ -66,7 +66,7 @@ impl Camera {
             let focal_point = origin + new_dir * self.focus_dist;
             let [x, y]: [f32; 2] = rng.sample(UnitDisc);
             origin += (x * right + y * self.up) * self.aperture;
-            new_dir = (focal_point - origin);
+            new_dir = focal_point - origin;
         }
         //println!("new_dir: {:}", new_dir);
 

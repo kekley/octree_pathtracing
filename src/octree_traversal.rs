@@ -1,15 +1,8 @@
 #![allow(clippy::style)]
 
-use std::f32::INFINITY;
+use glam::{UVec3, Vec2, Vec3A};
 
-use glam::{UVec3, Vec2, Vec3A, Vec4};
-use num_traits::PrimInt;
-
-use crate::{
-    axis::{self, Axis, AxisOps, Direction},
-    interval::Interval,
-    Cuboid, Face, HitRecord, Material, OctantId, Octree, Position, Ray, Texture, AABB,
-};
+use crate::{axis::Axis, Cuboid, Face, HitRecord, Material, OctantId, Octree, Position, Ray, AABB};
 impl Position for Vec3A {
     fn construct(x: u32, y: u32, z: u32) -> Self {
         Self::new(x as f32, y as f32, z as f32)

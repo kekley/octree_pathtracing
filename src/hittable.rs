@@ -2,8 +2,7 @@ use std::f32::INFINITY;
 
 pub type HittableIdx = u32;
 use crate::{
-    aabb::AABB, bvh::BVHTree, cuboid::Cuboid, interval::Interval, ray::Ray, sphere::Sphere,
-    Material,
+    aabb::AABB, bvh::BVHTree, cuboid::Cuboid, ray::Ray, sphere::Sphere,
 };
 use glam::{Vec3A as Vec3, Vec4};
 

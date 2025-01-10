@@ -1,17 +1,14 @@
-use glam::Vec3A as Vec3;
-use glam::Vec4;
 use std::sync::Mutex;
 use std::{
     fs::File,
-    io::{self, Write},
+    io::{Write},
     sync::Arc,
     thread, vec,
 };
 
-use glam::Vec4Swizzles;
 use rand::{rngs::StdRng, SeedableRng};
 
-use crate::{path_tracer::*, scene, util, Camera, Ray, Scene};
+use crate::{util, Scene};
 pub struct Tile {
     bytes_per_pixel: usize,
     stride: usize,

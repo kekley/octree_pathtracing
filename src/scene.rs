@@ -1,7 +1,6 @@
 use crate::{path_trace, BVHTree, Camera, Cuboid, Material, Octree, Ray, Sphere};
 
-use bitflags::bitflags;
-use glam::{Vec3A as Vec3, Vec4, Vec4Swizzles};
+use glam::{Vec4, Vec4Swizzles};
 use rand::rngs::StdRng;
 pub struct Scene {
     spheres: Vec<Sphere>,
@@ -81,7 +80,7 @@ impl Scene {
     }
 
     pub fn hit(&self, ray: &mut Ray) -> bool {
-        let mut hit = false;
+        let hit = false;
         self.octree
             .intersect_octree(ray, 1000.0, false, &self.cubes, &self.materials)
     }

@@ -1,4 +1,4 @@
-use crate::{interval::Interval, rtw_image::RTWImage};
+use crate::rtw_image::RTWImage;
 use glam::{Vec3A as Vec3, Vec4};
 
 #[derive(Debug, Clone)]

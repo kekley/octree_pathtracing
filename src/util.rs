@@ -1,9 +1,9 @@
 use core::f32;
 
 use glam::Vec3A as Vec3;
-use rand::{rngs::StdRng, Rng, RngCore};
+use rand::{rngs::StdRng, Rng};
 
-use crate::{axis::Axis, interval::Interval};
+use crate::interval::Interval;
 
 pub const PI: f32 = std::f32::consts::PI;
 #[inline]

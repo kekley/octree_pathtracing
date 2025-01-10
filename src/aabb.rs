@@ -6,7 +6,7 @@ use crate::{
     interval::Interval,
     ray::Ray,
 };
-use glam::{BVec3, Vec3A as Vec3, Vec3Swizzles};
+use glam::{Vec3A as Vec3, Vec3Swizzles};
 #[derive(Debug, Clone, Copy)]
 pub struct AABB {
     pub min: Vec3,

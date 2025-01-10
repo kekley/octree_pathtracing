@@ -1,9 +1,8 @@
-use std::{f32::EPSILON, fmt::Debug, hash::Hash, mem};
+use std::{fmt::Debug, hash::Hash, mem};
 
-use glam::{UVec3, Vec2, Vec3A};
-use rand_distr::num_traits::{self, Pow};
+use glam::UVec3;
+use rand_distr::num_traits::{Pow};
 
-use crate::{scene, Cuboid, Material, Ray, Scene};
 
 pub type OctantId = u32;
 
