@@ -8,7 +8,7 @@ use anyhow::Ok;
 use glam::{UVec3, Vec3A as Vec3};
 use rand_distr::uniform::SampleUniform;
 use rand_distr::{Normal, UnitDisc};
-use ray_tracing::{BVHTree, MaterialFlags, Octree, RTWImage, Scene, Texture, PI};
+use ray_tracing::{BVHTree, MaterialFlags, Octree, Position, RTWImage, Scene, Texture, PI};
 use ray_tracing::{Camera, HittableBVH};
 use ray_tracing::{Cuboid, Material};
 use ray_tracing::{HitList, Hittable};
@@ -19,13 +19,8 @@ use glam::Vec4;
 use rand::Rng;
 
 fn main() -> Result<(), anyhow::Error> {
-    let start = Instant::now();
+    blocks()?;
 
-    test();
-    let finish = Instant::now();
-    let duration = finish - start;
-
-    println!("time elapsed: {}", duration.as_millis());
     Ok(())
 }
 /*
@@ -219,24 +214,16 @@ fn cube() {
  */
 
 fn blocks() -> Result<(), anyhow::Error> {
-    let test = AABB {
-        min: Vec3::new(4.0, 0.0, 12.0),
-        max: Vec3::new(5.0, 1.0, 13.0),
-    };
     let camera = Camera::look_at(
-        Vec3::new(0.0, 0.0, 0.0),
-        (test.max + test.min) * 0.5,
+        Vec3::new(0.0, 30.0, 0.0),
+        Vec3::new(7.0, 28.0, 7.0),
         Vec3::new(0.0, 1.0, 0.0),
-        50.0,
+        70.0,
     );
     let mut scene = Scene::new().branch_count(1).camera(camera).spp(1).build();
     let tex_image = RTWImage::load("./assets/greasy.jpg").unwrap();
     let tex = Texture::Image(tex_image);
-    let checkerboard = Texture::CheckerBoard {
-        inv_scale: 1.0,
-        a: Box::new(Texture::Color(Vec4::new(0.6, 0.6, 0.6, 1.0))),
-        b: Box::new(Texture::Color(Vec4::splat(1.0))),
-    };
+
     let mat = Material {
         name: "earth".into(),
         index_of_refraction: 1.000293,
@@ -249,70 +236,34 @@ fn blocks() -> Result<(), anyhow::Error> {
     };
     let materials = vec![mat];
     scene.materials = materials;
-    let start = Vec3::new(-2.0, -2.0, 20.0);
-    let test = AABB {
-        min: Vec3::new(4.0, 0.0, 12.0),
-        max: Vec3::new(5.0, 1.0, 13.0),
+
+    let world = World::new("./biggerworld");
+    let mut octree: Octree<u32> = Octree::with_capacity(4000);
+    let f = |positon: UVec3| -> Option<u32> {
+        let block = world.get_block(WorldCoords {
+            x: positon.x.into(),
+            y: positon.y as i64 + 64,
+            z: positon.z.into(),
+        });
+        if block.is_some() {
+            if block.unwrap() == 0 {
+                return None;
+            }
+        }
+        block
     };
-    scene.add_cube(Cuboid::new(test, 0));
 
-    let mut rng = rand::thread_rng();
-    for _ in 0..5 {
-        let x = rng.gen_range(1..5);
-        let y = rng.gen_range(1..5);
-        let z = rng.gen_range(2..10);
-        let start = Vec3::new(x as f32, y as f32, z as f32);
-        let bounds = AABB::from_points(start, start + 1.0);
-        println!("{:?}", bounds);
-        scene.add_cube(Cuboid::new(bounds, 0));
-    }
-    let a = TileRenderer::new((1000, 1000), 1, scene);
-
-    a.single_thread_render();
-    Ok(())
-}
-
-fn test() -> Result<(), anyhow::Error> {
-    let test = AABB {
-        min: Vec3::new(4.0, 4.0, 12.0),
-        max: Vec3::new(5.0, 5.0, 13.0),
-    };
-    let camera = Camera::look_at(
-        Vec3::new(1.0, 1.0, 1.0),
-        (test.max + test.min) * 0.5,
-        Vec3::new(0.0, 1.0, 0.0),
-        30.0,
-    );
-    let mut scene = Scene::new().branch_count(1).camera(camera).spp(1).build();
-    let tex_image = RTWImage::load("./assets/greasy.jpg").unwrap();
-    let tex = Texture::Image(tex_image);
-    let checkerboard = Texture::CheckerBoard {
-        inv_scale: 1.0,
-        a: Box::new(Texture::Color(Vec4::new(0.6, 0.6, 0.6, 1.0))),
-        b: Box::new(Texture::Color(Vec4::splat(1.0))),
-    };
-    let mat = Material {
-        name: "earth".into(),
-        index_of_refraction: 1.000293,
-        material_flags: MaterialFlags::OPAQUE | MaterialFlags::SOLID,
-        specular: 0.0,
-        emittance: 0.0,
-        roughness: 0.0,
-        metalness: 0.0,
-        albedo: tex,
-    };
-    let materials = vec![mat];
-
-    scene.materials = materials;
-    scene.octree_palette = vec![Cuboid::new(test, 0)];
-
-    let mut octree: Octree<u32> = Octree::new();
-    octree.set_leaf(UVec3::new(4, 4, 12), 0);
-
+    octree.construct_octants_with(9, f);
+    println!("built octree!");
     scene.octree = octree;
-    let a = TileRenderer::new((1000, 1000), 1, scene);
 
-    a.single_thread_render();
+    let a: TileRenderer = TileRenderer::new((1000, 1000), 3, 8, scene);
+    let start = Instant::now();
+    a.render();
+    let finish = Instant::now();
+    let duration = finish - start;
+
+    println!("time elapsed: {}", duration.as_millis());
     Ok(())
 }
 

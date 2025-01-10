@@ -13,8 +13,8 @@ pub struct LeafId {
     pub idx: u8,
 }
 
-pub trait Position: Copy + Clone + Debug {
-    fn construct(pos: [u32; 3]) -> Self;
+pub trait Position: Copy + Clone + Debug + Sized {
+    fn construct(x: u32, y: u32, z: u32) -> Self;
     fn idx(&self) -> u8;
     fn required_depth(&self) -> u8;
     fn x(&self) -> u32;
@@ -34,8 +34,8 @@ impl Position for UVec3 {
         (depth as f32).log2().floor() as u8 + 1
     }
 
-    fn construct(pos: [u32; 3]) -> Self {
-        Self::new(pos[0], pos[1], pos[2])
+    fn construct(x: u32, y: u32, z: u32) -> Self {
+        Self::new(x, y, z)
     }
 
     fn x(&self) -> u32 {
@@ -170,11 +170,11 @@ impl<T: PartialEq> PartialEq for Octree<T> {
 }
 
 impl<T> Octree<T> {
-    pub fn new_in() -> Self {
+    fn new_in() -> Self {
         Self::with_capacity_in(0)
     }
 
-    pub fn with_capacity_in(capacity: usize) -> Self {
+    fn with_capacity_in(capacity: usize) -> Self {
         Self {
             root: None,
             octants: Vec::with_capacity(capacity),
@@ -237,14 +237,11 @@ impl<T> Octree<T> {
 
         let size = 2f32.pow(depth as i32) as u32;
 
-        if let Some(result) =
-            self.construct_octants_with_impl(size, P::construct([0u32, 0u32, 0u32]), &f)
-        {
+        if let Some(result) = self.construct_octants_with_impl(size, P::construct(0, 0, 0), &f) {
             self.root = Some(result);
             self.depth = depth;
         }
     }
-
     fn construct_octants_with_impl<P: Position, F: Fn(P) -> Option<T>>(
         &mut self,
         size: u32,
@@ -256,11 +253,12 @@ impl<T> Octree<T> {
         let mut new_parent = None;
 
         for i in 0u8..8 {
-            let child_pos = P::construct([
+            let child_pos = P::construct(
                 pos.x() + size * ((i as u32) & 1),
-                pos.y() + size * ((i as u32) & 1),
-                pos.z() + size * ((i as u32) & 1),
-            ]);
+                pos.y() + size * ((i as u32 >> 1) & 1),
+                pos.z() + size * ((i as u32 >> 2) & 1),
+            );
+
             if size > 1 {
                 let child_id = self.construct_octants_with_impl(size, child_pos, f);
                 let Some(child_id) = child_id else {
@@ -268,12 +266,14 @@ impl<T> Octree<T> {
                 };
 
                 let parent_id = new_parent.get_or_insert_with(|| self.new_octant(None));
+                self.octants[*parent_id as usize].set_child(i, Child::Octant(child_id));
 
                 let child = &mut self.octants[child_id as usize];
-
                 child.parent = Some(*parent_id);
+
                 continue;
             }
+
             if let Some(value) = f(child_pos) {
                 let parent_id = new_parent.get_or_insert_with(|| self.new_octant(None));
                 self.octants[*parent_id as usize].set_child(i, Child::Leaf(value));

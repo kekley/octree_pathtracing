@@ -1,7 +1,7 @@
 use crate::{path_trace, BVHTree, Camera, Cuboid, Material, Octree, Ray, Sphere};
 
 use bitflags::bitflags;
-use glam::{Vec3A as Vec3, Vec4};
+use glam::{Vec3A as Vec3, Vec4, Vec4Swizzles};
 use rand::rngs::StdRng;
 pub struct Scene {
     spheres: Vec<Sphere>,
@@ -98,9 +98,9 @@ impl Scene {
         }
     }
 
-    pub fn trace_ray(&self, x: f32, y: f32, rng: &mut StdRng) -> Vec4 {
+    pub fn get_pixel_color(&self, x: f32, y: f32, rng: &mut StdRng) -> glam::Vec3 {
         let mut ray = self.camera.get_ray(rng, x, y);
         path_trace(&self, &mut ray, true);
-        ray.hit.color
+        ray.hit.color.xyz()
     }
 }

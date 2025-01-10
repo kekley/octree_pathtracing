@@ -2,17 +2,17 @@
 
 use std::f32::INFINITY;
 
-use glam::{UVec3, Vec3A, Vec4};
+use glam::{UVec3, Vec2, Vec3A, Vec4};
 use num_traits::PrimInt;
 
 use crate::{
-    axis::{self, Axis, AxisOps},
+    axis::{self, Axis, AxisOps, Direction},
     interval::Interval,
-    Cuboid, HitRecord, Material, OctantId, Octree, Position, Ray, Texture, AABB,
+    Cuboid, Face, HitRecord, Material, OctantId, Octree, Position, Ray, Texture, AABB,
 };
 impl Position for Vec3A {
-    fn construct(pos: [u32; 3]) -> Self {
-        Self::new(pos[0] as f32, pos[1] as f32, pos[2] as f32)
+    fn construct(x: u32, y: u32, z: u32) -> Self {
+        Self::new(x as f32, y as f32, z as f32)
     }
 
     fn idx(&self) -> u8 {
@@ -61,7 +61,7 @@ impl Octree<u32> {
     ) -> bool {
         let octree_scale = f32::exp2(-(self.depth() as f32)); //scale factor for putting the size of the octree in the range[ 0-1]
         let mut stack: [(OctantId, f32); MAX_SCALE as usize + 1] =
-            [Default::default(); MAX_SCALE as usize + 1];
+            [(self.root.unwrap(), 2.0 - THIS_EPSILON); MAX_SCALE as usize + 1];
         let mut ro = ray.origin * octree_scale;
         let mut rd = ray.direction;
         let max_dst = max_dst * octree_scale;
@@ -80,7 +80,7 @@ impl Octree<u32> {
         let epsilon_bits_without_sign: u32 = THIS_EPSILON.to_bits() & !sign_mask;
 
         Axis::iter().for_each(|&axis| {
-            if rd[axis as usize] < THIS_EPSILON {
+            if rd[axis as usize].abs() < THIS_EPSILON {
                 rd[axis as usize] = f32::from_bits(
                     epsilon_bits_without_sign | rd[axis as usize].to_bits() & sign_mask,
                 );
@@ -99,14 +99,18 @@ impl Octree<u32> {
             }
         });
 
-        let mut t_min: f32 = (2.0 * t_coef.x - t_bias.x)
-            .max(2.0 * t_coef.y - t_bias.y)
-            .max(2.0 * t_coef.z - t_bias.z)
-            .max(0.0);
+        let mut t_min = (2.0 * t_coef - t_bias).max_element().max(0.0);
 
-        let mut t_max: f32 = (t_coef.x - t_bias.x)
-            .min(t_coef.y - t_bias.y)
-            .min(t_coef.z - t_bias.z);
+        /* let mut t_min: f32 = (2.0 * t_coef.x - t_bias.x)
+        .max(2.0 * t_coef.y - t_bias.y)
+        .max(2.0 * t_coef.z - t_bias.z)
+        .max(0.0); */
+
+        let mut t_max = (t_coef - t_bias).min_element();
+        /*  let mut t_max: f32 = (t_coef.x - t_bias.x)
+                   .min(t_coef.y - t_bias.y)
+                   .min(t_coef.z - t_bias.z);
+        */
 
         let mut h: f32 = t_max;
 
@@ -121,7 +125,7 @@ impl Octree<u32> {
             }
         });
 
-        for i in (0..MAX_STEPS) {
+        for i in 0..MAX_STEPS {
             if max_dst >= 0.0 && t_min > max_dst {
                 return false;
             }
@@ -138,18 +142,77 @@ impl Octree<u32> {
             let is_child = !child.is_none();
             let is_leaf = child.is_leaf();
 
-            //println!("pos: {:?},t_min:{}, current_parent: {}, unmirrored_idx: {}, scale: {}, is_child:{}, is_leaf: {}",ray.origin+ray.direction*(t_min/octree_scale),t_min/octree_scale,parent_octant_idx,unmirrored_idx,scale,is_child,is_leaf);
-
             if is_child && t_min <= t_max {
                 if is_leaf && t_min == 0.0 {
                     println!("inside block");
-                    ray.hit.color = Vec4::ONE;
                     return true;
                 }
 
                 if is_leaf && t_min > 0.0 {
                     //println!("hit");
-                    ray.hit.color = Vec4::new(1.0, 0.0, 1.0, 1.0);
+                    //println!("pos: {:?},t_min:{}, current_parent: {}, unmirrored_idx: {}, scale: {}, is_child:{}, is_leaf: {}",ray.origin+ray.direction*(t_min/octree_scale),t_min/octree_scale,parent_octant_idx,unmirrored_idx,scale,is_child,is_leaf);
+                    let leaf_value = self.octants[parent_octant_idx as usize].children
+                        [unmirrored_idx as usize]
+                        .get_leaf_value()
+                        .unwrap();
+
+                    let t_corner = (pos + scale_exp2) * t_coef - t_bias;
+
+                    let t_corner_min = t_corner.max_element();
+
+                    let mut pos = pos;
+                    Axis::iter().for_each(|&axis| {
+                        if (mirror_mask & (1 << axis as usize)) != 0 {
+                            pos[axis as usize] = 3.0 - scale_exp2 - pos[axis as usize];
+                        }
+                    });
+
+                    let mut face_id: Face = Face::East;
+                    let mut uv = Vec2::splat(0.0);
+
+                    if t_corner_min == t_corner.x {
+                        uv = Vec2::new(
+                            (ro.z + rd.z * t_corner.x) - pos.z,
+                            (ro.y + rd.y * t_corner.x) - pos.y,
+                        ) / scale_exp2;
+                        face_id = if rd.x > 0.0 {
+                            uv.x = 1.0 - uv.x;
+                            Face::East
+                        } else {
+                            Face::West
+                        };
+                    }
+                    if t_corner_min == t_corner.y {
+                        uv = Vec2::new(
+                            (ro.x + rd.x * t_corner.y) - pos.x,
+                            (ro.z + rd.z * t_corner.y) - pos.z,
+                        ) / scale_exp2;
+                        face_id = if rd.y > 0.0 {
+                            uv.y = 1.0 - uv.y;
+                            Face::Top
+                        } else {
+                            Face::Bottom
+                        };
+                    }
+                    if t_corner_min == t_corner.z {
+                        uv = Vec2::new(
+                            (ro.x + rd.x * t_corner.z) - pos.x,
+                            (ro.y + rd.y * t_corner.z) - pos.y,
+                        ) / scale_exp2;
+                        face_id = if rd.z < 0.0 {
+                            uv.x = 1.0 - uv.x;
+                            Face::South
+                        } else {
+                            Face::North
+                        };
+                    }
+
+                    ray.hit.u = uv.x;
+                    ray.hit.v = uv.y;
+                    ray.hit.previous_material = ray.hit.previous_material;
+                    ray.hit.t_next = t_min / octree_scale;
+                    let mat = &materials[0 as usize];
+                    Cuboid::intersect_texture(ray, mat);
                     return true;
                 } else {
                     let half_scale = scale_exp2 * 0.5;
@@ -203,18 +266,25 @@ impl Octree<u32> {
                 //println!("pop!");
                 let mut differing_bits: u32 = 0;
 
-                if (step_mask & 1) != 0 {
-                    differing_bits |= (pos.x.to_bits() ^ (pos.x + scale_exp2).to_bits());
+                /* if (step_mask & 1) != 0 {
+                    differing_bits |= pos.x.to_bits() ^ (pos.x + scale_exp2).to_bits();
                 }
                 if (step_mask & 2) != 0 {
-                    differing_bits |= (pos.y.to_bits() ^ (pos.y + scale_exp2).to_bits());
+                    differing_bits |= pos.y.to_bits() ^ (pos.y + scale_exp2).to_bits();
                 }
                 if (step_mask & 4) != 0 {
-                    differing_bits |= (pos.z.to_bits() ^ (pos.z + scale_exp2).to_bits());
-                }
+                    differing_bits |= pos.z.to_bits() ^ (pos.z + scale_exp2).to_bits();
+                } */
+
+                Axis::iter().for_each(|&axis| {
+                    if (step_mask & (1 << axis as usize)) != 0 {
+                        differing_bits |= pos[axis as usize].to_bits()
+                            ^ (pos[axis as usize] + scale_exp2).to_bits()
+                    }
+                });
 
                 //find msb
-                scale = find_msb_old(differing_bits).unwrap_or(-1);
+                scale = find_msb(differing_bits as i32);
                 //println!("{:b}", differing_bits);
                 scale_exp2 = f32::exp2((scale - MAX_SCALE) as f32);
 
@@ -223,17 +293,24 @@ impl Octree<u32> {
                 }
                 (parent_octant_idx, t_max) = stack[scale as usize];
 
-                let (mut shx, mut shy, mut shz): (u32, u32, u32) = (0, 0, 0);
+                //let (mut shx, mut shy, mut shz): (u32, u32, u32) = (0, 0, 0);
 
-                shx = pos.x.to_bits() >> scale;
+                let mut sh = UVec3::splat(0);
+
+                Axis::iter().for_each(|&axis| {
+                    sh[axis as usize] = pos[axis as usize].to_bits() >> scale;
+                    pos[axis as usize] = f32::from_bits(sh[axis as usize] << scale);
+                });
+
+                /*                 shx = pos.x.to_bits() >> scale;
                 shy = pos.y.to_bits() >> scale;
                 shz = pos.z.to_bits() >> scale;
 
                 pos.x = f32::from_bits(shx << scale);
                 pos.y = f32::from_bits(shy << scale);
-                pos.z = f32::from_bits(shz << scale);
+                pos.z = f32::from_bits(shz << scale); */
 
-                idx = (shx & 1) | ((shy & 1) << 1) | ((shz & 1) << 2);
+                idx = (sh.x & 1) | ((sh.y & 1) << 1) | ((sh.z & 1) << 2);
                 h = 0.0;
             }
         }
@@ -270,8 +347,8 @@ impl Octree<u32> {
             bbox: AABB::new(start, start + 1.0),
             textures: [0u16; 6],
         }];
-        let a = octree.intersect_octree(&mut ray, 1000.0, false, &palette, &materials);
-        let b = octree.intersect_octree(&mut ray2, 1000.0, false, &palette, &materials);
+        let a = octree.intersect_octree(&mut ray, 100.0, false, &palette, &materials);
+        let b = octree.intersect_octree(&mut ray2, 100.0, false, &palette, &materials);
         //let res = octree.new_intersect(&mut ray, 100.0, false, &palette, &materials);
         //println!("{}", res);
         println!("-.5:{} , +0.5:{}", a, b);
