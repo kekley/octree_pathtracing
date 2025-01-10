@@ -24,3 +24,5 @@ output.ppm
 
 callgrind.*
 *.mca
+*.ppm
+*debug*

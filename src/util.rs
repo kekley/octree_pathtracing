@@ -95,7 +95,7 @@ pub fn random_in_unit_disk(rng: &mut StdRng) -> Vec3 {
         }
     }
 }
-pub fn write_rgb8_color_as_text_to_stream(vec: &glam::Vec4, stream: &mut dyn std::io::Write) {
+pub fn write_rgb8_color_as_text_to_stream(vec: &glam::Vec3, stream: &mut dyn std::io::Write) {
     let r = linear_to_gamma(vec.x);
     let g = linear_to_gamma(vec.y);
     let b = linear_to_gamma(vec.z);
@@ -109,6 +109,19 @@ pub fn write_rgb8_color_as_text_to_stream(vec: &glam::Vec4, stream: &mut dyn std
     stream
         .write(format!("{} {} {}\n", r_byte, g_byte, b_byte).as_bytes())
         .expect("Unable to write to stream");
+}
+pub fn write_rgb8_color_to_stream(vec: &glam::Vec3, stream: &mut dyn std::io::Write) {
+    let r = linear_to_gamma(vec.x);
+    let g = linear_to_gamma(vec.y);
+    let b = linear_to_gamma(vec.z);
+
+    let intensity = Interval::new(0f32, 0.999f32);
+
+    let r_byte: u8 = (intensity.clamp(r) * 256f32) as u8;
+    let g_byte: u8 = (intensity.clamp(g) * 256f32) as u8;
+    let b_byte: u8 = (intensity.clamp(b) * 256f32) as u8;
+    let buf: [u8; 3] = [r_byte, g_byte, b_byte];
+    stream.write(&buf).unwrap();
 }
 
 pub fn near_zero(vec3: &Vec3) -> bool {

@@ -60,12 +60,13 @@ impl Camera {
         let mut origin = self.position;
         let mut new_dir =
             (distance_to_image_plane * self.direction + x * right + y * self.up).normalize();
+        //println!("new_dir: {}", new_dir);
 
         if self.aperture > 0.0 {
             let focal_point = origin + new_dir * self.focus_dist;
             let [x, y]: [f32; 2] = rng.sample(UnitDisc);
             origin += (x * right + y * self.up) * self.aperture;
-            new_dir = (focal_point - origin).normalize();
+            new_dir = (focal_point - origin);
         }
         //println!("new_dir: {:}", new_dir);
 
