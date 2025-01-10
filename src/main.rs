@@ -21,7 +21,7 @@ use rand::Rng;
 fn main() -> Result<(), anyhow::Error> {
     let start = Instant::now();
 
-    new_test();
+    test();
     let finish = Instant::now();
     let duration = finish - start;
 
@@ -274,14 +274,14 @@ fn blocks() -> Result<(), anyhow::Error> {
 
 fn test() -> Result<(), anyhow::Error> {
     let test = AABB {
-        min: Vec3::new(4.0, 0.0, 12.0),
-        max: Vec3::new(5.0, 1.0, 13.0),
+        min: Vec3::new(4.0, 4.0, 12.0),
+        max: Vec3::new(5.0, 5.0, 13.0),
     };
     let camera = Camera::look_at(
         Vec3::new(1.0, 1.0, 1.0),
         (test.max + test.min) * 0.5,
         Vec3::new(0.0, 1.0, 0.0),
-        5.0,
+        30.0,
     );
     let mut scene = Scene::new().branch_count(1).camera(camera).spp(1).build();
     let tex_image = RTWImage::load("./assets/greasy.jpg").unwrap();
@@ -307,11 +307,7 @@ fn test() -> Result<(), anyhow::Error> {
     scene.octree_palette = vec![Cuboid::new(test, 0)];
 
     let mut octree: Octree<u32> = Octree::new();
-    octree.set_leaf(UVec3::new(4, 0, 12), 0);
-    println!("zero:");
-    let a = octree.get_leaf(UVec3::new(0, 0, 0)).unwrap().clone();
-    println!("midpoint:");
-    let b = octree.get_leaf(UVec3::splat(8)).unwrap();
+    octree.set_leaf(UVec3::new(4, 4, 12), 0);
 
     scene.octree = octree;
     let a = TileRenderer::new((1000, 1000), 1, scene);

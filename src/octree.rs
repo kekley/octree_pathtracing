@@ -493,14 +493,3 @@ impl<T> Octree<T> {
         self.depth
     }
 }
-
-fn find_msb(value: u32) -> Option<i32> {
-    if value == 0 {
-        return None;
-    }
-    let mut msb: u32 = 31; // u32 has 32 bits
-    while (value & (1 << msb)) == 0 {
-        msb -= 1;
-    }
-    Some(msb as i32)
-}

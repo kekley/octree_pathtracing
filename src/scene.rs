@@ -83,7 +83,7 @@ impl Scene {
     pub fn hit(&self, ray: &mut Ray) -> bool {
         let mut hit = false;
         self.octree
-            .new_intersect(ray, 100.0, false, &self.cubes, &self.materials)
+            .intersect_octree(ray, 1000.0, false, &self.cubes, &self.materials)
     }
 
     pub fn get_current_branch_count(&self) -> u32 {
