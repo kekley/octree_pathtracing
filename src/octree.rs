@@ -12,7 +12,7 @@ pub struct LeafId {
     pub idx: u8,
 }
 
-pub trait Position: Copy + Clone + Debug + Sized + Send + Sync {
+pub trait Position: Copy + Clone + Debug + Sized {
     fn construct(x: u32, y: u32, z: u32) -> Self;
     fn idx(&self) -> u8;
     fn required_depth(&self) -> u8;

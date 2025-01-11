@@ -209,8 +209,8 @@ fn cube() {
 
 fn blocks() -> Result<(), anyhow::Error> {
     let camera = Camera::look_at(
-        Vec3::new(0.0, 30.0, 0.0),
-        Vec3::new(7.0, 28.0, 7.0),
+        Vec3::new(0.0, 40.0, 0.0),
+        Vec3::new(7.0, 0.0, 7.0),
         Vec3::new(0.0, 1.0, 0.0),
         70.0,
     );
@@ -229,30 +229,13 @@ fn blocks() -> Result<(), anyhow::Error> {
         albedo: tex,
     };
     let materials = vec![mat];
+    let world = World::new("./world");
     scene.materials = materials;
-
-    let world = World::new("./biggerworld");
-    let mut octree: Octree<u32> = Octree::new();
-
-    let f = |positon: UVec3| -> Option<u32> {
-        let block = world.get_block(WorldCoords {
-            x: positon.x.into(),
-            y: positon.y as i64 + 64,
-            z: positon.z.into(),
-        });
-        if block.is_some() {
-            if block.unwrap() == 0 {
-                return None;
-            }
-        }
-        block
-    };
-
-    octree.construct_octants_with(7, f);
-    println!("built octree!");
+    let octree: Octree<Octree<u32>> =
+        Octree::minecraft_world(WorldCoords { x: 0, y: 0, z: 0 }, world);
     scene.octree = octree;
 
-    let a: TileRenderer = TileRenderer::new((1000, 1000), 3, 8, scene);
+    let a: TileRenderer = TileRenderer::new((1000, 1000), 3, 12, scene);
     let start = Instant::now();
     a.render();
     let finish = Instant::now();

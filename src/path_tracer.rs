@@ -19,7 +19,7 @@ pub fn path_trace(scene: &Scene, ray: &mut Ray, first_reflection: bool) -> bool 
             hit = true;
             break;
         }
-
+        //println!("hit!");
         let current_material = ray.hit.current_material;
         let prev_material = ray.hit.previous_material;
 
@@ -88,7 +88,7 @@ pub fn path_trace(scene: &Scene, ray: &mut Ray, first_reflection: bool) -> bool 
             }
         }
 
-        ray.hit.color = cumm_color / count as f32;
+        //ray.hit.color = cumm_color / count as f32;
 
         break;
     }

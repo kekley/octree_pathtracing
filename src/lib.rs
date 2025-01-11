@@ -18,7 +18,9 @@ mod texture;
 mod tile_renderer;
 mod translation;
 mod util;
+mod world_svo;
 pub use {
-    aabb::*, bvh::*, camera::*, cuboid::*, hittable::*, interval::*, material::*, octree::*, path_tracer::*, ray::*, rtw_image::*, scene::*, sphere::*, texture::*,
-    tile_renderer::*, translation::*, util::*,
+    aabb::*, bvh::*, camera::*, cuboid::*, hittable::*, interval::*, material::*, octree::*,
+    path_tracer::*, ray::*, rtw_image::*, scene::*, sphere::*, texture::*, tile_renderer::*,
+    translation::*, util::*, world_svo::*,
 };
