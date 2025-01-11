@@ -3,10 +3,12 @@ use std::time::Instant;
 
 use anyhow::Ok;
 use glam::{UVec3, Vec3A as Vec3};
-use ray_tracing::{MaterialFlags, Octree, Position, RTWImage, Scene, Texture};
 use ray_tracing::Camera;
 use ray_tracing::Material;
 use ray_tracing::TileRenderer;
+use ray_tracing::{MaterialFlags, Octree, Position, RTWImage, Scene, Texture};
+use rayon::iter::IntoParallelIterator;
+use rayon::iter::ParallelIterator;
 use spider_eye::{World, WorldCoords};
 pub const ASPECT_RATIO: f32 = 1.5;
 
@@ -230,7 +232,8 @@ fn blocks() -> Result<(), anyhow::Error> {
     scene.materials = materials;
 
     let world = World::new("./biggerworld");
-    let mut octree: Octree<u32> = Octree::with_capacity(4000);
+    let mut octree: Octree<u32> = Octree::new();
+
     let f = |positon: UVec3| -> Option<u32> {
         let block = world.get_block(WorldCoords {
             x: positon.x.into(),
@@ -245,7 +248,7 @@ fn blocks() -> Result<(), anyhow::Error> {
         block
     };
 
-    octree.construct_octants_with(9, f);
+    octree.construct_octants_with(7, f);
     println!("built octree!");
     scene.octree = octree;
 
@@ -257,8 +260,4 @@ fn blocks() -> Result<(), anyhow::Error> {
 
     println!("time elapsed: {}", duration.as_millis());
     Ok(())
-}
-
-fn new_test() {
-    Octree::oct_test();
 }

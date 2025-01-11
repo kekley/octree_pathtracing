@@ -138,3 +138,17 @@ pub fn defocus_disk_sample(rng: &mut StdRng, center: Vec3, disc_u: Vec3, disc_v:
 pub fn sample_square(rng: &mut StdRng) -> Vec3 {
     Vec3::new(random_float(rng) - 0.5f32, random_float(rng) - 0.5f32, 0.0)
 }
+pub fn find_msb(mut x: i32) -> i32 {
+    let mut res = -1;
+    if x < 0 {
+        x = !x;
+    }
+    for i in 0..32 {
+        let mask = 0x80000000u32 as i32 >> i;
+        if x & mask != 0 {
+            res = 31 - i;
+            break;
+        }
+    }
+    res
+}

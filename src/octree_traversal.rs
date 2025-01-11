@@ -1,8 +1,12 @@
 #![allow(clippy::style)]
 
 use glam::{UVec3, Vec2, Vec3A};
-
-use crate::{axis::Axis, Cuboid, Face, HitRecord, Material, OctantId, Octree, Position, Ray, AABB};
+pub const OCTREE_MAX_STEPS: u32 = 1000;
+pub const OCTREE_MAX_SCALE: i32 = 23;
+pub const OCTREE_EPSILON: f32 = 0.00000011920929;
+use crate::{
+    axis::Axis, util, Cuboid, Face, HitRecord, Material, OctantId, Octree, Position, Ray, AABB,
+};
 impl Position for Vec3A {
     fn construct(x: u32, y: u32, z: u32) -> Self {
         Self::new(x as f32, y as f32, z as f32)
@@ -40,9 +44,6 @@ impl Position for Vec3A {
     }
 }
 
-const MAX_STEPS: u32 = 1000;
-const MAX_SCALE: i32 = 23;
-const THIS_EPSILON: f32 = 0.00000011920929;
 impl Octree<u32> {
     pub fn intersect_octree(
         &self,
@@ -53,8 +54,8 @@ impl Octree<u32> {
         materials: &Vec<Material>,
     ) -> bool {
         let octree_scale = f32::exp2(-(self.depth() as f32)); //scale factor for putting the size of the octree in the range[ 0-1]
-        let mut stack: [(OctantId, f32); MAX_SCALE as usize + 1] =
-            [(self.root.unwrap(), 2.0 - THIS_EPSILON); MAX_SCALE as usize + 1];
+        let mut stack: [(OctantId, f32); OCTREE_MAX_SCALE as usize + 1] =
+            [(self.root.unwrap(), 2.0 - OCTREE_EPSILON); OCTREE_MAX_SCALE as usize + 1];
         let mut ro = ray.origin * octree_scale;
         let mut rd = ray.direction;
         let max_dst = max_dst * octree_scale;
@@ -63,17 +64,17 @@ impl Octree<u32> {
 
         let mut parent_octant_idx = self.root.unwrap();
 
-        let mut scale: i32 = MAX_SCALE - 1;
+        let mut scale: i32 = OCTREE_MAX_SCALE - 1;
         let mut scale_exp2: f32 = 0.5f32; //exp2(scale-MAX_SCALE)
 
         let _last_leaf_value = u32::max_value();
         let adjacent_leaf_count = 0;
 
         let sign_mask: u32 = 1 << 31;
-        let epsilon_bits_without_sign: u32 = THIS_EPSILON.to_bits() & !sign_mask;
+        let epsilon_bits_without_sign: u32 = OCTREE_EPSILON.to_bits() & !sign_mask;
 
         Axis::iter().for_each(|&axis| {
-            if rd[axis as usize].abs() < THIS_EPSILON {
+            if rd[axis as usize].abs() < OCTREE_EPSILON {
                 rd[axis as usize] = f32::from_bits(
                     epsilon_bits_without_sign | rd[axis as usize].to_bits() & sign_mask,
                 );
@@ -118,7 +119,7 @@ impl Octree<u32> {
             }
         });
 
-        for i in 0..MAX_STEPS {
+        for i in 0..OCTREE_MAX_STEPS {
             if max_dst >= 0.0 && t_min > max_dst {
                 return false;
             }
@@ -277,11 +278,11 @@ impl Octree<u32> {
                 });
 
                 //find msb
-                scale = find_msb(differing_bits as i32);
+                scale = util::find_msb(differing_bits as i32);
                 //println!("{:b}", differing_bits);
-                scale_exp2 = f32::exp2((scale - MAX_SCALE) as f32);
+                scale_exp2 = f32::exp2((scale - OCTREE_MAX_SCALE) as f32);
 
-                if scale >= MAX_SCALE {
+                if scale >= OCTREE_MAX_SCALE {
                     return false;
                 }
                 (parent_octant_idx, t_max) = stack[scale as usize];
@@ -309,68 +310,4 @@ impl Octree<u32> {
         }
         return false;
     }
-    pub fn oct_test() {
-        let mut octree: Octree<u32> = Octree::new();
-        octree.set_leaf(UVec3::new(4, 1, 12), 0);
-        let start = Vec3A::ZERO + 1.0;
-        let end = Vec3A::new(4.0, 1.0, 12.0);
-
-        let dir1 = ((end - 0.1) - start).normalize();
-        let dir2 = ((end + 0.1) - start).normalize();
-        println!("dir1: {}, dir2: {}", dir1, dir2);
-
-        let mut ray = Ray {
-            origin: start,
-            direction: dir1,
-            inv_dir: 1.0 / dir1,
-            distance_travelled: 0.0,
-            hit: HitRecord::default(),
-        };
-
-        let mut ray2 = Ray {
-            origin: start,
-            direction: dir2,
-            inv_dir: 1.0 / dir2,
-            distance_travelled: 0.0,
-            hit: HitRecord::default(),
-        };
-
-        let materials = vec![Material::default()];
-        let palette = vec![Cuboid {
-            bbox: AABB::new(start, start + 1.0),
-            textures: [0u16; 6],
-        }];
-        let a = octree.intersect_octree(&mut ray, 100.0, false, &palette, &materials);
-        let b = octree.intersect_octree(&mut ray2, 100.0, false, &palette, &materials);
-        //let res = octree.new_intersect(&mut ray, 100.0, false, &palette, &materials);
-        //println!("{}", res);
-        println!("-.5:{} , +0.5:{}", a, b);
-    }
-}
-
-fn find_msb_old(value: u32) -> Option<i32> {
-    if value == 0 {
-        return None;
-    }
-    let mut msb: u32 = 31; // u32 has 32 bits
-    while (value & (1 << msb)) == 0 {
-        msb -= 1;
-    }
-    let a: u32 = 0b110000000000000000000;
-
-    Some(msb as i32)
-}
-fn find_msb(mut x: i32) -> i32 {
-    let mut res = -1;
-    if x < 0 {
-        x = !x;
-    }
-    for i in 0..32 {
-        let mask = 0x80000000u32 as i32 >> i;
-        if x & mask != 0 {
-            res = 31 - i;
-            break;
-        }
-    }
-    res
 }

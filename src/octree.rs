@@ -1,8 +1,8 @@
 use std::{fmt::Debug, hash::Hash, mem};
 
 use glam::UVec3;
-use rand_distr::num_traits::{Pow};
-
+use rand_distr::num_traits::Pow;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 pub type OctantId = u32;
 
@@ -12,7 +12,7 @@ pub struct LeafId {
     pub idx: u8,
 }
 
-pub trait Position: Copy + Clone + Debug + Sized {
+pub trait Position: Copy + Clone + Debug + Sized + Send + Sync {
     fn construct(x: u32, y: u32, z: u32) -> Self;
     fn idx(&self) -> u8;
     fn required_depth(&self) -> u8;
@@ -142,14 +142,14 @@ impl<T> Octant<T> {
 }
 
 #[derive(Debug)]
-pub struct Octree<T> {
+pub struct Octree<T: Sync + Send> {
     pub(super) root: Option<OctantId>,
     pub octants: Vec<Octant<T>>,
     free_list: Vec<OctantId>,
     depth: u8,
 }
 
-impl<T> Octree<T> {
+impl<T: Sync + Send> Octree<T> {
     pub fn new() -> Self {
         Self::new_in()
     }
@@ -159,7 +159,7 @@ impl<T> Octree<T> {
     }
 }
 
-impl<T: PartialEq> PartialEq for Octree<T> {
+impl<T: PartialEq + Send + Sync> PartialEq for Octree<T> {
     fn eq(&self, other: &Self) -> bool {
         self.root.eq(&other.root)
             && self.octants.eq(&other.octants)
@@ -168,7 +168,7 @@ impl<T: PartialEq> PartialEq for Octree<T> {
     }
 }
 
-impl<T> Octree<T> {
+impl<T: Sync + Send> Octree<T> {
     fn new_in() -> Self {
         Self::with_capacity_in(0)
     }
@@ -251,7 +251,7 @@ impl<T> Octree<T> {
 
         let mut new_parent = None;
 
-        for i in 0u8..8 {
+        (0u8..8).for_each(|i| {
             let child_pos = P::construct(
                 pos.x() + size * ((i as u32) & 1),
                 pos.y() + size * ((i as u32 >> 1) & 1),
@@ -261,7 +261,7 @@ impl<T> Octree<T> {
             if size > 1 {
                 let child_id = self.construct_octants_with_impl(size, child_pos, f);
                 let Some(child_id) = child_id else {
-                    continue;
+                    return;
                 };
 
                 let parent_id = new_parent.get_or_insert_with(|| self.new_octant(None));
@@ -270,14 +270,14 @@ impl<T> Octree<T> {
                 let child = &mut self.octants[child_id as usize];
                 child.parent = Some(*parent_id);
 
-                continue;
+                return;
             }
 
             if let Some(value) = f(child_pos) {
                 let parent_id = new_parent.get_or_insert_with(|| self.new_octant(None));
                 self.octants[*parent_id as usize].set_child(i, Child::Leaf(value));
             }
-        }
+        });
 
         new_parent
     }
@@ -383,7 +383,7 @@ impl<T> Octree<T> {
         }
         let diff = to - self.depth;
         if diff > 0 {
-            todo!()
+            self.expand(diff);
         }
     }
 
