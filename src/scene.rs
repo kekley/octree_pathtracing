@@ -1,20 +1,140 @@
-use crate::{
-    axis::Axis,
-    find_msb,
-    octree_traversal::{OCTREE_EPSILON, OCTREE_MAX_SCALE, OCTREE_MAX_STEPS},
-    path_trace, BVHTree, Camera, Cuboid, Face, Material, OctantId, Octree, Ray, Sphere,
+use std::{
+    f32::{consts::PI, EPSILON, NEG_INFINITY},
+    sync::Arc,
 };
 
-use glam::{UVec3, Vec2, Vec3A, Vec4, Vec4Swizzles};
-use rand::rngs::StdRng;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EmitterSamplingStrategy {
+    None {
+        name: &'static str,
+        description: &'static str,
+    },
+    One {
+        name: &'static str,
+        description: &'static str,
+    },
+    OneBlock {
+        name: &'static str,
+        description: &'static str,
+    },
+    All {
+        name: &'static str,
+        description: &'static str,
+    },
+}
+
+impl EmitterSamplingStrategy {
+    pub fn get_description(&self) -> &str {
+        match self {
+            EmitterSamplingStrategy::None { description, .. } => description,
+            EmitterSamplingStrategy::One { description, .. } => description,
+            EmitterSamplingStrategy::OneBlock { description, .. } => description,
+            EmitterSamplingStrategy::All { description, .. } => description,
+        }
+    }
+    pub const NONE: EmitterSamplingStrategy = EmitterSamplingStrategy::None {
+        name: "None",
+        description: "No emitter sampling.",
+    };
+
+    pub const ONE: EmitterSamplingStrategy = EmitterSamplingStrategy::One {
+        name: "One",
+        description: "Sample a single face.",
+    };
+
+    pub const ONE_BLOCK: EmitterSamplingStrategy = EmitterSamplingStrategy::OneBlock {
+        name: "One Block",
+        description: "Sample all the faces on a single emitter block.",
+    };
+
+    pub const ALL: EmitterSamplingStrategy = EmitterSamplingStrategy::All {
+        name: "All",
+        description: "Sample all faces on all emitter blocks.",
+    };
+}
+
+#[derive(Debug, Clone)]
+pub struct SunSamplingStrategy {
+    name: &'static str,
+    description: &'static str,
+    pub sun_sampling: bool,
+    pub diffuse_sun: bool,
+    pub strict_direct_light: bool,
+    pub sun_luminosity: bool,
+    pub importance_sampling: bool,
+}
+
+impl SunSamplingStrategy {
+    pub const OFF: SunSamplingStrategy = SunSamplingStrategy {
+        name: "Off",
+        description: "Sun is not sampled with next event estimation.",
+        sun_sampling: false,
+        diffuse_sun: true,
+        strict_direct_light: false,
+        sun_luminosity: true,
+        importance_sampling: false,
+    };
+
+    pub const NON_LUMINOUS: SunSamplingStrategy = SunSamplingStrategy {
+        name: "Non-Luminous",
+        description:
+            "Sun is drawn on the skybox but it does not contribute to the lighting of the scene.",
+        sun_sampling: false,
+        diffuse_sun: false,
+        strict_direct_light: false,
+        sun_luminosity: false,
+        importance_sampling: false,
+    };
+
+    pub const FAST: SunSamplingStrategy = SunSamplingStrategy {
+    name: "Fast",
+    description: "Fast sun sampling algorithm. Lower noise but does not correctly model some visual effects.",
+    sun_sampling: true,
+    diffuse_sun: false,
+    strict_direct_light: false,
+    sun_luminosity: false,
+    importance_sampling: false,
+};
+
+    pub const IMPORTANCE: SunSamplingStrategy = SunSamplingStrategy {
+    name: "Importance",
+    description: "Sun is sampled on a certain percentage of diffuse reflections. Correctly models visual effects while reducing noise for direct and diffuse illumination.",
+    sun_sampling: false,
+    diffuse_sun: true,
+    strict_direct_light: false,
+    sun_luminosity: true,
+    importance_sampling: true,
+};
+
+    pub const HIGH_QUALITY: SunSamplingStrategy = SunSamplingStrategy {
+    name: "High Quality",
+    description: "High quality sun sampling. More noise but correctly models visual effects such as caustics.",
+    sun_sampling: true,
+    diffuse_sun: true,
+    strict_direct_light: true,
+    sun_luminosity: true,
+    importance_sampling: false,
+};
+}
+
+use crate::{
+    axis::Axis, path_trace, random_float, BVHTree, Camera, Cuboid, Face, Material, OctantId,
+    Octree, Ray, Sphere, Texture, AABB,
+};
+
+use fastrand::Rng;
+use glam::{UVec3, Vec2, Vec3, Vec3A, Vec3Swizzles, Vec4, Vec4Swizzles};
+#[derive(Debug, Clone)]
 pub struct Scene {
-    spheres: Vec<Sphere>,
-    cubes: Vec<Cuboid>,
-    bvhs: Vec<BVHTree>,
-    pub octree: Octree<Octree<u32>>,
-    pub octree_palette: Vec<Cuboid>,
-    pub materials: Vec<Material>,
-    pub spp: u32,
+    pub sun: Sun,
+    pub sun_sampling_strategy: SunSamplingStrategy,
+    pub emitters_enabled: bool,
+    pub emmitter_intensity: f32,
+    pub emitter_sampling_strategy: EmitterSamplingStrategy,
+    pub f_sub_surface: f32,
+    pub octree: Arc<Octree<u32>>,
+    pub materials: Arc<Vec<Material>>,
+    pub target_spp: u32,
     pub branch_count: u32,
     pub camera: Camera,
 }
@@ -28,15 +148,26 @@ pub struct SceneBuilder {
 impl SceneBuilder {
     pub fn build(self) -> Scene {
         Scene {
-            spheres: Vec::new(),
-            cubes: Vec::new(),
-            bvhs: Vec::new(),
-            materials: Vec::new(),
-            spp: self.spp.unwrap_or(1),
+            sun: Sun::new(
+                PI / 2.5,
+                PI / 3.0,
+                0.03,
+                Vec4::splat(1.0),
+                crate::Texture::Color(Vec4::splat(1.0)),
+                true,
+                false,
+                Vec3A::splat(1.0),
+            ),
+            materials: Arc::new(Vec::new()),
             branch_count: self.branch_count.unwrap_or(1),
-            camera: self.camera.unwrap_or(Camera::default()),
-            octree: Octree::new(),
-            octree_palette: Vec::new(),
+            camera: self.camera.unwrap(),
+            octree: Arc::new(Octree::new()),
+            sun_sampling_strategy: SunSamplingStrategy::IMPORTANCE,
+            emitter_sampling_strategy: EmitterSamplingStrategy::NONE,
+            emitters_enabled: false,
+            emmitter_intensity: 13.0,
+            f_sub_surface: 0.3,
+            target_spp: self.spp.unwrap_or(1),
         }
     }
 
@@ -72,53 +203,256 @@ impl Scene {
     }
     pub const SKY_COLOR: Vec4 = Vec4::new(0.5, 0.7, 1.0, 1.0);
 
-    pub fn add_sphere(&mut self, sphere: Sphere) {
-        self.spheres.push(sphere);
-    }
-
-    pub fn add_cube(&mut self, cube: Cuboid) {
-        self.cubes.push(cube);
-    }
-
-    pub fn add_bvh(&mut self, bvh: BVHTree) {
-        self.bvhs.push(bvh);
-    }
-
     pub fn hit(&self, ray: &mut Ray) -> bool {
-        let hit = false;
-        let scale = 2.0f32.powi(-(5 as i32));
-        let mut scaled_ray = ray.clone();
-        scaled_ray.origin *= scale;
-        let max_dst = 500.0 * scale;
-        let hit = self.octree.intersect_octree(
-            &mut scaled_ray,
-            max_dst,
-            false,
-            &self.cubes,
-            &self.materials,
-        );
+        let mut hit = false;
+
+        if ray.direction.x == 0.0 && ray.direction.y == 0.0 && ray.direction.z == 0.0
+            || ray.direction.is_nan()
+        {
+            println!("invalid ray direction");
+            println!("ray dir: {}", ray.direction);
+            ray.direction = Vec3A::Y;
+        }
+
+        let max_dst = 1024.0;
+
+        let intersection = self.octree.intersect_octree(ray, max_dst);
+        hit = intersection.is_some();
         if hit {
-            ray.hit = scaled_ray.hit;
+            let intersection = intersection.unwrap();
+
+            let block_type = *intersection.0;
+            let voxel_pos = intersection.1;
+            let a = AABB::from_points(voxel_pos, voxel_pos + 1.0);
+            let hit = a.intersect(ray);
+            let mat = &self.materials[block_type as usize];
+            Cuboid::intersect_texture(ray, mat);
             return true;
         }
-        false
+
+        return false;
     }
 
-    pub fn get_current_branch_count(&self) -> u32 {
-        if self.spp < self.branch_count {
-            if self.spp as f32 <= (self.branch_count as f32).sqrt() {
+    pub fn get_current_branch_count(&self, current_spp: u32) -> u32 {
+        if current_spp < self.branch_count {
+            if current_spp as f32 <= (self.branch_count as f32).sqrt() {
                 return 1;
             } else {
-                return self.branch_count - self.spp;
+                return self.branch_count - current_spp;
             }
         } else {
             return self.branch_count;
         }
     }
 
-    pub fn get_pixel_color(&self, x: f32, y: f32, rng: &mut StdRng) -> glam::Vec3 {
+    pub fn get_pixel_color(&self, x: u32, y: u32, rng: &mut Rng, current_spp: u32) -> Vec3 {
         let mut ray = self.camera.get_ray(rng, x, y);
-        path_trace(&self, &mut ray, true);
+        let mut attenuation = Vec4::ZERO;
+        path_trace(rng, &self, &mut ray, true, &mut attenuation, current_spp);
         ray.hit.color.xyz()
+    }
+
+    pub fn get_sky_color(&self, ray: &mut Ray, draw_sun: bool) {
+        self.get_sky_color_inner(ray);
+        if draw_sun {
+            self.sun.intersect(ray);
+        }
+        ray.hit.color.w = 1.0;
+    }
+
+    pub fn get_sky_color_diffuse_sun(&self, ray: &mut Ray, diffuse_sun: bool) {
+        self.get_sky_color_inner(ray);
+        if diffuse_sun {
+            self.add_sun_color_diffuse_sun(ray);
+        }
+        ray.hit.color.w = 1.0
+    }
+
+    pub fn get_sky_color_inner(&self, ray: &mut Ray) {
+        ray.hit.color = Scene::SKY_COLOR;
+    }
+
+    pub fn add_sun_color(&self, ray: &mut Ray) {
+        let r = ray.hit.color.x;
+        let g = ray.hit.color.y;
+        let b = ray.hit.color.z;
+        if self.sun.intersect(ray) {
+            ray.hit.color.x = ray.hit.color.x + r;
+            ray.hit.color.y = ray.hit.color.y + g;
+            ray.hit.color.z = ray.hit.color.z + b;
+        }
+    }
+
+    pub fn add_sun_color_diffuse_sun(&self, ray: &mut Ray) {
+        let r = ray.hit.color.x;
+        let g = ray.hit.color.y;
+        let b = ray.hit.color.z;
+        if self.sun.intersect_diffuse(ray) {
+            let mult = self.sun.luminosity;
+            ray.hit.color.x = ray.hit.color.x * mult + r;
+            ray.hit.color.y = ray.hit.color.y * mult + g;
+            ray.hit.color.z = ray.hit.color.z * mult + b;
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Sun {
+    pub luminosity: f32,
+    pub luminosity_pdf: f32,
+    pub importance_sample_chance: f32,
+    pub importance_sample_radius: f32,
+    draw_texture: bool,
+    texture_modification: bool,
+    apparent_texture_brightness: Vec3A,
+    texture: Texture,
+    color: Vec4,
+    sw: Vec3A,
+    pub radius: f32,
+    pub azimuth: f32,
+    pub altitude: f32,
+    pub su: Vec3A,
+    sv: Vec3A,
+    radius_cos: f32,
+    radius_sin: f32,
+    pub emmittance: Vec4,
+}
+
+impl Sun {
+    pub const MAX_IMPORTANCE_SAMPLE_CHANCE: f32 = 0.9;
+    pub const MIN_IMPORTANCE_SAMPLE_CHANCE: f32 = 0.001;
+    pub const MAX_IMPORTANCE_SAMPLE_RADIUS: f32 = 5.0;
+    pub const MIN_IMPORTANCE_SAMPLE_RADIUS: f32 = 0.1;
+    const AMBIENT: f32 = 0.3;
+    const INTENSITY: f32 = 1.25;
+    const GAMMA: f32 = 2.2;
+    pub fn new(
+        azimuth: f32,
+        altitude: f32,
+        radius: f32,
+        color: Vec4,
+        texture: Texture,
+        draw_texture: bool,
+        texture_modification: bool,
+        apparent_color: Vec3A,
+    ) -> Self {
+        let radius_cos = radius.cos();
+        let radius_sin = radius.sin();
+
+        let theta = azimuth;
+        let phi = altitude;
+
+        let r = phi.cos().abs();
+
+        let sw = Vec3A::new(theta.cos() * r, phi.sin(), theta.sin() * r);
+
+        let mut su = if sw.x.abs() > 0.1 {
+            Vec3A::new(0.0, 1.0, 0.0)
+        } else {
+            Vec3A::new(1.0, 0.0, 0.0)
+        };
+
+        let mut sv = sw.cross(su);
+        sv = sv.normalize();
+        su = sv.cross(sw);
+
+        let mut emittance = color;
+        emittance *= Sun::INTENSITY.powf(Sun::GAMMA);
+
+        let mut apparent_texture_brightness = if texture_modification {
+            apparent_color
+        } else {
+            Vec3A::splat(1.0)
+        };
+
+        apparent_texture_brightness *= Sun::INTENSITY.powf(Sun::GAMMA);
+
+        let sun = Sun {
+            draw_texture,
+            texture,
+            color,
+            sw,
+            radius,
+            azimuth,
+            altitude,
+            su,
+            sv,
+            emmittance: emittance,
+            radius_cos,
+            radius_sin,
+            luminosity: 100.0,
+            luminosity_pdf: 1.0 / 100.0,
+            importance_sample_chance: 0.1,
+            importance_sample_radius: 1.2,
+            texture_modification,
+            apparent_texture_brightness: apparent_texture_brightness,
+        };
+
+        sun
+    }
+    pub fn intersect(&self, ray: &mut Ray) -> bool {
+        if !self.draw_texture || ray.direction.dot(self.sw) < 0.5 {
+            return false;
+        }
+
+        let width = self.radius * 4.0;
+        let width2 = width * 2.0;
+        let a = PI / 2.0 - ray.direction.dot(self.su).acos() + width;
+        if a >= 0.0 && a < width2 {
+            let b = PI / 2.0 - ray.direction.dot(self.sv) + width;
+            if b >= 0.0 && b < width2 {
+                ray.hit.color = self.texture.value(a / width2, b / width2, &Vec3A::ZERO);
+                ray.hit.color.x *= self.apparent_texture_brightness.x * 10.0;
+                ray.hit.color.y *= self.apparent_texture_brightness.z * 10.0;
+                ray.hit.color.y *= self.apparent_texture_brightness.z * 10.0;
+                return true;
+            }
+        }
+
+        return false;
+    }
+    pub fn intersect_diffuse(&self, ray: &mut Ray) -> bool {
+        if ray.direction.dot(self.sw) < 0.5 {
+            return false;
+        }
+        let width = self.radius * 4.0;
+        let width2 = width * 2.0;
+
+        let a = PI / 2.0 - ray.direction.dot(self.su).acos() + width;
+        if a >= 0.0 && a < width2 {
+            let b = PI / 2.0 - ray.direction.dot(self.sv).acos() + width;
+            if b >= 0.0 && b < width2 {
+                let color = self.texture.value(a / width2, b / width2, &Vec3A::ZERO);
+                ray.hit.color = color * self.color * 10.0;
+                return true;
+            }
+        }
+        return false;
+    }
+    pub fn get_random_sun_direction(&self, reflected: &mut Ray, rng: &mut Rng) {
+        let x1 = random_float(rng);
+        let x2 = random_float(rng);
+        let cos_a = 1.0 - x1 + x1 * self.radius_cos;
+        let sin_a = (1.0 - cos_a * cos_a).sqrt();
+        let phi = 2.0 * PI * x2;
+
+        let mut u = self.su.clone();
+        let mut v = self.sv.clone();
+        let mut w = self.sw.clone();
+
+        u *= phi.cos() * sin_a;
+        v *= phi.sin() * sin_a;
+        w *= cos_a;
+
+        reflected.direction = u + v;
+        reflected.direction += w;
+        reflected.direction = reflected.direction.normalize();
+    }
+
+    pub fn flat_shading(&self, ray: &mut Ray) {
+        let n = ray.hit.normal;
+        let mut shading = n.x * self.sw.x + n.y * self.sw.y + n.z * self.sw.z;
+        shading = Sun::AMBIENT.max(shading);
+        ray.hit.color *= self.emmittance * shading;
     }
 }

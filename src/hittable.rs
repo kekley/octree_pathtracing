@@ -1,10 +1,8 @@
 use std::f32::INFINITY;
 
 pub type HittableIdx = u32;
-use crate::{
-    aabb::AABB, bvh::BVHTree, cuboid::Cuboid, ray::Ray, sphere::Sphere,
-};
-use glam::{Vec3A as Vec3, Vec4};
+use crate::{aabb::AABB, bvh::BVHTree, cuboid::Cuboid, ray::Ray, sphere::Sphere};
+use glam::{Vec3A, Vec4};
 
 #[derive(Debug, Clone)]
 pub struct HittableBVH {
@@ -56,8 +54,8 @@ pub struct HitRecord<T> {
     pub u: f32,
     pub v: f32,
     pub current_material: T,
-    pub outward_normal: Vec3,
-    //    pub geom_normal: Vec3,
+    pub normal: Vec3A,
+    //    pub geom_normal: Vec3A,
     pub previous_material: T,
     pub color: Vec4,
     pub depth: u32,
@@ -71,13 +69,13 @@ impl<T: Default> Default for HitRecord<T> {
             u: 0.0,
             v: 0.0,
             current_material: Default::default(),
-            outward_normal: Vec3::ZERO,
-            //     geom_normal: Vec3::ZERO,
+            normal: Vec3A::ZERO,
+            //     geom_normal: Vec3A::ZERO,
             previous_material: Default::default(),
             t_next: INFINITY,
             color: Vec4::ZERO,
             depth: 0,
-            specular: false,
+            specular: true,
         }
     }
 }

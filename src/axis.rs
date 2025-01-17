@@ -1,13 +1,14 @@
-use glam::Vec3A as Vec3;
+use glam::Vec3A;
 
-pub const LEFT: Vec3 = Vec3::new(-1.0, 0.0, 0.0);
-pub const RIGHT: Vec3 = Vec3::new(1.0, 0.0, 0.0);
-pub const UP: Vec3 = Vec3::new(0.0, 1.0, 0.0);
-pub const DOWN: Vec3 = Vec3::new(0.0, -1.0, 0.0);
-pub const FORWARD: Vec3 = Vec3::new(0.0, 0.0, 1.0);
-pub const BACK: Vec3 = Vec3::new(0.0, 0.0, -1.0);
+pub const LEFT: Vec3A = Vec3A::new(-1.0, 0.0, 0.0);
+pub const RIGHT: Vec3A = Vec3A::new(1.0, 0.0, 0.0);
+pub const UP: Vec3A = Vec3A::new(0.0, 1.0, 0.0);
+pub const DOWN: Vec3A = Vec3A::new(0.0, -1.0, 0.0);
+pub const FORWARD: Vec3A = Vec3A::new(0.0, 0.0, 1.0);
+pub const BACK: Vec3A = Vec3A::new(0.0, 0.0, -1.0);
 
 #[derive(Debug, Clone, Copy)]
+
 pub enum Axis {
     X = 0,
     Y = 1,
@@ -51,7 +52,7 @@ pub trait AxisOps {
     fn get_axis(&self, axis: Axis) -> f32;
 }
 
-impl AxisOps for Vec3 {
+impl AxisOps for Vec3A {
     #[inline]
     fn get_axis(&self, axis: Axis) -> f32 {
         match axis {

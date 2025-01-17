@@ -1,4 +1,3 @@
-
 use stb_image::image::load;
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -43,6 +42,7 @@ impl RTWImage {
             image_height: 0,
             bytes_per_scanline: 0,
         };
+        //println!("{}", file_path);
         let load_result = load(file_path);
         match load_result {
             stb_image::image::LoadResult::Error(e) => {

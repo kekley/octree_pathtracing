@@ -6,34 +6,34 @@ use crate::{
     interval::Interval,
     ray::Ray,
 };
-use glam::{Vec3A as Vec3, Vec3Swizzles};
+use glam::{Vec3A, Vec3Swizzles};
 #[derive(Debug, Clone, Copy)]
 pub struct AABB {
-    pub min: Vec3,
-    pub max: Vec3,
+    pub min: Vec3A,
+    pub max: Vec3A,
 }
 
 impl Default for AABB {
     fn default() -> Self {
         AABB {
-            min: Vec3::ZERO,
-            max: Vec3::ZERO,
+            min: Vec3A::ZERO,
+            max: Vec3A::ZERO,
         }
     }
 }
 
 impl AABB {
     pub const EMPTY: AABB = AABB::new(
-        Vec3::new(INFINITY, INFINITY, INFINITY),
-        Vec3::new(NEG_INFINITY, NEG_INFINITY, NEG_INFINITY),
+        Vec3A::new(INFINITY, INFINITY, INFINITY),
+        Vec3A::new(NEG_INFINITY, NEG_INFINITY, NEG_INFINITY),
     );
     pub const UNIVERSE: AABB = AABB::new(
-        Vec3::new(NEG_INFINITY, NEG_INFINITY, NEG_INFINITY),
-        Vec3::new(INFINITY, INFINITY, INFINITY),
+        Vec3A::new(NEG_INFINITY, NEG_INFINITY, NEG_INFINITY),
+        Vec3A::new(INFINITY, INFINITY, INFINITY),
     );
 
     #[inline]
-    pub const fn new(min: Vec3, max: Vec3) -> Self {
+    pub const fn new(min: Vec3A, max: Vec3A) -> Self {
         Self { min, max }
     }
 
@@ -63,12 +63,12 @@ impl AABB {
     #[inline]
     pub fn from_aabb(a: &AABB, b: &AABB) -> Self {
         AABB {
-            min: Vec3::new(
+            min: Vec3A::new(
                 a.min.x.min(b.min.x),
                 a.min.y.min(b.min.y),
                 a.min.z.min(b.min.z),
             ),
-            max: Vec3::new(
+            max: Vec3A::new(
                 a.max.x.max(b.max.x),
                 a.max.y.max(b.max.y),
                 a.max.z.max(b.max.z),
@@ -77,15 +77,15 @@ impl AABB {
     }
 
     #[inline]
-    pub fn from_points(a: Vec3, b: Vec3) -> Self {
+    pub fn from_points(a: Vec3A, b: Vec3A) -> Self {
         AABB {
-            min: Vec3::new(a.x.min(b.x), a.y.min(b.y), a.z.min(b.z)),
-            max: Vec3::new(a.x.max(b.x), a.y.max(b.y), a.z.max(b.z)),
+            min: Vec3A::new(a.x.min(b.x), a.y.min(b.y), a.z.min(b.z)),
+            max: Vec3A::new(a.x.max(b.x), a.y.max(b.y), a.z.max(b.z)),
         }
     }
 
     #[inline]
-    pub fn extent(&self) -> Vec3 {
+    pub fn extent(&self) -> Vec3A {
         self.max - self.min
     }
 
@@ -108,8 +108,8 @@ impl AABB {
         let mut hit = false;
 
         let a = AABB {
-            min: Vec3::ZERO,
-            max: Vec3::ONE,
+            min: Vec3A::ZERO,
+            max: Vec3A::ONE,
         };
         ray.hit.t_next = ray.hit.t;
 
@@ -122,7 +122,7 @@ impl AABB {
                 ray.hit.t_next = t;
                 ray.hit.u = u;
                 ray.hit.v = v;
-                ray.hit.outward_normal = Vec3::new(-1.0, 0.0, 0.0);
+                ray.hit.normal = Vec3A::new(-1.0, 0.0, 0.0);
             }
         }
 
@@ -135,7 +135,7 @@ impl AABB {
                 ray.hit.t_next = t;
                 ray.hit.u = 1.0 - u;
                 ray.hit.v = v;
-                ray.hit.outward_normal = Vec3::new(1.0, 0.0, 0.0);
+                ray.hit.normal = Vec3A::new(1.0, 0.0, 0.0);
             }
         }
 
@@ -148,7 +148,7 @@ impl AABB {
                 ray.hit.t_next = t;
                 ray.hit.u = u;
                 ray.hit.v = v;
-                ray.hit.outward_normal = Vec3::new(0.0, -1.0, 0.0);
+                ray.hit.normal = Vec3A::new(0.0, -1.0, 0.0);
             }
         }
 
@@ -161,7 +161,7 @@ impl AABB {
                 ray.hit.t_next = t;
                 ray.hit.u = u;
                 ray.hit.v = v;
-                ray.hit.outward_normal = Vec3::new(0.0, 1.0, 0.0);
+                ray.hit.normal = Vec3A::new(0.0, 1.0, 0.0);
             }
         }
 
@@ -174,7 +174,7 @@ impl AABB {
                 ray.hit.t_next = t;
                 ray.hit.u = 1.0 - u;
                 ray.hit.v = v;
-                ray.hit.outward_normal = Vec3::new(0.0, 0.0, -1.0);
+                ray.hit.normal = Vec3A::new(0.0, 0.0, -1.0);
             }
         }
 
@@ -187,7 +187,7 @@ impl AABB {
                 ray.hit.t_next = t;
                 ray.hit.u = u;
                 ray.hit.v = v;
-                ray.hit.outward_normal = Vec3::new(0.0, 0.0, 1.0);
+                ray.hit.normal = Vec3A::new(0.0, 0.0, 1.0);
             }
         }
         if hit {
@@ -199,7 +199,7 @@ impl AABB {
         hit
     }
 
-    pub fn intersects(&self, ray: &mut Ray) -> bool {
+    pub fn intersects(&self, ray: &Ray) -> bool {
         let mut t_min = -INFINITY;
         let mut t_max = INFINITY;
         for &axis in Axis::iter() {
@@ -232,7 +232,7 @@ impl AABB {
         let box_min = self.min;
         let box_max = self.max;
         let ray_origin = ray.origin;
-        let ray_inv_dir = ray.inv_dir;
+        let ray_inv_dir = 1.0 / ray.direction;
         let t_bot = (box_min - ray_origin) * ray_inv_dir;
         let t_top = (box_max - ray_origin) * ray_inv_dir;
 

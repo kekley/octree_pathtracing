@@ -1,10 +1,13 @@
 extern crate ray_tracing;
+use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::Ok;
-use glam::{UVec3, Vec3A as Vec3};
+use dashmap::DashMap;
+use glam::{UVec3, Vec3A};
 use ray_tracing::Camera;
 use ray_tracing::Material;
+use ray_tracing::OctreeChunkPos;
 use ray_tracing::TileRenderer;
 use ray_tracing::{MaterialFlags, Octree, Position, RTWImage, Scene, Texture};
 use rayon::iter::IntoParallelIterator;
@@ -14,230 +17,94 @@ pub const ASPECT_RATIO: f32 = 1.5;
 
 fn main() -> Result<(), anyhow::Error> {
     blocks()?;
-
+    //face_id_test();
     Ok(())
 }
-/*
-fn checkered_spheres() {
-    let mut world = HitList::new();
-
-    let texture_black = Texture::Color(Vec3::splat(0.6));
-    let texture_white = Texture::Color(Vec3::splat(1.0));
-    let checker_texture = Texture::CheckerBoard {
-        inv_scale: 1.0 / 0.32,
-        a: Box::new(texture_black),
-        b: Box::new(texture_white),
-    };
-
-    let ground_material = Material::Lambertian {
-        texture: &checker_texture,
-    };
-    let earth_texture = Texture::Image(RTWImage::load("./assets/greasy.png"));
-
-    let earth_surface = Material::Lambertian {
-        texture: &earth_texture,
-    };
-
-    world.add(Hittable::Sphere(Sphere::new(
-        Vec3::new(0.0, -1000.0, 0.0),
-        1000.0,
-        &ground_material,
-    )));
-
-    let mut materials = Vec::new();
-    let mut rng = Rng::new();
-    (-11..11).for_each(|a| {
-        for b in (-11..11) {
-            let choose_mat = random_float(&mut rng);
-            let center = Vec3::new(
-                a as f32 + 0.9 * random_float(&mut rng),
-                0.2,
-                b as f32 + 0.9 * random_float(&mut rng),
-            );
-            if (center - Vec3::new(4.0, 0.2, 0.0)).length() > 0.9 {
-                let sphere_material: Material;
-                match choose_mat {
-                    //diffuse
-                    _mat if choose_mat < 0.8 => {
-                        let albedo = random_vec(&mut rng);
-                        sphere_material = Material::Lambertian {
-                            texture: Box::leak(Box::new(Texture::Color(albedo))),
-                        };
-                    }
-                    _mat if choose_mat < 0.95 => {
-                        let fuzz = random_float_in_range(&mut rng, 0.0, 0.5);
-                        sphere_material = Material::Metal {
-                            texture: &earth_texture,
-                            fuzz: fuzz,
-                        };
-                    }
-                    _ => {
-                        sphere_material = Material::Dielectric {
-                            refraction_index: 1.5,
-                        };
-                    }
-                }
-                materials.push((sphere_material.clone(), center));
-            }
-        }
-    });
-
-    materials.iter().for_each(|sphere_data| {
-        world.add(Hittable::Sphere(Sphere::new(
-            sphere_data.1,
-            0.2,
-            &sphere_data.0,
-        )));
-    });
-
-    let material1 = Material::Dielectric {
-        refraction_index: 1.5,
-    };
-    world.add(Hittable::Sphere(Sphere::new(
-        Vec3::new(0.0, 1.0, 0.0),
-        1.0,
-        &material1,
-    )));
-
-    let yellow_tex = Texture::Color(Vec3::new(0.4, 0.2, 0.1));
-
-    let material2 = Material::Lambertian {
-        texture: &yellow_tex,
-    };
-
-    world.add(Hittable::Sphere(Sphere::new(
-        Vec3::new(-4.0, 1.0, 0.0),
-        1.0,
-        &earth_surface,
-    )));
-
-    let gray = Vec3::new(0.7, 0.6, 0.5);
-
-    let material3 = Material::Metal {
-        texture: &checker_texture,
-        fuzz: 0.1,
-    };
-    world.add(Hittable::Sphere(Sphere::new(
-        Vec3::new(4.0, 1.0, 0.0),
-        1.0,
-        &material3,
-    )));
-
-    let bvh_world = BVHTree::from_hit_list(&world);
-
-    let mut camera = Camera::new();
-    camera.aspect_ratio = ASPECT_RATIO;
-    camera.image_width = 1000;
-    camera.samples_per_pixel = 200;
-    camera.max_depth = 50;
-    camera.v_fov = 20.0;
-    camera.look_from = Vec3::new(13.0, 2.0, 3.0);
-    camera.look_at = Vec3::new(0.0, 0.0, 0.0);
-    camera.v_up = Vec3::new(0.0, 1.0, 0.0);
-    camera.defocus_angle = 0.1;
-    camera.focus_dist = 10.0;
-
-    let buf = camera.multi_threaded_render(&Hittable::BVH(bvh_world));
-
-    //file to write to
-    let mut file = File::create("./output.ppm").unwrap();
-
-    file.write(&buf[..]).unwrap();
-}
-
-fn earth() {
-    let earth_texture = Texture::Image(RTWImage::load("./assets/earthmap.jpg"));
-
-    let earth_surface = Material::Lambertian {
-        texture: &earth_texture,
-    };
-
-    let globe = Hittable::Sphere(Sphere::new(Vec3::splat(0.0), 2.0, &earth_surface));
-
-    let mut camera = Camera::new();
-
-    camera.aspect_ratio = 16.0 / 9.0;
-    camera.image_width = 1200;
-    camera.samples_per_pixel = 500;
-    camera.max_depth = 50;
-    camera.v_fov = 20.0;
-    camera.look_from = Vec3::new(0.0, 0.0, 12.0);
-    camera.look_at = Vec3::splat(0.0);
-    camera.v_up = Vec3::new(0.0, 1.0, 0.0);
-
-    camera.defocus_angle = 0.0;
-
-    let buf = camera.multi_threaded_render(&globe);
-
-    //file to write to
-    let mut file = File::create("./output.ppm").unwrap();
-
-    file.write(&buf[..]).unwrap();
-}
-
-fn cube() {
-    let greasy_texture = Texture::Image(RTWImage::load("./assets/greasy.jpg"));
-
-    let cube_surface = Material::Lambertian {
-        texture: &greasy_texture,
-    };
-
-    let bounds = AABB::from_points(Vec3::splat(-1.0), Vec3::splat(1.0));
-    let cube = Hittable::Box(Cuboid::new(bounds, &cube_surface));
-
-    let mut camera = Camera::new();
-
-    camera.aspect_ratio = 16.0 / 9.0;
-    camera.image_width = 1200;
-    camera.samples_per_pixel = 500;
-    camera.max_depth = 50;
-    camera.v_fov = 20.0;
-    camera.look_from = Vec3::new(-10.0, 10.0, 10.0);
-    camera.look_at = Vec3::splat(0.0);
-    camera.v_up = Vec3::new(0.0, 1.0, 0.0);
-
-    camera.defocus_angle = 0.0;
-
-    let buf = camera.multi_threaded_render(&cube);
-
-    //file to write to
-    let mut file = File::create("./output.ppm").unwrap();
-
-    file.write(&buf[..]).unwrap();
-}
- */
 
 fn blocks() -> Result<(), anyhow::Error> {
-    let camera = Camera::look_at(
-        Vec3::new(0.0, 40.0, 0.0),
-        Vec3::new(7.0, 0.0, 7.0),
-        Vec3::new(0.0, 1.0, 0.0),
+    const RESOLUTION: (usize, usize) = (1280, 720);
+    let camera = Camera::new(
+        Vec3A::new(0.0, 8.0, 0.0),
+        Vec3A::new(7.0, 8.0, 7.0),
+        RESOLUTION.0 as u32,
         70.0,
+        RESOLUTION.0 as f32 / RESOLUTION.1 as f32,
     );
+
     let mut scene = Scene::new().branch_count(1).camera(camera).spp(1).build();
-    let tex_image = RTWImage::load("./assets/greasy.jpg").unwrap();
-    let tex = Texture::Image(tex_image);
-
-    let mat = Material {
-        name: "earth".into(),
-        index_of_refraction: 1.000293,
-        material_flags: MaterialFlags::OPAQUE | MaterialFlags::SOLID,
-        specular: 0.0,
-        emittance: 0.0,
-        roughness: 0.0,
-        metalness: 0.0,
-        albedo: tex,
-    };
-    let materials = vec![mat];
     let world = World::new("./world");
-    scene.materials = materials;
-    let octree: Octree<Octree<u32>> =
-        Octree::minecraft_world(WorldCoords { x: 0, y: 0, z: 0 }, world);
-    scene.octree = octree;
 
-    let a: TileRenderer = TileRenderer::new((1000, 1000), 3, 12, scene);
+    let f = |position: UVec3| -> Option<u32> {
+        let UVec3 { x, y, z } = position;
+        //println!("position: {}", position);
+        let block = world.get_block(
+            WorldCoords {
+                x: (x as i64),
+                y: (y as i64 - 64),
+                z: (z as i64),
+            }
+            .into(),
+        );
+        if block? == 0 {
+            //println!("air");
+            return None;
+        } else {
+            //println!("not air");
+            return block;
+        }
+    };
+    let mut tree: Octree<u32> = Octree::construct_parallel(7, &f);
+    tree.set_leaf(UVec3::new(0, 512, 0), 1);
+    let arc = Arc::new(tree);
+    //println!("{:?}", tree);
+    println!("octree built");
+    scene.octree = arc;
+    let textures = world
+        .global_palette
+        .read()
+        .unwrap()
+        .keys()
+        .into_iter()
+        .filter_map(|str| {
+            //println!("{}", str);
+            if str.contains("grass") {
+                return Some("grass_block".to_string());
+            }
+            if str.contains("leaves") {
+                return Some("leaves".to_string());
+            }
+            let new_string = str.strip_prefix("minecraft:").unwrap_or(&str).to_string();
+            return Some(new_string);
+        })
+        .collect::<Vec<String>>();
+    let texture_path =
+        "./assets/default_resource_pack/assets/minecraft/textures/block/".to_string();
+    let materials: Arc<Vec<Material>> = textures
+        .iter()
+        .filter_map(|texture| {
+            let image = RTWImage::load((texture_path.clone() + texture + ".png").as_str());
+            let albedo = match image {
+                Result::Ok(image) => Texture::Image(image),
+                Err(_) => Texture::DEFAULT_TEXTURE,
+            };
+            let material = Material {
+                name: texture.into(),
+                index_of_refraction: 1.000293,
+                material_flags: MaterialFlags::SOLID | MaterialFlags::OPAQUE,
+                specular: 0.0,
+                emittance: 0.0,
+                roughness: 0.0,
+                metalness: 0.0,
+                albedo: albedo,
+            };
+            Some(material)
+        })
+        .collect::<Vec<Material>>()
+        .into();
+    scene.materials = materials.clone();
+    let mut a: TileRenderer = TileRenderer::new(RESOLUTION, 3, 16, scene);
     let start = Instant::now();
-    a.render();
+    a.render("render.png");
     let finish = Instant::now();
     let duration = finish - start;
 

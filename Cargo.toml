@@ -10,13 +10,16 @@ spider_eye = { path = "../spider_eye" }
 smol_str = "0.3.2"
 fast-math = "0.1.1"
 glam = "0.29.2"
-rand_distr = "0.4.3"
-rand = "0.8.5"
 bitflags = "2.6.0"
 anyhow = "1.0.95"
 num-traits = "0.2.19"
 dashmap = "6.1.0"
+fxhash = "0.2.1"
+image = "0.25.5"
+fastrand = "2.3.0"
 
 [profile.release-with-debug]
 inherits = "release"
 debug = true
+[profile.release]
+panic = "abort"

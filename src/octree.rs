@@ -1,7 +1,6 @@
 use std::{fmt::Debug, hash::Hash, mem};
 
 use glam::UVec3;
-use rand_distr::num_traits::Pow;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 pub type OctantId = u32;
@@ -58,7 +57,7 @@ impl Position for UVec3 {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub enum Child<T> {
     #[default]
     None,
@@ -118,7 +117,7 @@ impl<T: PartialEq> PartialEq for Child<T> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Octant<T> {
     pub parent: Option<OctantId>,
     pub child_count: u8,
@@ -141,15 +140,15 @@ impl<T> Octant<T> {
     }
 }
 
-#[derive(Debug)]
-pub struct Octree<T: Sync + Send> {
-    pub(super) root: Option<OctantId>,
+#[derive(Debug, Clone)]
+pub struct Octree<T> {
+    pub root: Option<OctantId>,
     pub octants: Vec<Octant<T>>,
-    free_list: Vec<OctantId>,
-    depth: u8,
+    pub free_list: Vec<OctantId>,
+    pub depth: u8,
 }
 
-impl<T: Sync + Send> Octree<T> {
+impl<T> Octree<T> {
     pub fn new() -> Self {
         Self::new_in()
     }
@@ -159,7 +158,7 @@ impl<T: Sync + Send> Octree<T> {
     }
 }
 
-impl<T: PartialEq + Send + Sync> PartialEq for Octree<T> {
+impl<T: PartialEq> PartialEq for Octree<T> {
     fn eq(&self, other: &Self) -> bool {
         self.root.eq(&other.root)
             && self.octants.eq(&other.octants)
@@ -168,7 +167,7 @@ impl<T: PartialEq + Send + Sync> PartialEq for Octree<T> {
     }
 }
 
-impl<T: Sync + Send> Octree<T> {
+impl<T> Octree<T> {
     fn new_in() -> Self {
         Self::with_capacity_in(0)
     }
@@ -187,7 +186,7 @@ impl<T: Sync + Send> Octree<T> {
 
         let mut it = self.root.unwrap();
         let mut pos = pos;
-        let mut size = 2f32.pow(self.depth as i32) as u32;
+        let mut size = 2f32.powi(self.depth as i32) as u32;
 
         while size >= 1 {
             size /= 2;
@@ -207,7 +206,7 @@ impl<T: Sync + Send> Octree<T> {
     pub fn get_leaf(&self, pos: impl Position) -> Option<&T> {
         let mut it = self.root.unwrap();
         let mut pos = pos;
-        let mut size = 2f32.pow(self.depth as i32) as u32;
+        let mut size = 2f32.powi(self.depth as i32) as u32;
 
         while size > 0 {
             size /= 2;
@@ -234,14 +233,14 @@ impl<T: Sync + Send> Octree<T> {
     pub fn construct_octants_with<P: Position, F: Fn(P) -> Option<T>>(&mut self, depth: u8, f: F) {
         self.reset();
 
-        let size = 2f32.pow(depth as i32) as u32;
+        let size = 2f32.powi(depth as i32) as u32;
 
         if let Some(result) = self.construct_octants_with_impl(size, P::construct(0, 0, 0), &f) {
             self.root = Some(result);
             self.depth = depth;
         }
     }
-    fn construct_octants_with_impl<P: Position, F: Fn(P) -> Option<T>>(
+    pub(super) fn construct_octants_with_impl<P: Position, F: Fn(P) -> Option<T>>(
         &mut self,
         size: u32,
         pos: P,
@@ -287,7 +286,7 @@ impl<T: Sync + Send> Octree<T> {
 
         let mut it = self.root.unwrap();
         let mut pos = to_pos;
-        let mut size = 2f32.pow(self.depth as i32) as u32;
+        let mut size = 2f32.powi(self.depth as i32) as u32;
 
         while size >= 1 {
             size /= 2;
@@ -329,7 +328,7 @@ impl<T: Sync + Send> Octree<T> {
 
         let mut it = self.root.unwrap();
         let mut pos = pos;
-        let mut size = 2f32.pow(self.depth as i32) as u32;
+        let mut size = 2f32.powi(self.depth as i32) as u32;
 
         while size >= 1 {
             size /= 2;

@@ -9,7 +9,7 @@ pub struct Interval {
 impl Interval {
     pub const EMPTY: Interval = Interval::new(INFINITY, -INFINITY);
     pub const UNIVERSE: Interval = Interval::new(-INFINITY, INFINITY);
-    pub const ZEROISH_TO_INFINITY: Interval = Interval::new(0.001f32, INFINITY);
+    pub const ZEROISH_TO_INFINITY: Interval = Interval::new(0.001, INFINITY);
     #[inline]
 
     pub const fn new(min: f32, max: f32) -> Self {

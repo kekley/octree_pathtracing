@@ -1,14 +1,13 @@
 use std::sync::Mutex;
-use std::{
-    fs::File,
-    io::{Write},
-    sync::Arc,
-    thread, vec,
+use std::{fs::File, io::Write, sync::Arc, thread, vec};
+
+use fastrand::Rng;
+use glam::Vec2;
+use image::{
+    EncodableLayout, ExtendedColorType, GenericImage, ImageBuffer, Rgb, Rgb32FImage, RgbImage,
 };
 
-use rand::{rngs::StdRng, SeedableRng};
-
-use crate::{util, Scene};
+use crate::{random_float_in_range, sample_square, util, Scene};
 pub struct Tile {
     bytes_per_pixel: usize,
     stride: usize,
@@ -17,17 +16,17 @@ pub struct Tile {
     y0: usize,
     x1: usize,
     y1: usize,
-    local_buffer: Vec<u8>,
+    local_buffer: Vec<f32>,
     frame_buffer_resolution: (usize, usize),
-    frame_buffer: Arc<Mutex<Vec<u8>>>,
+    pixel_size: Vec2,
+    frame_buffer: Arc<Mutex<Vec<f32>>>,
 }
 
 pub struct TileRenderer {
     pub thread_count: usize,
     pub resolution: (usize, usize),
     bytes_per_pixel: usize,
-    stride: usize,
-    frame_buffer: Arc<Mutex<Vec<u8>>>,
+    frame_buffer: Arc<Mutex<Vec<f32>>>,
     scene: Arc<Scene>,
 }
 
@@ -38,11 +37,15 @@ impl Tile {
         x1: usize,
         y1: usize,
         bytes_per_pixel: usize,
-        frame_buffer: Arc<Mutex<Vec<u8>>>,
+        frame_buffer: Arc<Mutex<Vec<f32>>>,
         frame_buffer_resolution: (usize, usize),
     ) -> Self {
         let x1 = x1.min(frame_buffer_resolution.0);
         let y1 = y1.min(frame_buffer_resolution.1);
+        let pixel_size = Vec2::new(
+            1.0 / frame_buffer_resolution.0 as f32,
+            1.0 / frame_buffer_resolution.1 as f32,
+        );
         Self {
             bytes_per_pixel: bytes_per_pixel,
             stride: (x1 - x0),
@@ -51,9 +54,10 @@ impl Tile {
             y0,
             x1,
             y1,
-            local_buffer: Vec::with_capacity((y1 - y0) * (x1 - x0) * bytes_per_pixel),
+            local_buffer: vec![0.0; (y1 - y0) * (x1 - x0) * bytes_per_pixel],
             frame_buffer: frame_buffer,
             frame_buffer_resolution,
+            pixel_size,
         }
     }
 }
@@ -69,22 +73,21 @@ impl TileRenderer {
             thread_count: threads,
             resolution: render_resolution,
             frame_buffer: Arc::new(Mutex::new(vec![
-                0u8;
+                0.0;
                 render_resolution.0
                     * render_resolution.1
                     * bytes_per_pixel
             ])),
             scene: Arc::new(scene),
             bytes_per_pixel: bytes_per_pixel,
-            stride: render_resolution.0 * bytes_per_pixel,
         }
     }
 
-    pub fn render(&self) {
-        let mut threads = vec![];
+    pub fn render(&mut self, file_name: &str) {
         let tile_width = (self.resolution.0 + self.thread_count - 1) / self.thread_count;
         let tile_height = (self.resolution.1 + self.thread_count - 1) / self.thread_count;
-        let header = format!("P3\n{} {}\n255\n", self.resolution.0, self.resolution.1);
+
+        let mut threads = vec![];
 
         for y in 0..self.thread_count {
             for x in 0..self.thread_count {
@@ -99,7 +102,7 @@ impl TileRenderer {
                 );
                 let scene = self.scene.clone();
                 threads.push(thread::spawn(move || {
-                    TileRenderer::render_tile(tile, &scene);
+                    TileRenderer::render_tile(tile, scene);
                 }));
             }
         }
@@ -108,39 +111,72 @@ impl TileRenderer {
             t.join().unwrap();
         }
 
-        let mut ppm_buffer: Vec<u8> =
-            Vec::with_capacity(self.resolution.0 * self.resolution.1 * self.bytes_per_pixel * 3);
+        let u8_frame_buffer = self
+            .frame_buffer
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|channel| ((channel * 255.0).clamp(0.0, 255.0)) as u8)
+            .collect::<Vec<u8>>();
 
-        ppm_buffer.write(header.as_bytes()).unwrap();
-        let frame_buffer = self.frame_buffer.lock().unwrap().to_owned();
-        for (i, byte) in frame_buffer.iter().enumerate() {
-            let byte_as_str = byte.to_string();
-            ppm_buffer.write(byte_as_str.as_bytes()).unwrap();
-            if (i + 1) % (self.bytes_per_pixel * 3) == 0 {
-                ppm_buffer.write("\n".as_bytes()).unwrap();
-            } else {
-                ppm_buffer.write(" ".as_bytes()).unwrap();
-            }
-        }
+        let image = RgbImage::from_vec(
+            self.resolution.0 as u32,
+            self.resolution.1 as u32,
+            u8_frame_buffer,
+        )
+        .unwrap();
 
-        let mut file_stream = File::create("render.ppm").unwrap();
+        image.save(file_name).unwrap();
 
-        file_stream.write_all(&ppm_buffer).unwrap();
+        /*         let mut ppm_buffer: Vec<u8> =
+                   Vec::with_capacity(self.resolution.0 * self.resolution.1 * self.bytes_per_pixel * 3);
+
+               ppm_buffer.write(header.as_bytes()).unwrap();
+               let frame_buffer = self.frame_buffer.lock().unwrap().to_owned();
+               for (i, byte) in frame_buffer.iter().enumerate() {
+                   let byte_as_str = byte.to_string();
+                   ppm_buffer.write(byte_as_str.as_bytes()).unwrap();
+                   if (i + 1) % (self.bytes_per_pixel * 3) == 0 {
+                       ppm_buffer.write("\n".as_bytes()).unwrap();
+                   } else {
+                       ppm_buffer.write(" ".as_bytes()).unwrap();
+                   }
+               }
+        */
+        //let mut file_stream = File::create(file_name).unwrap();
+
+        //file_stream.write_all(&self.frame_buffer).unwrap();
     }
 
-    pub fn render_tile(mut tile: Tile, scene: &Scene) {
-        let mut rng = StdRng::from_entropy();
-        for y in tile.y0..tile.y1 {
-            for x in tile.x0..tile.x1 {
-                let (norm_x, norm_y) = TileRenderer::normalize_coordinates(
-                    x,
-                    y,
-                    tile.frame_buffer_resolution.0,
-                    tile.frame_buffer_resolution.1,
-                );
-                let color = scene.get_pixel_color(norm_x, norm_y, &mut rng);
-                util::write_rgb8_color_to_stream(&color, &mut tile.local_buffer);
+    pub fn render_tile(mut tile: Tile, scene: Arc<Scene>) {
+        let mut rng = Rng::new();
+        let mut current_spp = 0;
+        while current_spp < scene.target_spp {
+            let branch_count = scene.get_current_branch_count(current_spp);
+            let sin_v = 1.0 / (branch_count + current_spp) as f32;
+
+            for y in tile.y0..tile.y1 {
+                for x in tile.x0..tile.x1 {
+                    //println!("x:{}, y:{}", x, y);
+                    let color = scene.get_pixel_color(x as u32, y as u32, &mut rng, current_spp);
+                    let local_buffer_idx = Self::get_pixel_index(
+                        x - tile.x0,
+                        y - tile.y0,
+                        tile.bytes_per_pixel,
+                        tile.stride,
+                    );
+                    let r = color.x * branch_count as f32;
+                    let g = color.y * branch_count as f32;
+                    let b = color.z * branch_count as f32;
+                    tile.local_buffer[local_buffer_idx] =
+                        (tile.local_buffer[local_buffer_idx] * current_spp as f32 + r) * sin_v;
+                    tile.local_buffer[local_buffer_idx + 1] =
+                        (tile.local_buffer[local_buffer_idx + 1] * current_spp as f32 + g) * sin_v;
+                    tile.local_buffer[local_buffer_idx + 2] =
+                        (tile.local_buffer[local_buffer_idx + 2] * current_spp as f32 + b) * sin_v;
+                }
             }
+            current_spp += branch_count;
         }
         let mut frame_buffer = tile.frame_buffer.lock().unwrap();
         for y in tile.y0..tile.y1 {
@@ -153,9 +189,13 @@ impl TileRenderer {
                     tile.bytes_per_pixel,
                     tile.stride,
                 );
-                frame_buffer[frame_buffer_idx] = tile.local_buffer[local_buffer_idx];
-                frame_buffer[frame_buffer_idx + 1] = tile.local_buffer[local_buffer_idx + 1];
-                frame_buffer[frame_buffer_idx + 2] = tile.local_buffer[local_buffer_idx + 2];
+                let r = tile.local_buffer[local_buffer_idx];
+                let g = tile.local_buffer[local_buffer_idx + 1];
+                let b = tile.local_buffer[local_buffer_idx + 2];
+
+                frame_buffer[frame_buffer_idx] = r;
+                frame_buffer[frame_buffer_idx + 1] = g;
+                frame_buffer[frame_buffer_idx + 2] = b;
             }
         }
     }
@@ -168,10 +208,10 @@ impl TileRenderer {
         val
     }
 
-    fn normalize_coordinates(x: usize, y: usize, width: usize, height: usize) -> (f32, f32) {
-        let dim = width.max(height) as f32;
-        let xn = ((2 * x + 1) as f32 - width as f32) / dim;
-        let yn = ((2 * (height - y) - 1) as f32 - height as f32) / dim;
+    fn normalize_coordinates(x: f32, y: f32, width: f32, height: f32) -> (f32, f32) {
+        let dim = width.max(height);
+        let xn = ((2.0 * x + 1.0) - width) / dim;
+        let yn = ((2.0 * (height - y) - 1.0) - height) / dim;
 
         (xn, yn)
     }

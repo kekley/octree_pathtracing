@@ -1,9 +1,10 @@
 use crate::{ray::Ray, texture::Texture};
 use bitflags::bitflags;
-use glam::Vec3A as Vec3;
+use glam::Vec3A;
 use smol_str::SmolStr;
 
 bitflags! {
+    #[derive(Clone, Copy,Debug)]
     pub struct MaterialFlags: u32 {
         const OPAQUE = 0b00000001;
         const SUBSURFACE_SCATTER = 0b00000010;
@@ -16,15 +17,16 @@ bitflags! {
 #[derive(Debug, Default)]
 pub struct Scatter {
     pub ray: Ray,
-    pub color: Vec3,
+    pub color: Vec3A,
 }
 
 impl Scatter {
-    pub fn new(ray: Ray, color: Vec3) -> Self {
+    pub fn new(ray: Ray, color: Vec3A) -> Self {
         Self { ray, color }
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Material {
     pub name: SmolStr,
     pub index_of_refraction: f32,

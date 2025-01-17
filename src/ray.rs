@@ -1,14 +1,14 @@
+use core::f32;
 use std::f32::{consts::PI, INFINITY};
 
-use crate::HitRecord;
-use glam::{Mat3A, Vec3A as Vec3, Vec4};
-use rand::{rngs::StdRng, Rng};
+use crate::{angle_distance, random_float, scene, HitRecord, Scene, Sun};
+use fastrand::Rng;
+use glam::{DMat3, Mat3A, Vec3A, Vec4};
 
 #[derive(Debug, Clone, Default)]
 pub struct Ray {
-    pub(crate) origin: Vec3,
-    pub(crate) direction: Vec3,
-    pub(crate) inv_dir: Vec3,
+    pub(crate) origin: Vec3A,
+    pub(crate) direction: Vec3A,
     pub(crate) distance_travelled: f32,
     pub(crate) hit: HitRecord<u16>,
 }
@@ -18,17 +18,16 @@ impl Ray {
     pub const OFFSET: f32 = 0.000001;
 
     #[inline]
-    pub fn at(&self, t: f32) -> Vec3 {
+    pub fn at(&self, t: f32) -> Vec3A {
         self.origin + self.direction * t
     }
     #[inline]
-    pub fn new(point: Vec3, direction: Vec3) -> Self {
+    pub fn new(point: Vec3A, direction: Vec3A) -> Self {
         Self {
             origin: point,
             direction,
             hit: HitRecord::default(),
             distance_travelled: 0.0,
-            inv_dir: 1.0 / direction,
         }
     }
 
@@ -36,27 +35,36 @@ impl Ray {
         Self {
             origin: self.origin,
             direction: self.direction,
-            distance_travelled: self.distance_travelled,
-            hit: self.hit.clone(),
-            inv_dir: self.inv_dir,
+            distance_travelled: 0.0,
+            hit: HitRecord {
+                t: 0.0,
+                t_next: 0.0,
+                u: self.hit.u,
+                v: self.hit.v,
+                current_material: self.hit.current_material,
+                normal: self.hit.normal,
+                previous_material: self.hit.previous_material,
+                color: Vec4::ZERO,
+                depth: self.hit.depth,
+                specular: self.hit.specular,
+            },
         }
     }
 
-    pub fn set_normals(&mut self, normal: Vec3) {
-        self.hit.outward_normal = normal;
-        //self.hit.geom_normal = normal;
+    pub fn set_normals(&mut self, normal: Vec3A) {
+        self.hit.normal = normal;
     }
 
-    pub fn orient_normal(&mut self, normal: Vec3) {
+    pub fn orient_normal(&mut self, normal: Vec3A) {
         if self.direction.dot(normal) > 0.0 {
-            self.hit.outward_normal = -normal;
+            self.hit.normal = -normal;
         } else {
-            self.hit.outward_normal = normal;
+            self.hit.normal = normal;
         }
         //self.hit.geom_normal = normal;
     }
 
-    pub fn specular_reflection(&self, roughness: f32, rng: &mut StdRng) -> Self {
+    pub fn specular_reflection(&self, roughness: f32, rng: &mut Rng) -> Self {
         let mut tmp = Ray {
             origin: self.origin,
             direction: self.direction,
@@ -67,26 +75,25 @@ impl Ray {
                 u: 0.0,
                 v: 0.0,
                 current_material: self.hit.current_material,
-                outward_normal: self.hit.outward_normal,
+                normal: self.hit.normal,
                 previous_material: self.hit.previous_material,
                 color: Vec4::ZERO,
                 depth: self.hit.depth,
                 specular: self.hit.specular,
             },
-            inv_dir: self.inv_dir,
         };
         tmp.hit.current_material = tmp.hit.previous_material;
 
         if roughness > Ray::EPSILON {
             let mut specular_dir = self.direction;
-            let s = -2.0 * self.direction.dot(self.hit.outward_normal);
-            let d = self.hit.outward_normal;
+            let s = -2.0 * self.direction.dot(self.hit.normal);
+            let d = self.hit.normal;
             let o = self.direction;
 
             specular_dir = s * d + o;
 
-            let x1 = rng.gen::<f32>();
-            let x2 = rng.gen::<f32>();
+            let x1 = random_float(rng);
+            let x2 = random_float(rng);
             let r = x1.sqrt();
             let theta = 2.0 * PI * x2;
 
@@ -94,115 +101,213 @@ impl Ray {
             let ty = r * theta.sin();
             let tz = (1.0 - x1).sqrt();
 
-            let tangent: Vec3;
-            if tmp.hit.outward_normal.x.abs() > 0.1 {
-                tangent = Vec3::new(0.0, 1.0, 0.0);
+            let tangent: Vec3A;
+            if tmp.hit.normal.x.abs() > 0.1 {
+                tangent = Vec3A::new(0.0, 1.0, 0.0);
             } else {
-                tangent = Vec3::new(1.0, 0.0, 0.0);
+                tangent = Vec3A::new(1.0, 0.0, 0.0);
             }
 
-            let u = tangent.cross(tmp.hit.outward_normal).normalize();
-            let v = tmp.hit.outward_normal.cross(u);
+            let u = tangent.cross(tmp.hit.normal).normalize();
+            let v = tmp.hit.normal.cross(u);
 
-            let rotation_matrix = Mat3A::from_cols(u, v, tmp.hit.outward_normal);
+            let rotation_matrix = Mat3A::from_cols(u, v, tmp.hit.normal);
 
-            let new_dir = rotation_matrix * Vec3::new(tx, ty, tz);
+            let new_dir = rotation_matrix * Vec3A::new(tx, ty, tz);
 
             tmp.direction = new_dir * roughness + specular_dir * (1.0 - roughness);
             tmp.direction = tmp.direction.normalize();
-            tmp.inv_dir = 1.0 / tmp.direction;
             tmp.origin = tmp.at(Ray::OFFSET);
         } else {
-            tmp.direction = self.direction
-                - 2.0 * self.direction.dot(self.hit.outward_normal) * self.hit.outward_normal;
-            tmp.inv_dir = 1.0 / tmp.direction;
+            tmp.direction =
+                self.direction - 2.0 * self.direction.dot(self.hit.normal) * self.hit.normal;
             tmp.origin = tmp.at(Ray::OFFSET);
         }
 
-        if tmp.hit.outward_normal.dot(tmp.direction).signum()
-            == tmp.hit.outward_normal.dot(self.direction).signum()
+        if tmp.hit.normal.dot(tmp.direction).signum() == tmp.hit.normal.dot(self.direction).signum()
         {
-            let factor = tmp.hit.outward_normal.dot(self.direction) * -Ray::EPSILON
-                - tmp.direction.dot(tmp.hit.outward_normal);
-            tmp.direction += factor * tmp.hit.outward_normal;
+            let factor = tmp.hit.normal.dot(self.direction) * -Ray::EPSILON
+                - tmp.direction.dot(tmp.hit.normal);
+            tmp.direction += factor * tmp.hit.normal;
             tmp.direction = tmp.direction.normalize();
-            tmp.inv_dir = 1.0 / tmp.direction;
         }
 
         tmp
     }
 
-    pub fn scatter_normal(&mut self, rng: &mut StdRng) {
-        let x1 = rng.gen::<f32>();
-        let x2 = rng.gen::<f32>();
+    pub fn scatter_normal(&mut self, rng: &mut Rng) {
+        let x1 = random_float(rng);
+        let x2 = random_float(rng);
 
         let r = x1.sqrt();
         let theta = 2.0 * PI * x2;
 
-        let tangent = if self.hit.outward_normal.x.abs() > 0.1 {
-            Vec3::new(0.0, 1.0, 0.0)
+        let tangent = if self.hit.normal.x.abs() > 0.1 {
+            Vec3A::new(0.0, 1.0, 0.0)
         } else {
-            Vec3::new(1.0, 0.0, 0.0)
+            Vec3A::new(1.0, 0.0, 0.0)
         };
 
-        let u = tangent.cross(self.hit.outward_normal).normalize();
-        let v = self.hit.outward_normal.cross(u);
+        let u = tangent.cross(self.hit.normal).normalize();
+        let v = self.hit.normal.cross(u);
 
-        let rotation_matrix = Mat3A::from_cols(u, v, self.hit.outward_normal);
+        let rotation_matrix = Mat3A::from_cols(u, v, self.hit.normal);
 
         let new_dir =
-            rotation_matrix * Vec3::new(r * theta.cos(), r * theta.sin(), (1.0 - x1).sqrt());
+            rotation_matrix * Vec3A::new(r * theta.cos(), r * theta.sin(), (1.0 - x1).sqrt());
 
         self.direction = new_dir;
-        self.inv_dir = 1.0 / self.direction;
         self.origin = self.at(Ray::OFFSET);
     }
 
-    pub fn diffuse_reflection(&self, rng: &mut StdRng) -> Self {
-        let mut tmp = self.clone();
+    pub fn diffuse_reflection(&mut self, ray: &mut Ray, rng: &mut Rng, scene: &Scene) {
+        *self = ray.clone();
+        let normal = self.hit.normal;
 
-        let x1 = rng.gen::<f32>();
-        let x2 = rng.gen::<f32>();
+        let mut x1 = random_float(rng);
+        let mut x2 = random_float(rng);
 
-        let r = x1.sqrt();
-        let theta = 2.0 * PI * x2;
+        let mut r = x1.sqrt();
+        let mut theta = 2.0 * PI * x2;
 
-        let tx = r * theta.cos();
-        let ty = r * theta.sin();
-        let tz = (1.0 - tx * tx - ty * ty).sqrt();
+        let mut tx = r * theta.cos();
+        let mut ty = r * theta.sin();
+        let tz: f32;
 
-        let tangent = if self.hit.outward_normal.x.abs() > 0.1 {
-            Vec3::new(0.0, 1.0, 0.0)
+        if scene.sun_sampling_strategy.importance_sampling {
+            let sun_az = scene.sun.azimuth;
+            let sun_alt_fake = scene.sun.altitude;
+            let sun_alt = if sun_alt_fake.abs() > PI / 2.0 {
+                sun_alt_fake.signum() * PI - sun_alt_fake
+            } else {
+                sun_alt_fake
+            };
+            let sun_dx = sun_az.cos() * sun_alt.cos();
+            let sun_dz = sun_az.sin() * sun_alt.cos();
+            let sun_dy = sun_alt.sin();
+
+            let (mut sun_tx, mut sun_ty, sqrt): (f32, f32, f32);
+            let sun_tz = sun_dx * normal.x + sun_dy * normal.y + sun_dz * normal.z;
+            if normal.x.abs() > 0.1 {
+                sun_tx = sun_dx * normal.z - sun_dz * normal.x;
+                sun_ty = sun_dx * normal.x * normal.y
+                    - sun_dy * (normal.x * normal.x + normal.z * normal.z)
+                    + sun_dz * normal.y * normal.z;
+                sqrt = normal.x.hypot(normal.z);
+            } else {
+                sun_tx = sun_dz * normal.y - sun_dy * normal.z;
+                sun_ty = sun_dy * normal.x * normal.y
+                    - sun_dx * (normal.y * normal.y + normal.z * normal.z)
+                    + sun_dz * normal.x * normal.z;
+                sqrt = normal.z.hypot(normal.y);
+            }
+
+            sun_tx /= sqrt;
+            sun_ty /= sqrt;
+
+            let circle_radius = scene.sun.radius * scene.sun.importance_sample_radius;
+            let mut sample_chance = scene.sun.importance_sample_chance;
+
+            let sun_alt_relative = sun_tz.asin();
+
+            if sun_alt_relative + circle_radius > Ray::EPSILON {
+                if sun_tx.hypot(sun_ty) + circle_radius + Ray::EPSILON < 1.0 {
+                    if random_float(rng) < sample_chance {
+                        tx = sun_tx + tx * circle_radius;
+                        ty = sun_ty + ty * circle_radius;
+                        ray.hit.color *= circle_radius * circle_radius / sample_chance;
+                    } else {
+                        while (tx - sun_tx).hypot(ty - sun_ty) < circle_radius {
+                            tx -= sun_tx;
+                            ty -= sun_ty;
+                            if tx == 0.0 && ty == 0.0 {
+                                break;
+                            }
+                            tx /= circle_radius;
+                            ty /= circle_radius;
+                        }
+                        ray.hit.color *=
+                            (1.0 - circle_radius * circle_radius) / (1.0 - sample_chance);
+                    }
+                } else {
+                    let min_r = (sun_alt_relative + circle_radius).cos();
+                    let max_r = ((sun_alt_relative - circle_radius).max(0.0)).cos();
+
+                    let sun_theta = sun_ty.atan2(sun_tx);
+                    let segment_area_proportion =
+                        ((max_r * max_r - min_r * min_r) * circle_radius) / PI;
+                    sample_chance *= segment_area_proportion / (circle_radius * circle_radius);
+                    sample_chance = sample_chance.min(Sun::MAX_IMPORTANCE_SAMPLE_CHANCE);
+                    if random_float(rng) < sample_chance {
+                        r = (min_r * min_r * x1 + max_r * max_r * (1.0 - x1)).sqrt();
+                        theta = sun_theta + (2.0 * x2 - 1.0) * circle_radius;
+                        tx = r * theta.cos();
+                        ty = r * theta.sin();
+
+                        ray.hit.color *= segment_area_proportion / sample_chance;
+                    } else {
+                        while r > min_r
+                            && r < max_r
+                            && angle_distance(theta, sun_theta) < circle_radius
+                        {
+                            x1 = random_float(rng);
+                            x2 = random_float(rng);
+                            r = x1.sqrt();
+                            theta = 2.0 * PI * x2;
+                        }
+                        tx = r * theta.cos();
+                        ty = r * theta.sin();
+                        ray.hit.color *= (1.0 - segment_area_proportion) / (1.0 - sample_chance);
+                    }
+                }
+            }
+        }
+
+        tz = (1.0 - tx * tx - ty * ty).sqrt();
+
+        let (xx, xy, xz): (f32, f32, f32);
+        let (mut ux, mut uy, mut uz): (f32, f32, f32);
+        let (vx, vy, vz): (f32, f32, f32);
+
+        if normal.x.abs() > 0.1 {
+            xx = 0.0;
+            xy = 1.0;
+            xz = 0.0
         } else {
-            Vec3::new(1.0, 0.0, 0.0)
-        };
+            xx = 1.0;
+            xy = 0.0;
+            xz = 0.0;
+        }
 
-        let u = tangent.cross(self.hit.outward_normal).normalize();
-        let v = self.hit.outward_normal.cross(u);
+        ux = xy * normal.z - xz * normal.y;
+        uy = xz * normal.x - xx * normal.z;
+        uz = xx * normal.y - xy * normal.x;
 
-        let rotation_matrix = Mat3A::from_cols(u, v, self.hit.outward_normal);
-        let new_dir = rotation_matrix * Vec3::new(tx, ty, tz);
+        r = 1.0 / (ux * ux + uy * uy + uz * uz).sqrt();
 
-        tmp.direction = new_dir.normalize();
-        tmp.inv_dir = 1.0 / tmp.direction;
+        ux *= r;
+        uy *= r;
+        uz *= r;
 
-        tmp.origin = tmp.at(Ray::OFFSET);
+        vx = uy * normal.z - uz * normal.y;
+        vy = uz * normal.x - ux * normal.z;
+        vz = ux * normal.y - uy * normal.x;
+
+        self.direction.x = ux * tx + vx * ty + normal.x * tz;
+        self.direction.y = uy * tx + vy * ty + normal.y * tz;
+        self.direction.z = uz * tx + vz * ty + normal.z * tz;
+
+        self.origin = self.at(Ray::OFFSET);
         //println!("new_dir: {:?}", new_dir);
 
-        tmp.hit.current_material = tmp.hit.previous_material;
-        tmp.hit.specular = false;
+        self.hit.current_material = self.hit.previous_material;
+        self.hit.specular = false;
 
-        if tmp.hit.outward_normal.dot(tmp.direction).signum()
-            == tmp.hit.outward_normal.dot(self.direction).signum()
-        {
-            let factor = tmp.hit.outward_normal.dot(self.direction).signum() * -Ray::EPSILON
-                - tmp.direction.dot(tmp.hit.outward_normal);
-            tmp.direction += factor * tmp.hit.outward_normal;
-            tmp.direction = tmp.direction.normalize();
-            tmp.inv_dir = 1.0 / tmp.direction
+        if (normal.dot(self.direction)).signum() == (normal.dot(ray.direction)).signum() {
+            let factor =
+                normal.dot(ray.direction).signum() * -Ray::EPSILON - self.direction.dot(normal);
+            self.direction += normal * factor;
+            self.direction = self.direction.normalize();
         }
-        //tmp.origin = self.at(self.hit.t);
-        //tmp.origin = tmp.at(Ray::OFFSET);
-        tmp
     }
 }

@@ -1,19 +1,19 @@
+use std::f32::consts::PI;
 use std::f32::INFINITY;
 
 use crate::aabb::AABB;
-use crate::util::PI;
 use crate::ray::Ray;
-use glam::Vec3A as Vec3;
+use glam::Vec3A;
 
 #[derive(Debug, Clone)]
 pub struct Sphere {
-    center: Vec3,
+    center: Vec3A,
     radius: f32,
     material_idx: u16,
 }
 
 impl Sphere {
-    pub fn new(center: Vec3, radius: f32, material_idx: u16) -> Self {
+    pub fn new(center: Vec3A, radius: f32, material_idx: u16) -> Self {
         Self {
             center: center,
             radius: radius,
@@ -22,7 +22,7 @@ impl Sphere {
     }
 
     pub fn bbox(&self) -> AABB {
-        let radius_vec: Vec3 = Vec3::splat(self.radius);
+        let radius_vec: Vec3A = Vec3A::splat(self.radius);
 
         let bbox = AABB::from_points(self.center - radius_vec, self.center + radius_vec);
         bbox
@@ -37,7 +37,7 @@ impl Sphere {
 
         let discriminant = h * h - a * c;
 
-        if discriminant < 0f32 {
+        if discriminant < 0.0 {
             ray.hit.t = INFINITY;
             return false;
         }
@@ -53,11 +53,11 @@ impl Sphere {
         ray.hit.t = t;
         ray.hit.u = u;
         ray.hit.v = v;
-        ray.hit.outward_normal = outward_normal;
+        ray.hit.normal = outward_normal;
         ray.hit.current_material = self.material_idx;
     }
 
-    pub fn get_uv(point: Vec3) -> (f32, f32) {
+    pub fn get_uv(point: Vec3A) -> (f32, f32) {
         let theta = (-point.y).acos();
 
         let phi = (-point.z).atan2(point.x) + PI;

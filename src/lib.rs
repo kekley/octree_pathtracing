@@ -1,5 +1,6 @@
 mod aabb;
 mod axis;
+mod block_model;
 mod bvh;
 mod camera;
 mod cuboid;
@@ -8,6 +9,7 @@ mod interval;
 mod material;
 mod minecraft_textures;
 mod octree;
+mod octree_parallel;
 mod octree_traversal;
 mod path_tracer;
 mod ray;
@@ -20,7 +22,7 @@ mod translation;
 mod util;
 mod world_svo;
 pub use {
-    aabb::*, bvh::*, camera::*, cuboid::*, hittable::*, interval::*, material::*, octree::*,
-    path_tracer::*, ray::*, rtw_image::*, scene::*, sphere::*, texture::*, tile_renderer::*,
-    translation::*, util::*, world_svo::*,
+    aabb::*, block_model::*, bvh::*, camera::*, cuboid::*, hittable::*, interval::*, material::*,
+    octree::*, octree_parallel::*, path_tracer::*, ray::*, rtw_image::*, scene::*, sphere::*,
+    texture::*, tile_renderer::*, translation::*, util::*, world_svo::*,
 };
