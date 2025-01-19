@@ -16,6 +16,19 @@ pub enum Face {
     North = 5,
 }
 
+impl Face {
+    pub fn to_normal(face: Face) -> Vec3A {
+        match face {
+            Face::West => Vec3A::NEG_X,
+            Face::East => Vec3A::X,
+            Face::Bottom => Vec3A::NEG_Y,
+            Face::Top => Vec3A::Y,
+            Face::South => Vec3A::NEG_Z,
+            Face::North => Vec3A::Z,
+        }
+    }
+}
+
 impl TryFrom<u32> for Face {
     type Error = anyhow::Error;
 

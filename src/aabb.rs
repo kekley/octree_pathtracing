@@ -98,107 +98,6 @@ impl AABB {
         }
     }
 
-    pub fn intersect(&self, ray: &mut Ray) -> bool {
-        let ix = ray.origin.x - (ray.origin.x + ray.direction.x * Ray::OFFSET).floor();
-        let iy = ray.origin.y - (ray.origin.y + ray.direction.y * Ray::OFFSET).floor();
-        let iz = ray.origin.z - (ray.origin.z + ray.direction.z * Ray::OFFSET).floor();
-        let mut t;
-        let mut u;
-        let mut v;
-        let mut hit = false;
-
-        let a = AABB {
-            min: Vec3A::ZERO,
-            max: Vec3A::ONE,
-        };
-        ray.hit.t_next = ray.hit.t;
-
-        t = (a.min.x - ix) / ray.direction.x;
-        if t < ray.hit.t_next && t > -Ray::EPSILON {
-            u = iz + ray.direction.z * t;
-            v = iy + ray.direction.y * t;
-            if u >= a.min.z && u <= a.max.z && v >= a.min.y && v <= a.max.y {
-                hit = true;
-                ray.hit.t_next = t;
-                ray.hit.u = u;
-                ray.hit.v = v;
-                ray.hit.normal = Vec3A::new(-1.0, 0.0, 0.0);
-            }
-        }
-
-        t = (a.max.x - ix) / ray.direction.x;
-        if t < ray.hit.t_next && t > -Ray::EPSILON {
-            u = iz + ray.direction.z * t;
-            v = iy + ray.direction.y * t;
-            if u >= a.min.z && u <= a.max.z && v >= a.min.y && v <= a.max.y {
-                hit = true;
-                ray.hit.t_next = t;
-                ray.hit.u = 1.0 - u;
-                ray.hit.v = v;
-                ray.hit.normal = Vec3A::new(1.0, 0.0, 0.0);
-            }
-        }
-
-        t = (a.min.y - iy) / ray.direction.y;
-        if t < ray.hit.t_next && t > -Ray::EPSILON {
-            u = ix + ray.direction.x * t;
-            v = iz + ray.direction.z * t;
-            if u >= a.min.x && u <= a.max.x && v >= a.min.z && v <= a.max.z {
-                hit = true;
-                ray.hit.t_next = t;
-                ray.hit.u = u;
-                ray.hit.v = v;
-                ray.hit.normal = Vec3A::new(0.0, -1.0, 0.0);
-            }
-        }
-
-        t = (a.max.y - iy) / ray.direction.y;
-        if t < ray.hit.t_next && t > -Ray::EPSILON {
-            u = ix + ray.direction.x * t;
-            v = iz + ray.direction.z * t;
-            if u >= a.min.x && u <= a.max.x && v >= a.min.z && v <= a.max.z {
-                hit = true;
-                ray.hit.t_next = t;
-                ray.hit.u = u;
-                ray.hit.v = v;
-                ray.hit.normal = Vec3A::new(0.0, 1.0, 0.0);
-            }
-        }
-
-        t = (a.min.z - iz) / ray.direction.z;
-        if t < ray.hit.t_next && t > -Ray::EPSILON {
-            u = ix + ray.direction.x * t;
-            v = iy + ray.direction.y * t;
-            if u >= a.min.x && u <= a.max.x && v >= a.min.y && v <= a.max.y {
-                hit = true;
-                ray.hit.t_next = t;
-                ray.hit.u = 1.0 - u;
-                ray.hit.v = v;
-                ray.hit.normal = Vec3A::new(0.0, 0.0, -1.0);
-            }
-        }
-
-        t = (a.max.z - iz) / ray.direction.z;
-        if t < ray.hit.t_next && t > -Ray::EPSILON {
-            u = ix + ray.direction.x * t;
-            v = iy + ray.direction.y * t;
-            if u >= a.min.x && u <= a.max.x && v >= a.min.y && v <= a.max.y {
-                hit = true;
-                ray.hit.t_next = t;
-                ray.hit.u = u;
-                ray.hit.v = v;
-                ray.hit.normal = Vec3A::new(0.0, 0.0, 1.0);
-            }
-        }
-        if hit {
-            ray.hit.t = ray.hit.t_next;
-            ray.distance_travelled += ray.hit.t;
-            ray.origin = ray.at(ray.hit.t);
-        }
-
-        hit
-    }
-
     pub fn intersects(&self, ray: &Ray) -> bool {
         let mut t_min = -INFINITY;
         let mut t_max = INFINITY;
@@ -228,7 +127,7 @@ impl AABB {
     }
 
     #[inline]
-    pub fn intersects_new(&self, ray: &Ray) -> f32 {
+    pub fn intersects_new(&self, ray: &Ray) -> (f32, f32) {
         let box_min = self.min;
         let box_max = self.max;
         let ray_origin = ray.origin;
@@ -239,15 +138,9 @@ impl AABB {
         let mins = t_bot.min(t_top);
         let maxs = t_bot.max(t_top);
 
-        let mut t = mins.xx().max(mins.yz());
-        let t0 = t.max_element();
-        t = maxs.xx().min(maxs.yz());
-        let t1 = t.min_element();
+        let t0 = mins.max_element();
+        let t1 = maxs.min_element();
 
-        if t0 < t1 && t0 > 0.0 {
-            return t0;
-        } else {
-            return INFINITY;
-        }
+        (t0, t1)
     }
 }

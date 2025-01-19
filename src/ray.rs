@@ -2,7 +2,8 @@ use core::f32;
 use std::f32::{consts::PI, INFINITY};
 
 use crate::{angle_distance, random_float, scene, HitRecord, Scene, Sun};
-use fastrand::Rng;
+use rand::rngs::StdRng;
+
 use glam::{DMat3, Mat3A, Vec3A, Vec4};
 
 #[derive(Debug, Clone, Default)]
@@ -64,7 +65,7 @@ impl Ray {
         //self.hit.geom_normal = normal;
     }
 
-    pub fn specular_reflection(&self, roughness: f32, rng: &mut Rng) -> Self {
+    pub fn specular_reflection(&self, roughness: f32, rng: &mut StdRng) -> Self {
         let mut tmp = Ray {
             origin: self.origin,
             direction: self.direction,
@@ -135,7 +136,7 @@ impl Ray {
         tmp
     }
 
-    pub fn scatter_normal(&mut self, rng: &mut Rng) {
+    pub fn scatter_normal(&mut self, rng: &mut StdRng) {
         let x1 = random_float(rng);
         let x2 = random_float(rng);
 
@@ -160,7 +161,7 @@ impl Ray {
         self.origin = self.at(Ray::OFFSET);
     }
 
-    pub fn diffuse_reflection(&mut self, ray: &mut Ray, rng: &mut Rng, scene: &Scene) {
+    pub fn diffuse_reflection(&mut self, ray: &mut Ray, rng: &mut StdRng, scene: &Scene) {
         *self = ray.clone();
         let normal = self.hit.normal;
 
@@ -303,11 +304,11 @@ impl Ray {
         self.hit.current_material = self.hit.previous_material;
         self.hit.specular = false;
 
-        if (normal.dot(self.direction)).signum() == (normal.dot(ray.direction)).signum() {
+        /*         if (normal.dot(self.direction)).signum() == (normal.dot(ray.direction)).signum() {
             let factor =
                 normal.dot(ray.direction).signum() * -Ray::EPSILON - self.direction.dot(normal);
             self.direction += normal * factor;
             self.direction = self.direction.normalize();
-        }
+        } */
     }
 }

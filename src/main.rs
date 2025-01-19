@@ -22,17 +22,16 @@ fn main() -> Result<(), anyhow::Error> {
 }
 
 fn blocks() -> Result<(), anyhow::Error> {
-    const RESOLUTION: (usize, usize) = (1280, 720);
-    let camera = Camera::new(
-        Vec3A::new(0.0, 8.0, 0.0),
-        Vec3A::new(7.0, 8.0, 7.0),
-        RESOLUTION.0 as u32,
+    const RESOLUTION: (usize, usize) = (1000, 1000);
+    let camera = Camera::look_at(
+        Vec3A::new(0.0, 204.0, 0.0),
+        Vec3A::new(100.0, 190.0, 100.0),
+        Vec3A::Y,
         70.0,
-        RESOLUTION.0 as f32 / RESOLUTION.1 as f32,
     );
 
-    let mut scene = Scene::new().branch_count(1).camera(camera).spp(1).build();
-    let world = World::new("./world");
+    let mut scene = Scene::new().branch_count(10).camera(camera).spp(20).build();
+    let world = World::new("./server");
 
     let f = |position: UVec3| -> Option<u32> {
         let UVec3 { x, y, z } = position;
@@ -53,8 +52,7 @@ fn blocks() -> Result<(), anyhow::Error> {
             return block;
         }
     };
-    let mut tree: Octree<u32> = Octree::construct_parallel(7, &f);
-    tree.set_leaf(UVec3::new(0, 512, 0), 1);
+    let mut tree: Octree<u32> = Octree::construct_parallel(8, &f);
     let arc = Arc::new(tree);
     //println!("{:?}", tree);
     println!("octree built");
@@ -72,6 +70,9 @@ fn blocks() -> Result<(), anyhow::Error> {
             }
             if str.contains("leaves") {
                 return Some("leaves".to_string());
+            }
+            if str.contains("water") {
+                return Some("water".to_string());
             }
             let new_string = str.strip_prefix("minecraft:").unwrap_or(&str).to_string();
             return Some(new_string);
@@ -102,7 +103,7 @@ fn blocks() -> Result<(), anyhow::Error> {
         .collect::<Vec<Material>>()
         .into();
     scene.materials = materials.clone();
-    let mut a: TileRenderer = TileRenderer::new(RESOLUTION, 3, 16, scene);
+    let mut a: TileRenderer = TileRenderer::new(RESOLUTION, 3, 1, scene);
     let start = Instant::now();
     a.render("render.png");
     let finish = Instant::now();
@@ -110,4 +111,23 @@ fn blocks() -> Result<(), anyhow::Error> {
 
     println!("time elapsed: {}", duration.as_millis());
     Ok(())
+}
+
+fn face_id_test() {
+    let mut tree: Octree<u32> = Octree::new();
+
+    let camera = Camera::look_at(Vec3A::new(0.0, 0.0, 0.0), Vec3A::splat(2.0), Vec3A::Y, 70.0);
+
+    tree.set_leaf(UVec3::splat(2), 0);
+
+    let arc_tree = Arc::new(tree);
+    let materials = vec![Material::default()];
+    let arc_mat = Arc::new(materials);
+    let mut scene = Scene::new().branch_count(1).spp(1).camera(camera).build();
+    scene.octree = arc_tree;
+    scene.materials = arc_mat;
+
+    let mut renderer = TileRenderer::new((1000, 1000), 3, 1, scene);
+
+    renderer.render("./test.png");
 }

@@ -1,13 +1,16 @@
 use std::sync::Mutex;
 use std::{fs::File, io::Write, sync::Arc, thread, vec};
 
-use fastrand::Rng;
+use rand::rngs::StdRng;
+
 use glam::Vec2;
 use image::{
     EncodableLayout, ExtendedColorType, GenericImage, ImageBuffer, Rgb, Rgb32FImage, RgbImage,
 };
+use rand::{Rng, SeedableRng};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use crate::{random_float_in_range, sample_square, util, Scene};
+use crate::{linear_to_gamma, random_float_in_range, sample_square, util, Scene};
 pub struct Tile {
     bytes_per_pixel: usize,
     stride: usize,
@@ -18,7 +21,7 @@ pub struct Tile {
     y1: usize,
     local_buffer: Vec<f32>,
     frame_buffer_resolution: (usize, usize),
-    pixel_size: Vec2,
+    dim: f32,
     frame_buffer: Arc<Mutex<Vec<f32>>>,
 }
 
@@ -42,10 +45,7 @@ impl Tile {
     ) -> Self {
         let x1 = x1.min(frame_buffer_resolution.0);
         let y1 = y1.min(frame_buffer_resolution.1);
-        let pixel_size = Vec2::new(
-            1.0 / frame_buffer_resolution.0 as f32,
-            1.0 / frame_buffer_resolution.1 as f32,
-        );
+        let dim = frame_buffer_resolution.0.max(frame_buffer_resolution.1) as f32;
         Self {
             bytes_per_pixel: bytes_per_pixel,
             stride: (x1 - x0),
@@ -57,7 +57,7 @@ impl Tile {
             local_buffer: vec![0.0; (y1 - y0) * (x1 - x0) * bytes_per_pixel],
             frame_buffer: frame_buffer,
             frame_buffer_resolution,
-            pixel_size,
+            dim,
         }
     }
 }
@@ -87,10 +87,8 @@ impl TileRenderer {
         let tile_width = (self.resolution.0 + self.thread_count - 1) / self.thread_count;
         let tile_height = (self.resolution.1 + self.thread_count - 1) / self.thread_count;
 
-        let mut threads = vec![];
-
-        for y in 0..self.thread_count {
-            for x in 0..self.thread_count {
+        (0..self.thread_count).into_iter().for_each(|y| {
+            (0..self.thread_count).into_iter().for_each(|x| {
                 let tile = Tile::new(
                     x * tile_width,
                     y * tile_height,
@@ -101,22 +99,19 @@ impl TileRenderer {
                     self.resolution,
                 );
                 let scene = self.scene.clone();
-                threads.push(thread::spawn(move || {
-                    TileRenderer::render_tile(tile, scene);
-                }));
-            }
-        }
-
-        for t in threads {
-            t.join().unwrap();
-        }
+                TileRenderer::render_tile(tile, scene);
+            })
+        });
 
         let u8_frame_buffer = self
             .frame_buffer
             .lock()
             .unwrap()
             .iter()
-            .map(|channel| ((channel * 255.0).clamp(0.0, 255.0)) as u8)
+            .map(|&channel| {
+                let corrected = channel.powf(1.0 / 2.2);
+                (corrected * 255.0) as u8
+            })
             .collect::<Vec<u8>>();
 
         let image = RgbImage::from_vec(
@@ -149,16 +144,28 @@ impl TileRenderer {
     }
 
     pub fn render_tile(mut tile: Tile, scene: Arc<Scene>) {
-        let mut rng = Rng::new();
-        let mut current_spp = 0;
-        while current_spp < scene.target_spp {
-            let branch_count = scene.get_current_branch_count(current_spp);
-            let sin_v = 1.0 / (branch_count + current_spp) as f32;
+        let mut rng = StdRng::from_entropy();
 
-            for y in tile.y0..tile.y1 {
-                for x in tile.x0..tile.x1 {
-                    //println!("x:{}, y:{}", x, y);
-                    let color = scene.get_pixel_color(x as u32, y as u32, &mut rng, current_spp);
+        for y in tile.y0..tile.y1 {
+            for x in tile.x0..tile.x1 {
+                let x_normalized =
+                    ((2 * x + 1) as f32 - tile.frame_buffer_resolution.0 as f32) / tile.dim;
+                let y_normalized = ((2 * (tile.frame_buffer_resolution.1 - y) - 1) as f32
+                    - tile.frame_buffer_resolution.1 as f32)
+                    / tile.dim;
+                let mut current_spp = 0;
+                while current_spp < scene.target_spp {
+                    let branch_count = scene.get_current_branch_count(current_spp);
+                    let sin_v = 1.0 / (branch_count + current_spp) as f32;
+
+                    let dx = rng.gen_range((-1.0 / tile.dim)..(1.0 / tile.dim));
+                    let dy = rng.gen_range((-1.0 / tile.dim)..(1.0 / tile.dim));
+                    let color = scene.get_color(
+                        x_normalized + dx,
+                        y_normalized + dy,
+                        &mut rng,
+                        current_spp,
+                    );
                     let local_buffer_idx = Self::get_pixel_index(
                         x - tile.x0,
                         y - tile.y0,
@@ -174,10 +181,11 @@ impl TileRenderer {
                         (tile.local_buffer[local_buffer_idx + 1] * current_spp as f32 + g) * sin_v;
                     tile.local_buffer[local_buffer_idx + 2] =
                         (tile.local_buffer[local_buffer_idx + 2] * current_spp as f32 + b) * sin_v;
+                    current_spp += branch_count;
                 }
             }
-            current_spp += branch_count;
         }
+
         let mut frame_buffer = tile.frame_buffer.lock().unwrap();
         for y in tile.y0..tile.y1 {
             for x in tile.x0..tile.x1 {

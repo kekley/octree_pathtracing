@@ -1,8 +1,10 @@
 use core::f32;
 use std::f32::consts::PI;
 
-use fastrand::Rng;
-use glam::Vec3A;
+use rand::{rngs::StdRng, Rng};
+
+use glam::{Vec2, Vec3A};
+use rand_distr::{Distribution, UnitDisc};
 
 #[inline]
 pub fn degrees_to_rads(degrees: f32) -> f32 {
@@ -10,17 +12,17 @@ pub fn degrees_to_rads(degrees: f32) -> f32 {
 }
 
 #[inline]
-pub fn random_float(rng: &mut Rng) -> f32 {
-    rng.f32()
+pub fn random_float(rng: &mut StdRng) -> f32 {
+    rng.gen::<f32>()
 }
 
 #[inline]
-pub fn random_int(rng: &mut Rng, min: i64, max: i64) -> i64 {
+pub fn random_int(rng: &mut StdRng, min: i64, max: i64) -> i64 {
     random_float(rng) as i64
 }
 
 #[inline]
-pub fn random_float_in_range(rng: &mut Rng, min: f32, max: f32) -> f32 {
+pub fn random_float_in_range(rng: &mut StdRng, min: f32, max: f32) -> f32 {
     return min + (max - min) * random_float(rng);
 }
 
@@ -33,12 +35,12 @@ pub fn linear_to_gamma(linear_component: f32) -> f32 {
     }
 }
 #[inline]
-pub fn random_vec(rng: &mut Rng) -> Vec3A {
+pub fn random_vec(rng: &mut StdRng) -> Vec3A {
     Vec3A::new(random_float(rng), random_float(rng), random_float(rng))
 }
 #[inline]
 
-pub fn random_vec_in_range(rng: &mut Rng, min: f32, max: f32) -> Vec3A {
+pub fn random_vec_in_range(rng: &mut StdRng, min: f32, max: f32) -> Vec3A {
     Vec3A::new(
         random_float_in_range(rng, min, max),
         random_float_in_range(rng, min, max),
@@ -47,7 +49,7 @@ pub fn random_vec_in_range(rng: &mut Rng, min: f32, max: f32) -> Vec3A {
 }
 #[inline]
 
-pub fn random_unit_vec(rng: &mut Rng) -> Vec3A {
+pub fn random_unit_vec(rng: &mut StdRng) -> Vec3A {
     loop {
         let p = random_vec_in_range(rng, -1.0, 1.0);
         let len_sq = p.length_squared();
@@ -58,7 +60,7 @@ pub fn random_unit_vec(rng: &mut Rng) -> Vec3A {
     }
 }
 #[inline]
-pub fn random_on_hemisphere(rng: &mut Rng, normal: Vec3A) -> Vec3A {
+pub fn random_on_hemisphere(rng: &mut StdRng, normal: Vec3A) -> Vec3A {
     let on_sphere = random_unit_vec(rng);
     if on_sphere.dot(normal) > 0.0 {
         return on_sphere;
@@ -74,39 +76,33 @@ pub fn step(edge: f32, x: f32) -> f32 {
         false => 1.0,
     }
 }
-
+pub fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
+    let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
 pub fn step_vec(edge: f32, x: Vec3A) -> Vec3A {
     Vec3A::new(step(edge, x.x), step(edge, x.y), step(edge, x.z))
 }
 
 #[inline]
-pub fn random_in_unit_disk(rng: &mut Rng) -> Vec3A {
-    loop {
-        let p = Vec3A::new(
-            random_float_in_range(rng, -1.0, 1.0),
-            random_float_in_range(rng, -1.0, 1.0),
-            0.0,
-        );
-
-        if p.length_squared() < 1.0 {
-            return p;
-        }
-    }
+pub fn random_in_unit_disk(rng: &mut StdRng) -> Vec2 {
+    let a: [f32; 2] = UnitDisc.sample(rng);
+    Vec2::from_array(a)
 }
 
-pub fn near_zero(Vec3A: &Vec3A) -> bool {
+pub fn near_zero(vec: &Vec3A) -> bool {
     let s = 1e-8;
-    Vec3A.x.abs() < s && Vec3A.y.abs() < s && Vec3A.z.abs() < s
+    vec.x.abs() < s && vec.y.abs() < s && vec.z.abs() < s
 }
 
-pub fn defocus_disk_sample(rng: &mut Rng, center: Vec3A, disc_u: Vec3A, disc_v: Vec3A) -> Vec3A {
+pub fn defocus_disk_sample(rng: &mut StdRng, center: Vec3A, disc_u: Vec3A, disc_v: Vec3A) -> Vec3A {
     let p = random_in_unit_disk(rng);
     center + (p.x * disc_u) + (p.y * disc_v)
 }
 
 #[inline]
-pub fn sample_square(rng: &mut Rng) -> Vec3A {
-    Vec3A::new(random_float(rng) - 0.5, random_float(rng) - 0.5, 0.0)
+pub fn sample_square(rng: &mut StdRng) -> Vec2 {
+    Vec2::new(random_float(rng) - 0.5, random_float(rng) - 0.5)
 }
 pub fn find_msb(mut x: i32) -> i32 {
     let mut res = -1;
@@ -122,7 +118,6 @@ pub fn find_msb(mut x: i32) -> i32 {
     }
     res
 }
-
 pub fn angle_distance(a1: f32, a2: f32) -> f32 {
     let diff = (a1 - a2).abs() % (2.0 * PI);
     if diff > PI {

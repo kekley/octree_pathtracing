@@ -5,10 +5,11 @@ use crate::{
     material, random_float, texture, EmitterSamplingStrategy, Material, MaterialFlags, Ray, Scene,
     Texture,
 };
-use fastrand::Rng;
+use rand::rngs::StdRng;
+
 use glam::{Vec3A, Vec4, Vec4Swizzles};
 pub fn path_trace(
-    rng: &mut Rng,
+    rng: &mut StdRng,
     scene: &Scene,
     ray: &mut Ray,
     first_reflection: bool,
@@ -21,9 +22,7 @@ pub fn path_trace(
         if !next_intersection(scene, ray) {
             if ray.hit.depth == 0 {
                 //direct sky hit
-                scene.get_sky_color_inner(ray);
-                scene.add_sun_color(ray);
-                ray.hit.color.w = 1.0;
+                scene.get_sky_color_interp(ray);
                 hit = true;
             } else if ray.hit.specular {
                 scene.get_sky_color(ray, true);
@@ -65,7 +64,7 @@ pub fn path_trace(
             1
         };
 
-        for _ in 0..0 {
+        for _ in 0..count {
             let do_metal = metal > Ray::EPSILON && random_float(rng) < metal;
             if do_metal || (specular > Ray::EPSILON && random_float(rng) < specular) {
                 hit |= do_specular_reflection(
@@ -119,11 +118,10 @@ pub fn path_trace(
             }
         }
 
-        //ray.hit.color = cumm_color / count as f32;
+        ray.hit.color = cumm_color / count as f32;
 
         break;
     }
-    hit = true;
     if !hit {
         ray.hit.color = Vec4::new(0.0, 0.0, 0.0, 1.0);
         if first_reflection {
@@ -133,12 +131,29 @@ pub fn path_trace(
     hit
 }
 
+pub fn flat_shading(rng: &mut StdRng, scene: &Scene, ray: &mut Ray, attenuation: &mut Vec4) {
+    loop {
+        if !next_intersection(scene, ray) {
+            break;
+        } else {
+            ray.origin = ray.at(Ray::OFFSET);
+        }
+    }
+
+    if ray.hit.current_material == 0 {
+        scene.get_sky_color_inner(ray);
+        scene.add_sun_color(ray);
+    } else {
+        scene.sun.flat_shading(ray);
+    }
+}
+
 pub fn do_specular_reflection(
     ray: &Ray,
     next: &mut Ray,
     cumulative_color: &mut Vec4,
     do_metal: bool,
-    rng: &mut Rng,
+    rng: &mut StdRng,
     scene: &Scene,
     attenuation: &mut Vec4,
     current_spp: u32,
@@ -172,7 +187,7 @@ pub fn do_diffuse_reflection(
     next: &mut Ray,
     cumulative_color: &mut Vec4,
     material: &material::Material,
-    rng: &mut Rng,
+    rng: &mut StdRng,
     scene: &Scene,
     attenuation: &mut Vec4,
     current_spp: u32,
@@ -219,7 +234,6 @@ pub fn do_diffuse_reflection(
                 .contains(MaterialFlags::SUBSURFACE_SCATTER)
                 && random_float(rng) < scene.f_sub_surface)
         {
-            println!("zenis");
             if !front_light {
                 next.origin += -Ray::OFFSET * ray.hit.normal;
             }
@@ -307,7 +321,7 @@ pub fn do_refraction(
     ior1: f32,
     ior2: f32,
     absorption: f32,
-    rng: &mut Rng,
+    rng: &mut StdRng,
     scene: &Scene,
     attenuation: &mut Vec4,
     current_spp: u32,
@@ -391,7 +405,7 @@ pub fn do_transmission(
     absorption: f32,
     scene: &Scene,
     attenuation: &mut Vec4,
-    rng: &mut Rng,
+    rng: &mut StdRng,
     current_spp: u32,
 ) -> bool {
     println!("transmission");
@@ -425,12 +439,10 @@ pub fn translucent_ray_color(
 pub fn next_intersection(scene: &Scene, ray: &mut Ray) -> bool {
     ray.hit.previous_material = ray.hit.current_material;
     ray.hit.t = INFINITY;
-    let mut hit = false;
     if scene.hit(ray) {
         return true;
     }
 
-    ray.hit.current_material = 0;
     return false;
 }
 

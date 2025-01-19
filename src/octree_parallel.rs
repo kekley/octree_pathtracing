@@ -58,7 +58,6 @@ impl Octree<u32> {
             } = tree;
 
             if root.is_some() {
-                println!("depth: {}", depth);
                 let root = root.unwrap();
                 if depth != subtree_depth {
                     return;
