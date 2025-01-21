@@ -237,6 +237,15 @@ impl Scene {
             }
 
             let normal = Face::to_normal(intersection.face);
+            let hit_pos = ray.at(t.0);
+            let uv  = match intersection.face {
+                Face::West => {Vec2::new(, y)},
+                Face::East => todo!(),
+                Face::Bottom => todo!(),
+                Face::Top => todo!(),
+                Face::South => todo!(),
+                Face::North => todo!(),
+            };
 
             ray.hit.previous_material = ray.hit.previous_material;
             ray.hit.t = t.0;
