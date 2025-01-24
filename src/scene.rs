@@ -1,10 +1,4 @@
-use std::{
-    f32::{
-        consts::{FRAC_PI_8, PI},
-        EPSILON, NEG_INFINITY,
-    },
-    sync::Arc,
-};
+use std::{f32::consts::PI, sync::Arc};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EmitterSamplingStrategy {
@@ -238,8 +232,8 @@ impl Scene {
 
             let normal = Face::to_normal(intersection.face);
             let hit_pos = ray.at(t.0);
-            let uv  = match intersection.face {
-                Face::West => {Vec2::new(, y)},
+            let uv = match intersection.face {
+                Face::West => todo!(),
                 Face::East => todo!(),
                 Face::Bottom => todo!(),
                 Face::Top => todo!(),

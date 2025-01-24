@@ -16,6 +16,7 @@ pub enum Face {
     North = 5,
 }
 
+
 impl Face {
     pub fn to_normal(face: Face) -> Vec3A {
         match face {

@@ -1,4 +1,7 @@
-use std::array::{self, from_fn};
+use std::{
+    array::{self, from_fn},
+    rc::Rc,
+};
 
 use crate::rtw_image::RTWImage;
 use glam::{Vec3A, Vec4};
@@ -10,8 +13,8 @@ pub enum Texture {
     Image(RTWImage),
     CheckerBoard {
         inv_scale: f32,
-        a: Box<Texture>,
-        b: Box<Texture>,
+        a: Rc<Texture>,
+        b: Rc<Texture>,
     },
 }
 lazy_static! {

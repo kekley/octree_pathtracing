@@ -1,3 +1,5 @@
+use std::{rc::Rc, sync::Arc};
+
 use stb_image::image::load;
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -25,8 +27,8 @@ impl TryFrom<u32> for BytesPerPixel {
 #[derive(Debug, Clone)]
 pub struct RTWImage {
     bytes_per_pixel: BytesPerPixel,
-    fdata: Vec<f32>,
-    bdata: Vec<u8>,
+    fdata: Rc<[f32]>,
+    bdata: Rc<[u8]>,
     pub image_width: u32,
     pub image_height: u32,
     bytes_per_scanline: u32,
@@ -34,14 +36,6 @@ pub struct RTWImage {
 
 impl RTWImage {
     pub fn load(file_path: &str) -> Result<Self, String> {
-        let mut tmp = Self {
-            bytes_per_pixel: BytesPerPixel::default(),
-            fdata: vec![],
-            bdata: vec![],
-            image_width: 0,
-            image_height: 0,
-            bytes_per_scanline: 0,
-        };
         //println!("{}", file_path);
         let load_result = load(file_path);
         match load_result {
@@ -50,23 +44,42 @@ impl RTWImage {
                 return Err(file_path.to_string());
             }
             stb_image::image::LoadResult::ImageU8(image) => {
-                tmp.bdata = image.data;
-                tmp.image_width = image.width as u32;
-                tmp.image_height = image.height as u32;
-                tmp.bytes_per_pixel = BytesPerPixel::try_from(image.depth as u32)?;
-                tmp.bytes_per_scanline = tmp.image_width * image.depth as u32;
-                tmp.convert_to_floats();
+                let bdata = image.data;
+                let image_width = image.width as u32;
+                let image_height = image.height as u32;
+                let bytes_per_pixel = BytesPerPixel::try_from(image.depth as u32)?;
+                let bytes_per_scanline = image_width * image.depth as u32;
+                let fdata = Self::convert_to_floats(&bdata);
+                let bdata: Rc<[u8]> = Rc::from(bdata);
+                let fdata: Rc<[f32]> = Rc::from(fdata);
+                return Ok(RTWImage {
+                    bytes_per_pixel,
+                    fdata,
+                    bdata,
+                    image_width,
+                    image_height,
+                    bytes_per_scanline,
+                });
             }
             stb_image::image::LoadResult::ImageF32(image) => {
-                tmp.fdata = image.data;
-                tmp.image_width = image.width as u32;
-                tmp.image_height = image.height as u32;
-                tmp.bytes_per_pixel = BytesPerPixel::try_from(image.depth as u32)?;
-                tmp.bytes_per_scanline = tmp.image_width * image.depth as u32;
-                tmp.convert_to_bytes();
+                let fdata = image.data;
+                let image_width = image.width as u32;
+                let image_height = image.height as u32;
+                let bytes_per_pixel = BytesPerPixel::try_from(image.depth as u32)?;
+                let bytes_per_scanline = image_width * image.depth as u32;
+                let bdata = Self::convert_to_bytes(&fdata);
+                let bdata: Rc<[u8]> = Rc::from(bdata);
+                let fdata: Rc<[f32]> = Rc::from(fdata);
+                return Ok(RTWImage {
+                    bytes_per_pixel,
+                    fdata,
+                    bdata,
+                    image_width,
+                    image_height,
+                    bytes_per_scanline,
+                });
             }
         }
-        Ok(tmp)
     }
 
     pub fn float_to_byte(value: f32) -> u8 {
@@ -84,23 +97,21 @@ impl RTWImage {
         value as f32 / 255.0
     }
 
-    pub fn convert_to_bytes(&mut self) {
-        self.bdata.clear();
-
-        let total_bytes = self.image_height * self.image_width * self.bytes_per_pixel as u32;
-        self.bdata.reserve(total_bytes.try_into().unwrap());
-        self.fdata.iter().for_each(|f| {
-            self.bdata.push(Self::float_to_byte(*f));
+    pub fn convert_to_bytes(floats: &Vec<f32>) -> Vec<u8> {
+        let total_bytes = floats.len();
+        let mut bytes = Vec::with_capacity(total_bytes);
+        floats.iter().for_each(|f| {
+            bytes.push(Self::float_to_byte(*f));
         });
+        bytes
     }
-    pub fn convert_to_floats(&mut self) {
-        self.fdata.clear();
-
-        let total_bytes = self.image_height * self.image_width * self.bytes_per_pixel as u32;
-        self.fdata.reserve(total_bytes.try_into().unwrap());
-        self.bdata.iter().for_each(|f| {
-            self.fdata.push(Self::byte_to_float(*f));
+    pub fn convert_to_floats(bytes: &Vec<u8>) -> Vec<f32> {
+        let total_bytes = bytes.len();
+        let mut floats = Vec::with_capacity(total_bytes);
+        bytes.iter().for_each(|f| {
+            floats.push(Self::byte_to_float(*f));
         });
+        floats
     }
 
     pub fn pixel_data(&self, mut x: u32, mut y: u32) -> [u8; 4] {

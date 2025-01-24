@@ -14,15 +14,79 @@ bitflags! {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct Scatter {
-    pub ray: Ray,
-    pub color: Vec3A,
+impl Default for MaterialFlags {
+    fn default() -> Self {
+        Self::OPAQUE | Self::SOLID
+    }
 }
 
-impl Scatter {
-    pub fn new(ray: Ray, color: Vec3A) -> Self {
-        Self { ray, color }
+pub struct MaterialBuilder {
+    name: SmolStr,
+    index_of_refraction: Option<f32>,
+    material_flags: Option<MaterialFlags>,
+    specular: Option<f32>,
+    emittance: Option<f32>,
+    roughness: Option<f32>,
+    metalness: Option<f32>,
+    albedo: Option<Texture>,
+}
+
+impl MaterialBuilder {
+    pub fn build(self) -> Material {
+        const DEFAULT_IOR: f32 = 1.000293;
+
+        Material {
+            name: self.name,
+            index_of_refraction: self.index_of_refraction.unwrap_or(DEFAULT_IOR),
+            material_flags: self.material_flags.unwrap_or(MaterialFlags::default()),
+            specular: self.specular.unwrap_or(0.0),
+            emittance: self.emittance.unwrap_or(0.0),
+            roughness: self.roughness.unwrap_or(0.0),
+            metalness: self.metalness.unwrap_or(0.0),
+            albedo: Texture::DEFAULT_TEXTURE,
+        }
+    }
+    pub fn index_of_refraction(self, ior: f32) -> Self {
+        Self {
+            index_of_refraction: Some(ior),
+            ..self
+        }
+    }
+    pub fn specular(self, specular: f32) -> Self {
+        Self {
+            specular: Some(specular),
+            ..self
+        }
+    }
+    pub fn emittance(self, emittance: f32) -> Self {
+        Self {
+            emittance: Some(emittance),
+            ..self
+        }
+    }
+    pub fn roughness(self, roughness: f32) -> Self {
+        Self {
+            roughness: Some(roughness),
+            ..self
+        }
+    }
+    pub fn metalness(self, metalness: f32) -> Self {
+        Self {
+            metalness: Some(metalness),
+            ..self
+        }
+    }
+    pub fn albedo(self, albedo: Texture) -> Self {
+        Self {
+            albedo: Some(albedo),
+            ..self
+        }
+    }
+    pub fn material_flags(self, material_flags: MaterialFlags) -> Self {
+        Self {
+            material_flags: Some(material_flags),
+            ..self
+        }
     }
 }
 
@@ -39,20 +103,22 @@ pub struct Material {
 }
 
 impl Material {
-    const DEFAULT_IOR: f32 = 1.000293;
+    pub fn new(name: SmolStr) -> MaterialBuilder {
+        MaterialBuilder {
+            name: name,
+            index_of_refraction: None,
+            material_flags: None,
+            specular: None,
+            emittance: None,
+            roughness: None,
+            metalness: None,
+            albedo: None,
+        }
+    }
 }
 
 impl Default for Material {
     fn default() -> Self {
-        Self {
-            name: "default".into(),
-            index_of_refraction: Self::DEFAULT_IOR,
-            specular: 0.0,
-            emittance: 0.0,
-            roughness: 0.0,
-            metalness: 0.0,
-            material_flags: MaterialFlags::OPAQUE | MaterialFlags::SOLID,
-            albedo: Texture::DEFAULT_TEXTURE,
-        }
+        Material::new(SmolStr::new("DEFAULT")).build()
     }
 }
