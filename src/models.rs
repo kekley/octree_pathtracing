@@ -5,6 +5,7 @@ use rayon::array;
 use spider_eye::{
     block_models::{BlockModel, BlockRotation, IntermediateBlockModel},
     block_texture::{BlockTextures, TextureVariable},
+    variant::Variant,
 };
 
 use crate::{material, Material, MaterialBuilder, Quad, RTWImage, Ray, Texture};
@@ -14,10 +15,6 @@ pub struct SingleBlockModel {
     rotation: BlockRotation,
 }
 impl SingleBlockModel {}
-
-pub struct MultiBlockModel {
-    blocks: Vec<SingleBlockModel>,
-}
 
 pub struct QuadModel {
     quads: Vec<Quad>,
@@ -59,56 +56,5 @@ impl QuadModel {
             ray.origin = ray.at(ray.hit.t);
         }
         hit
-    }
-}
-
-pub enum MinecraftModel {
-    SingleBlock(SingleBlockModel),
-    Quad(QuadModel),
-}
-pub enum ModelType {
-    SingleAABB,
-    MultiAABB,
-    Quads,
-}
-
-impl MinecraftModel {
-    fn from_variant(variant: VariantModel) -> MinecraftModel {
-        MinecraftModel::from_block_model(BlockModel::load("s"))
-    }
-    fn from_block_model(block_model: BlockModel) -> MinecraftModel {
-        match Self::determine_model_type(&block_model) {
-            ModelType::SingleAABB => todo!(),
-            ModelType::MultiAABB => todo!(),
-            ModelType::Quads => todo!(),
-        }
-    }
-    fn determine_model_type(block_model: &BlockModel) -> ModelType {
-        match block_model.elements.len() {
-            0 => {
-                panic!("no elements")
-            }
-            1 => {
-                if block_model.elements[0].is_axis_aligned() && block_model.elements[0].is_cube() {
-                    return ModelType::SingleAABB;
-                } else {
-                    return ModelType::Quads;
-                }
-            }
-            2..=usize::MAX => {
-                let is_aabb = block_model
-                    .elements
-                    .iter()
-                    .any(|element| element.is_axis_aligned() && element.is_cube());
-                if is_aabb {
-                    return ModelType::MultiAABB;
-                } else {
-                    return ModelType::Quads;
-                }
-            }
-            _ => {
-                panic!("")
-            }
-        }
     }
 }

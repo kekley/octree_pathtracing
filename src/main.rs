@@ -52,29 +52,30 @@ fn blocks() -> Result<(), anyhow::Error> {
             return block;
         }
     };
-    let mut tree: Octree<u32> = Octree::construct_parallel(8, &f);
+    let mut tree: Octree<u32> = Octree::construct_parallel(9, &f);
     let arc = Arc::new(tree);
     //println!("{:?}", tree);
     println!("octree built");
     scene.octree = arc;
     let textures = world
         .global_palette
-        .read()
-        .unwrap()
-        .keys()
         .into_iter()
-        .filter_map(|str| {
+        .filter_map(|state| {
             //println!("{}", str);
-            if str.contains("grass") {
+            if state.block.contains("grass") {
                 return Some("grass_block".to_string());
             }
-            if str.contains("leaves") {
+            if state.block.contains("leaves") {
                 return Some("leaves".to_string());
             }
-            if str.contains("water") {
+            if state.block.contains("water") {
                 return Some("water".to_string());
             }
-            let new_string = str.strip_prefix("minecraft:").unwrap_or(&str).to_string();
+            let new_string = state
+                .block
+                .strip_prefix("minecraft:")
+                .unwrap_or(&state.block)
+                .to_string();
             return Some(new_string);
         })
         .collect::<Vec<String>>();
