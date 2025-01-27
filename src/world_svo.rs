@@ -3,7 +3,10 @@ use std::sync::{Arc, Mutex};
 use dashmap::DashMap;
 use glam::UVec3;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use spider_eye::{Chunk, ChunkCoords, World, WorldCoords};
+use spider_eye::{
+    chunk::Chunk,
+    loaded_world::{ChunkCoords, World, WorldCoords},
+};
 
 use crate::{octree, Octree};
 const WORLD_SIZE: usize = 10;

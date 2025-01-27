@@ -12,7 +12,9 @@ use ray_tracing::TileRenderer;
 use ray_tracing::{MaterialFlags, Octree, Position, RTWImage, Scene, Texture};
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
-use spider_eye::{World, WorldCoords};
+use spider_eye::block_states::BlockState;
+use spider_eye::loaded_world::World;
+use spider_eye::loaded_world::WorldCoords;
 pub const ASPECT_RATIO: f32 = 1.5;
 
 fn main() -> Result<(), anyhow::Error> {
@@ -31,7 +33,7 @@ fn blocks() -> Result<(), anyhow::Error> {
     );
 
     let mut scene = Scene::new().branch_count(10).camera(camera).spp(20).build();
-    let world = World::new("./server");
+    let world = World::new("./world");
 
     let f = |position: UVec3| -> Option<u32> {
         let UVec3 { x, y, z } = position;
@@ -62,19 +64,19 @@ fn blocks() -> Result<(), anyhow::Error> {
         .into_iter()
         .filter_map(|state| {
             //println!("{}", str);
-            if state.block.contains("grass") {
+            if state.block_name().contains("grass") {
                 return Some("grass_block".to_string());
             }
-            if state.block.contains("leaves") {
+            if state.block_name().contains("leaves") {
                 return Some("leaves".to_string());
             }
-            if state.block.contains("water") {
+            if state.block_name().contains("water") {
                 return Some("water".to_string());
             }
             let new_string = state
-                .block
+                .block_name()
                 .strip_prefix("minecraft:")
-                .unwrap_or(&state.block)
+                .unwrap_or(&state.block_name())
                 .to_string();
             return Some(new_string);
         })
