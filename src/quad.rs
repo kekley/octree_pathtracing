@@ -16,6 +16,31 @@ pub struct Quad {
 }
 
 impl Quad {
+    //uv Minimum and maximum U/V texture coordinates (x0,y0 bottom left)
+    pub fn new(v0: Vec3A, v1: Vec3A, v2: Vec3A, uv: Vec4, material: Material) -> Self {
+        let origin = v0;
+        let xv = v1 - v0;
+        let xvl = 1.0 / xv.length_squared();
+        let yv = v2 - v0;
+        let yvl = 1.0 / yv.length_squared();
+        let n = xv.cross(yv).normalize();
+        let d = -n.dot(origin);
+        let mut uv = uv;
+        uv.y -= uv.x;
+        uv.w -= uv.z;
+        Self {
+            origin,
+            xv,
+            yv,
+            uv,
+            d,
+            xvl,
+            yvl,
+            normal: n,
+            material,
+            tint: Vec4::ONE,
+        }
+    }
     pub fn hit(&self, ray: &mut Ray) -> bool {
         let (u, v): (f32, f32);
 

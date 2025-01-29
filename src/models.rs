@@ -11,8 +11,7 @@ use spider_eye::{
 use crate::{material, Material, MaterialBuilder, Quad, RTWImage, Ray, Texture};
 
 pub struct SingleBlockModel {
-    materials: [Material; 6],
-    rotation: BlockRotation,
+    pub materials: [Material; 6],
 }
 impl SingleBlockModel {}
 
