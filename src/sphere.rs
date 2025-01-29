@@ -3,6 +3,7 @@ use std::f32::INFINITY;
 
 use crate::aabb::AABB;
 use crate::ray::Ray;
+use crate::Material;
 use glam::Vec3A;
 
 #[derive(Debug, Clone)]
@@ -54,7 +55,7 @@ impl Sphere {
         ray.hit.u = u;
         ray.hit.v = v;
         ray.hit.normal = outward_normal;
-        ray.hit.current_material = self.material_idx;
+        ray.hit.current_material = Material::default();
     }
 
     pub fn get_uv(point: Vec3A) -> (f32, f32) {

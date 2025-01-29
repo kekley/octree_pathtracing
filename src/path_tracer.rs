@@ -34,8 +34,8 @@ pub fn path_trace(
             break;
         }
         //println!("hit!");
-        let current_material = &scene.materials[ray.hit.current_material as usize];
-        let prev_material = &scene.materials[ray.hit.previous_material as usize];
+        let current_material = ray.hit.current_material.clone();
+        let prev_material = ray.hit.previous_material.clone();
 
         let specular = current_material.specular;
         let diffuse = ray.hit.color.w;
@@ -140,7 +140,7 @@ pub fn flat_shading(rng: &mut StdRng, scene: &Scene, ray: &mut Ray, attenuation:
         }
     }
 
-    if ray.hit.current_material == 0 {
+    if ray.hit.current_material.name == "air" {
         scene.get_sky_color_inner(ray);
         scene.add_sun_color(ray);
     } else {
@@ -161,10 +161,7 @@ pub fn do_specular_reflection(
     println!("specular");
 
     let mut hit = false;
-    *next = ray.specular_reflection(
-        scene.materials[ray.hit.current_material as usize].roughness,
-        rng,
-    );
+    *next = ray.specular_reflection(ray.hit.current_material.roughness, rng);
 
     if path_trace(rng, scene, next, false, attenuation, current_spp) {
         if do_metal {
@@ -238,7 +235,7 @@ pub fn do_diffuse_reflection(
                 next.origin += -Ray::OFFSET * ray.hit.normal;
             }
 
-            next.hit.current_material = next.hit.previous_material;
+            next.hit.current_material = next.hit.previous_material.clone();
 
             get_direct_light_attenuation(scene, next, attenuation);
 
@@ -437,7 +434,7 @@ pub fn translucent_ray_color(
     *cumulative_color += output_color;
 }
 pub fn next_intersection(scene: &Scene, ray: &mut Ray) -> bool {
-    ray.hit.previous_material = ray.hit.current_material;
+    ray.hit.previous_material = ray.hit.current_material.clone();
     ray.hit.t = INFINITY;
     if scene.hit(ray) {
         return true;
@@ -460,8 +457,8 @@ pub fn get_direct_light_attenuation(scene: &Scene, ray: &mut Ray, attenuation: &
         attenuation.w *= mult;
 
         if scene.sun_sampling_strategy.strict_direct_light
-            && scene.materials[ray.hit.previous_material as usize].index_of_refraction
-                != scene.materials[ray.hit.current_material as usize].index_of_refraction
+            && ray.hit.previous_material.index_of_refraction
+                != ray.hit.current_material.index_of_refraction
         {
             attenuation.w = 0.0;
             println!("umm");

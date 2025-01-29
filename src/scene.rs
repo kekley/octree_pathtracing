@@ -116,7 +116,7 @@ impl SunSamplingStrategy {
 
 use crate::{
     axis::Axis, flat_shading, path_trace, random_float, BVHTree, Camera, Cuboid, Face, Material,
-    OctantId, Octree, Ray, Sphere, Texture, AABB,
+    OctantId, Octree, Ray, ResourceManager, Sphere, Texture, AABB,
 };
 
 use rand::rngs::StdRng;
@@ -131,7 +131,7 @@ pub struct Scene {
     pub emitter_sampling_strategy: EmitterSamplingStrategy,
     pub f_sub_surface: f32,
     pub octree: Arc<Octree<u32>>,
-    pub materials: Arc<Vec<Material>>,
+    pub resources: ResourceManager,
     pub target_spp: u32,
     pub branch_count: u32,
     pub camera: Camera,
@@ -156,7 +156,7 @@ impl SceneBuilder {
                 false,
                 Vec3A::splat(1.0),
             ),
-            materials: Arc::new(Vec::new()),
+            resources: ResourceManager::new(),
             branch_count: self.branch_count.unwrap_or(1),
             camera: self.camera.unwrap(),
             octree: Arc::new(Octree::new()),
@@ -217,40 +217,11 @@ impl Scene {
         let intersection = self.octree.intersect_octree(ray, max_dst);
         hit = intersection.is_some();
         if hit {
-            let intersection = intersection.unwrap();
-            let bounds = AABB::from_points(
-                intersection.voxel_position,
-                intersection.voxel_position + 1.0,
-            );
-            let t = bounds.intersects_new(ray);
-            if !t.0.is_finite() {
-                println!("ray: {:?}", ray);
-                println!("box: {:?}", bounds);
-                println!("{:?}", t);
-                panic!();
-            }
+            let intersection = intersection.as_ref().unwrap();
 
-            let normal = Face::to_normal(intersection.face);
-            let hit_pos = ray.at(t.0);
-            let uv = match intersection.face {
-                Face::West => todo!(),
-                Face::East => todo!(),
-                Face::Bottom => todo!(),
-                Face::Top => todo!(),
-                Face::South => todo!(),
-                Face::North => todo!(),
-            };
+            let model = self.resources.get_model(*intersection.ty);
+            model.intersect(ray, intersection);
 
-            ray.hit.previous_material = ray.hit.previous_material;
-            ray.hit.t = t.0;
-            ray.origin = ray.at(t.0);
-            ray.hit.normal = normal;
-            ray.hit.current_material = *intersection.ty as u16;
-            ray.hit.u = intersection.uv.x;
-            ray.hit.v = intersection.uv.y;
-
-            let mat = &self.materials[*intersection.ty as usize];
-            Cuboid::intersect_texture(ray, mat);
             return true;
         }
 

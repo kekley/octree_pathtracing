@@ -1,17 +1,18 @@
 use core::f32;
 use std::f32::{consts::PI, INFINITY};
 
-use crate::{angle_distance, random_float, scene, HitRecord, Scene, Sun};
+use crate::{angle_distance, random_float, scene, HitRecord, Material, Scene, Sun};
 use rand::rngs::StdRng;
 
 use glam::{DMat3, Mat3A, Vec3A, Vec4};
+use smol_str::SmolStr;
 
 #[derive(Debug, Clone, Default)]
 pub struct Ray {
     pub(crate) origin: Vec3A,
     pub(crate) direction: Vec3A,
     pub(crate) distance_travelled: f32,
-    pub(crate) hit: HitRecord<u16>,
+    pub(crate) hit: HitRecord<Material>,
 }
 
 impl Ray {
@@ -42,9 +43,9 @@ impl Ray {
                 t_next: 0.0,
                 u: self.hit.u,
                 v: self.hit.v,
-                current_material: self.hit.current_material,
+                current_material: self.hit.current_material.clone(),
                 normal: self.hit.normal,
-                previous_material: self.hit.previous_material,
+                previous_material: self.hit.previous_material.clone(),
                 color: Vec4::ZERO,
                 depth: self.hit.depth,
                 specular: self.hit.specular,
@@ -75,15 +76,15 @@ impl Ray {
                 t_next: INFINITY,
                 u: 0.0,
                 v: 0.0,
-                current_material: self.hit.current_material,
+                current_material: self.hit.current_material.clone(),
                 normal: self.hit.normal,
-                previous_material: self.hit.previous_material,
+                previous_material: self.hit.previous_material.clone(),
                 color: Vec4::ZERO,
                 depth: self.hit.depth,
                 specular: self.hit.specular,
             },
         };
-        tmp.hit.current_material = tmp.hit.previous_material;
+        tmp.hit.current_material = tmp.hit.previous_material.clone();
 
         if roughness > Ray::EPSILON {
             let mut specular_dir = self.direction;
@@ -301,7 +302,7 @@ impl Ray {
         self.origin = self.at(Ray::OFFSET);
         //println!("new_dir: {:?}", new_dir);
 
-        self.hit.current_material = self.hit.previous_material;
+        self.hit.current_material = self.hit.previous_material.clone();
         self.hit.specular = false;
 
         /*         if (normal.dot(self.direction)).signum() == (normal.dot(ray.direction)).signum() {

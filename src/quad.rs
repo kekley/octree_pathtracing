@@ -1,7 +1,7 @@
-use glam::{Vec3, Vec3A, Vec4};
+use glam::{Mat3A, Vec3, Vec3A, Vec4};
 
 use crate::{Material, Ray};
-
+#[derive(Debug, Clone)]
 pub struct Quad {
     pub origin: Vec3A,
     xv: Vec3A,
@@ -40,6 +40,15 @@ impl Quad {
             material,
             tint: Vec4::ONE,
         }
+    }
+    pub fn transform(&mut self, matrix: &Mat3A) {
+        self.origin -= 0.5;
+        self.origin = *matrix * self.origin;
+        self.origin += 0.5;
+        self.xv = *matrix * self.xv;
+        self.yv = *matrix * self.yv;
+        self.normal = *matrix * self.normal;
+        self.d = -self.normal.dot(self.origin);
     }
     pub fn hit(&self, ray: &mut Ray) -> bool {
         let (u, v): (f32, f32);

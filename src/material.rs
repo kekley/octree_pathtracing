@@ -1,6 +1,6 @@
 use crate::{ray::Ray, texture::Texture};
 use bitflags::bitflags;
-use glam::Vec3A;
+use glam::{Vec3A, Vec4};
 use smol_str::SmolStr;
 
 bitflags! {
@@ -33,7 +33,7 @@ pub struct MaterialBuilder {
 
 impl MaterialBuilder {
     pub fn build(self) -> Material {
-        const DEFAULT_IOR: f32 = 1.000293;
+        pub const DEFAULT_IOR: f32 = 1.000293;
 
         Material {
             name: self.name,
@@ -103,6 +103,16 @@ pub struct Material {
 }
 
 impl Material {
+    pub const AIR: Material = Material {
+        name: SmolStr::new_static("air"),
+        index_of_refraction: 1.000293,
+        material_flags: MaterialFlags::empty(),
+        specular: 0.0,
+        emittance: 0.0,
+        roughness: 0.0,
+        metalness: 0.0,
+        albedo: Texture::Color(Vec4::ZERO),
+    };
     pub fn new(name: SmolStr) -> MaterialBuilder {
         MaterialBuilder {
             name: name,
