@@ -5,13 +5,16 @@ use glam::{Vec3, Vec3A, Vec4};
 use hashbrown::HashMap;
 use smol_str::SmolStr;
 use spider_eye::{
+    block::Block,
     block_element::{self, ElementRotation},
     block_face::FaceName,
     block_models::{BlockModel, BlockRotation},
-    block_states::BlockResource,
+    block_states::BlockState,
     block_texture::Uv,
-    resource_loader::ResourceLoader,
-    variant::Variant,
+    loaded_world::BlockName,
+    resource::BlockStates,
+    resource_loader::{self, ResourceLoader},
+    variant::{ModelVariant, Variants},
 };
 
 use crate::{
@@ -23,12 +26,34 @@ pub type ModelID = u32;
 
 #[derive(Debug, Clone)]
 pub struct ResourceManager {
-    resource_loader: ResourceLoader,
+    pub resource_loader: ResourceLoader,
     materials: HashMap<SmolStr, Material, FxBuildHasher>,
     models: Vec<ResourceModel>,
+    cache: HashMap<BlockName, BlockStates, FxBuildHasher>,
 }
 
 impl ResourceManager {
+    pub fn load_resource(&mut self, block: Block) -> ModelID {
+        let rodeo = &self.resource_loader.rodeo;
+        let block_states = if let Some(cached) = self.cache.get(&block.block_name) {
+            cached
+        } else {
+            dbg!(rodeo.resolve(&block.block_name));
+            let path = "./assets/default_resource_pack/assets/minecraft/blockstates/".to_string()
+                + rodeo
+                    .resolve(&block.block_name)
+                    .strip_prefix("minecraft:")
+                    .unwrap()
+                + ".json";
+            &BlockStates::new(&path, rodeo)
+        };
+        let model: Vec<ModelVariant> = match block_states {
+            BlockStates::MultiPart(multi_part) => multi_part.get(&block.block_state),
+            BlockStates::Variants(variants) => variants.get(&block.block_state),
+        };
+        let id = self.build_variant(model);
+        id
+    }
     pub fn new() -> Self {
         let mut materials = HashMap::with_hasher(FxBuildHasher::default());
 
@@ -37,25 +62,67 @@ impl ResourceManager {
             materials,
             models: vec![],
             resource_loader: ResourceLoader::new(),
+            cache: HashMap::with_hasher(FxBuildHasher::default()),
         }
     }
     fn get_material(&self, mat: &SmolStr) -> &Material {
         self.materials.get(mat).expect("")
     }
-    fn get_model_type(model: &BlockModel) -> ModelType {
-        if model.is_cube() {
-            ModelType::SingleAABB
+
+    pub fn build_variant(&mut self, variants: Vec<ModelVariant>) -> ModelID {
+        if variants.len() == 1 {
+            match &variants[0] {
+                ModelVariant::SingleModel(variant_entry) => {
+                    let path = Variants::parse_path(&variant_entry.model_path);
+                    let model = self.resource_loader.load_model(&path);
+                    let resource = if model.is_cube() {
+                        self.build_model(&model, ModelType::SingleAABB)
+                    } else {
+                        self.build_model(&model, ModelType::Quads)
+                    };
+                    let model_id = self.models.len() as u32;
+                    self.models.push(resource);
+                    return model_id;
+                }
+                ModelVariant::ModelArray(items) => {
+                    let path = Variants::parse_path(&items[0].model_path);
+                    let model = self.resource_loader.load_model(&path);
+                    let resource = if model.is_cube() {
+                        self.build_model(&model, ModelType::SingleAABB)
+                    } else {
+                        self.build_model(&model, ModelType::Quads)
+                    };
+                    let model_id = self.models.len() as u32;
+                    self.models.push(resource);
+                    return model_id;
+                }
+            }
         } else {
-            ModelType::Quads
+            let quads = variants
+                .iter()
+                .flat_map(|variant| match variant {
+                    ModelVariant::SingleModel(variant_entry) => {
+                        let path = Variants::parse_path(&variant_entry.model_path);
+                        let model = self.resource_loader.load_model(&path);
+                        let resource = self.build_model(&model, ModelType::Quads);
+                        resource.take_quads()
+                    }
+                    ModelVariant::ModelArray(items) => {
+                        let path = Variants::parse_path(&items[0].model_path);
+                        let model = self.resource_loader.load_model(&path);
+                        let resource = self.build_model(&model, ModelType::Quads);
+                        resource.take_quads()
+                    }
+                })
+                .collect::<Vec<_>>();
+            let resource = ResourceModel::Quad(QuadModel { quads });
+            let model_id = self.models.len() as u32;
+            self.models.push(resource);
+            return model_id;
         }
     }
-    pub fn load_model(&mut self, path: &str) -> ModelID {
-        let block_model = self.resource_loader.load_model(path);
-        let resource = self.build_resource(&block_model);
-        resource
-    }
 
-    fn build_resource(&mut self, block_model: &BlockModel) -> ModelID {
+    fn build_model(&mut self, block_model: &BlockModel, model_type: ModelType) -> ResourceModel {
         let textures = block_model.get_textures();
         let materials = textures
             .iter()
@@ -72,7 +139,7 @@ impl ResourceManager {
             })
             .collect::<HashMap<_, _>>();
 
-        let model = match Self::get_model_type(block_model) {
+        let model = match model_type {
             ModelType::SingleAABB => {
                 let block_element = &block_model.elements[0];
                 let mut block_materials: [Material; 6] = array::from_fn(|_| Material::default());
@@ -119,9 +186,7 @@ impl ResourceManager {
                 ResourceModel::Quad(model)
             }
         };
-        let model_id = self.models.len() as u32;
-        self.models.push(model);
-        model_id
+        model
     }
 
     pub fn get_model(&self, model_id: ModelID) -> &ResourceModel {
@@ -186,6 +251,12 @@ pub enum ModelType {
 }
 
 impl ResourceModel {
+    pub(crate) fn take_quads(self) -> Vec<Quad> {
+        match self {
+            ResourceModel::SingleBlock(single_block_model) => panic!(),
+            ResourceModel::Quad(quad_model) => quad_model.quads,
+        }
+    }
     pub fn intersect(&self, ray: &mut Ray, octree_result: &OctreeIntersectResult<u32>) -> bool {
         match self {
             ResourceModel::SingleBlock(single_block_model) => {

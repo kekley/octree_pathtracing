@@ -54,12 +54,24 @@ fn blocks() -> Result<(), anyhow::Error> {
             return block;
         }
     };
+
     let mut tree: Octree<u32> = Octree::construct_parallel(9, &f);
     let arc = Arc::new(tree);
     //println!("{:?}", tree);
     println!("octree built");
     scene.octree = arc;
-
+    scene.resources.resource_loader.rodeo = world.nbt_loader.rodeo.clone();
+    world.global_palette.into_iter().for_each(|block| {
+        if scene
+            .resources
+            .resource_loader
+            .rodeo
+            .resolve(&block.block_name)
+            != "minecraft:air"
+        {
+            scene.resources.load_resource(block);
+        }
+    });
     let mut a: TileRenderer = TileRenderer::new(RESOLUTION, 3, 1, scene);
     let start = Instant::now();
     a.render("render.png");
@@ -78,8 +90,6 @@ fn face_id_test() {
     tree.set_leaf(UVec3::splat(2), 0);
 
     let arc_tree = Arc::new(tree);
-    let materials = vec![Material::default()];
-    let arc_mat = Arc::new(materials);
     let mut scene = Scene::new().branch_count(1).spp(1).camera(camera).build();
     scene.octree = arc_tree;
 

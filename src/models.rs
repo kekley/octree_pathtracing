@@ -5,7 +5,7 @@ use rayon::array;
 use spider_eye::{
     block_models::{BlockModel, BlockRotation, IntermediateBlockModel},
     block_texture::{BlockTextures, TextureVariable},
-    variant::Variant,
+    variant::ModelVariant,
 };
 
 use crate::{
