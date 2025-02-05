@@ -12,9 +12,9 @@ use ray_tracing::TileRenderer;
 use ray_tracing::{MaterialFlags, Octree, Position, RTWImage, Scene, Texture};
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
-use spider_eye::block_states::BlockState;
 use spider_eye::loaded_world::World;
 use spider_eye::loaded_world::WorldCoords;
+use spider_eye::ResourceLoader;
 pub const ASPECT_RATIO: f32 = 1.5;
 
 fn main() -> Result<(), anyhow::Error> {
@@ -24,16 +24,21 @@ fn main() -> Result<(), anyhow::Error> {
 }
 
 fn blocks() -> Result<(), anyhow::Error> {
-    const RESOLUTION: (usize, usize) = (1000, 1000);
+    const RESOLUTION: (usize, usize) = (500, 500);
     let camera = Camera::look_at(
         Vec3A::new(0.0, 204.0, 0.0),
         Vec3A::new(100.0, 190.0, 100.0),
         Vec3A::Y,
         70.0,
     );
+    let minecraft_loader = ResourceLoader::new();
 
-    let mut scene = Scene::new().branch_count(10).camera(camera).spp(20).build();
-    let world = World::new("./world");
+    let mut scene = Scene::new()
+        .branch_count(1)
+        .camera(camera)
+        .spp(2)
+        .build(&minecraft_loader);
+    let world = minecraft_loader.open_world("./world");
 
     let f = |position: UVec3| -> Option<u32> {
         let UVec3 { x, y, z } = position;
@@ -55,12 +60,12 @@ fn blocks() -> Result<(), anyhow::Error> {
         }
     };
 
-    let mut tree: Octree<u32> = Octree::construct_parallel(9, &f);
+    let mut tree: Octree<u32> = Octree::construct_parallel(8, &f);
     let arc = Arc::new(tree);
+
     //println!("{:?}", tree);
     println!("octree built");
     scene.octree = arc;
-    scene.resources.resource_loader.rodeo = world.nbt_loader.rodeo.clone();
     world.global_palette.into_iter().for_each(|block| {
         if scene
             .resources
@@ -72,7 +77,7 @@ fn blocks() -> Result<(), anyhow::Error> {
             scene.resources.load_resource(block);
         }
     });
-    let mut a: TileRenderer = TileRenderer::new(RESOLUTION, 3, 1, scene);
+    let mut a: TileRenderer = TileRenderer::new(RESOLUTION, 3, 8, scene);
     let start = Instant::now();
     a.render("render.png");
     let finish = Instant::now();
@@ -80,20 +85,4 @@ fn blocks() -> Result<(), anyhow::Error> {
 
     println!("time elapsed: {}", duration.as_millis());
     Ok(())
-}
-
-fn face_id_test() {
-    let mut tree: Octree<u32> = Octree::new();
-
-    let camera = Camera::look_at(Vec3A::new(0.0, 0.0, 0.0), Vec3A::splat(2.0), Vec3A::Y, 70.0);
-
-    tree.set_leaf(UVec3::splat(2), 0);
-
-    let arc_tree = Arc::new(tree);
-    let mut scene = Scene::new().branch_count(1).spp(1).camera(camera).build();
-    scene.octree = arc_tree;
-
-    let mut renderer = TileRenderer::new((1000, 1000), 3, 1, scene);
-
-    renderer.render("./test.png");
 }

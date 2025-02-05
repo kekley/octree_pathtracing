@@ -3,17 +3,16 @@ use std::array;
 use fxhash::{FxBuildHasher, FxHashMap};
 use glam::{Vec3, Vec3A, Vec4};
 use hashbrown::HashMap;
-use smol_str::SmolStr;
+use smol_str::{SmolStr, SmolStrBuilder};
 use spider_eye::{
     block::Block,
     block_element::{self, ElementRotation},
     block_face::FaceName,
     block_models::{BlockModel, BlockRotation},
-    block_states::BlockState,
     block_texture::Uv,
     loaded_world::BlockName,
     resource::BlockStates,
-    resource_loader::{self, ResourceLoader},
+    resource_loader::ResourceLoader,
     variant::{ModelVariant, Variants},
 };
 
@@ -23,7 +22,6 @@ use crate::{
 };
 
 pub type ModelID = u32;
-
 #[derive(Debug, Clone)]
 pub struct ResourceManager {
     pub resource_loader: ResourceLoader,
@@ -39,7 +37,7 @@ impl ResourceManager {
             cached
         } else {
             dbg!(rodeo.resolve(&block.block_name));
-            let path = "./assets/default_resource_pack/assets/minecraft/blockstates/".to_string()
+            let path = "./test_assets/assets/minecraft/blockstates/".to_string()
                 + rodeo
                     .resolve(&block.block_name)
                     .strip_prefix("minecraft:")
@@ -54,14 +52,14 @@ impl ResourceManager {
         let id = self.build_variant(model);
         id
     }
-    pub fn new() -> Self {
+    pub fn new(resource_loader: &ResourceLoader) -> Self {
         let mut materials = HashMap::with_hasher(FxBuildHasher::default());
 
         materials.insert(SmolStr::new("air"), Material::AIR);
         Self {
             materials,
             models: vec![],
-            resource_loader: ResourceLoader::new(),
+            resource_loader: resource_loader.clone(),
             cache: HashMap::with_hasher(FxBuildHasher::default()),
         }
     }
@@ -73,8 +71,8 @@ impl ResourceManager {
         if variants.len() == 1 {
             match &variants[0] {
                 ModelVariant::SingleModel(variant_entry) => {
-                    let path = Variants::parse_path(&variant_entry.model_path);
-                    let model = self.resource_loader.load_model(&path);
+                    let model = &variant_entry.model;
+
                     let resource = if model.is_cube() {
                         self.build_model(&model, ModelType::SingleAABB)
                     } else {
@@ -85,8 +83,7 @@ impl ResourceManager {
                     return model_id;
                 }
                 ModelVariant::ModelArray(items) => {
-                    let path = Variants::parse_path(&items[0].model_path);
-                    let model = self.resource_loader.load_model(&path);
+                    let model = &items[0].model;
                     let resource = if model.is_cube() {
                         self.build_model(&model, ModelType::SingleAABB)
                     } else {
@@ -102,14 +99,14 @@ impl ResourceManager {
                 .iter()
                 .flat_map(|variant| match variant {
                     ModelVariant::SingleModel(variant_entry) => {
-                        let path = Variants::parse_path(&variant_entry.model_path);
-                        let model = self.resource_loader.load_model(&path);
+                        let model = &variant_entry.model;
+
                         let resource = self.build_model(&model, ModelType::Quads);
                         resource.take_quads()
                     }
                     ModelVariant::ModelArray(items) => {
-                        let path = Variants::parse_path(&items[0].model_path);
-                        let model = self.resource_loader.load_model(&path);
+                        //FIXME: randomly choose model
+                        let model = &items[0].model;
                         let resource = self.build_model(&model, ModelType::Quads);
                         resource.take_quads()
                     }
@@ -127,13 +124,27 @@ impl ResourceManager {
         let materials = textures
             .iter()
             .map(|texture| {
-                let material = if self.materials.contains_key(texture.1) {
-                    self.materials.get(texture.1).unwrap().clone()
+                let material = if self
+                    .materials
+                    .contains_key(self.resource_loader.resolve_spur(&texture.1.get_inner()))
+                {
+                    self.materials
+                        .get(self.resource_loader.resolve_spur(&texture.1.get_inner()))
+                        .unwrap()
+                        .clone()
                 } else {
-                    let image = RTWImage::load(texture.1).unwrap();
-                    Material::new(texture.1.clone())
-                        .albedo(Texture::Image(image))
-                        .build()
+                    let tex_path = self.resource_loader.get_texture_path(
+                        self.resource_loader.resolve_spur(&texture.1.get_inner()),
+                    );
+                    dbg!(&tex_path);
+                    let image = RTWImage::load(&tex_path).unwrap();
+                    Material::new(
+                        self.resource_loader
+                            .resolve_spur(&texture.1.get_inner())
+                            .into(),
+                    )
+                    .albedo(Texture::Image(image))
+                    .build()
                 };
                 (texture.0.clone(), material)
             })
@@ -147,7 +158,7 @@ impl ResourceManager {
                     let face = face.as_ref().expect("single block model was missing face");
                     let ind: u32 = face.name as u32;
                     let material = materials
-                        .get(face.texture.get())
+                        .get(&face.texture.get_inner())
                         .expect("texture variable was not in material hashmap");
                     block_materials[ind as usize] = material.clone();
                 });
@@ -172,7 +183,7 @@ impl ResourceManager {
                                 get_face_coordinates(&element.from, &element.to, face.name)
                             };
                             let material = materials
-                                .get(face.texture.get())
+                                .get(&face.texture.get_inner())
                                 .expect("texture variable was not in materials hashmap");
                             let mut quad = Quad::new(v0, v1, v2, uv, material.clone());
                             if let Some(matrix) = element_rotation {

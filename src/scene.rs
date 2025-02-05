@@ -122,6 +122,7 @@ use crate::{
 use rand::rngs::StdRng;
 
 use glam::{UVec3, Vec2, Vec3, Vec3A, Vec3Swizzles, Vec4, Vec4Swizzles};
+use spider_eye::ResourceLoader;
 #[derive(Debug, Clone)]
 pub struct Scene {
     pub sun: Sun,
@@ -144,7 +145,7 @@ pub struct SceneBuilder {
 }
 
 impl SceneBuilder {
-    pub fn build(self) -> Scene {
+    pub fn build(self, resource_loader: &ResourceLoader) -> Scene {
         Scene {
             sun: Sun::new(
                 320.0,
@@ -156,7 +157,7 @@ impl SceneBuilder {
                 false,
                 Vec3A::splat(1.0),
             ),
-            resources: ResourceManager::new(),
+            resources: ResourceManager::new(resource_loader),
             branch_count: self.branch_count.unwrap_or(1),
             camera: self.camera.unwrap(),
             octree: Arc::new(Octree::new()),
