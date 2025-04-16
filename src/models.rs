@@ -1,11 +1,10 @@
-use std::{array::from_fn, f32::INFINITY, usize};
+use std::{f32::INFINITY, usize};
 
-use glam::{Vec3, Vec3A, Vec4};
-use rayon::array;
+use glam::{Vec3A, Vec4};
 
 use crate::{
-    material, octree_traversal::OctreeIntersectResult, Cuboid, Face, Material, MaterialBuilder,
-    Quad, RTWImage, Ray, Texture, AABB,
+    octree_traversal::OctreeIntersectResult, Cuboid, Face, Material,
+    Quad, Ray, AABB,
 };
 
 #[derive(Debug, Clone)]

@@ -23,6 +23,6 @@ mod translation;
 mod util;
 pub use {
     aabb::*, bvh::*, camera::*, cuboid::*, hittable::*, interval::*, material::*, models::*,
-    octree::*, octree_parallel::*, path_tracer::*, quad::*, ray::*, resource_manager::*,
+    octree::*, path_tracer::*, quad::*, ray::*, resource_manager::*,
     rtw_image::*, scene::*, sphere::*, texture::*, tile_renderer::*, translation::*, util::*,
 };

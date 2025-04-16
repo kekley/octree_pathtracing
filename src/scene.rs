@@ -115,13 +115,12 @@ impl SunSamplingStrategy {
 }
 
 use crate::{
-    axis::Axis, flat_shading, path_trace, random_float, BVHTree, Camera, Cuboid, Face, Material,
-    OctantId, Octree, Ray, ResourceManager, Sphere, Texture, AABB,
+    path_trace, random_float, Camera, Octree, Ray, ResourceManager, Texture,
 };
 
 use rand::rngs::StdRng;
 
-use glam::{UVec3, Vec2, Vec3, Vec3A, Vec3Swizzles, Vec4, Vec4Swizzles};
+use glam::{Vec3, Vec3A, Vec3Swizzles, Vec4, Vec4Swizzles};
 use spider_eye::ResourceLoader;
 #[derive(Debug, Clone)]
 pub struct Scene {

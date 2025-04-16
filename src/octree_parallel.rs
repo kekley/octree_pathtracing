@@ -1,13 +1,11 @@
-use std::{array, fmt::Debug, sync::atomic::AtomicU8};
+use std::array;
 
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::{
-    Camera, Child, Material, MaterialFlags, Octant, OctantId, Octree, Position, RTWImage, Scene,
-    Texture, TileRenderer,
+    Child, Octant, OctantId, Octree, Position,
 };
 
-use glam::Vec3A;
 impl Octree<u32> {
     pub fn construct_parallel<P: Position, F: Fn(P) -> Option<u32> + Sync>(
         depth: u8,

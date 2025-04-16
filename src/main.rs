@@ -1,23 +1,14 @@
 extern crate ray_tracing;
-use std::sync::Arc;
-use std::time::Instant;
+
+use std::{sync::Arc, time::Instant};
 
 use anyhow::Ok;
-use dashmap::DashMap;
 use glam::{UVec3, Vec3A};
-use ray_tracing::Camera;
-use ray_tracing::Material;
-use ray_tracing::TileRenderer;
-use ray_tracing::{MaterialFlags, Octree, Position, RTWImage, Scene, Texture};
-use rayon::iter::IntoParallelIterator;
-use rayon::iter::ParallelIterator;
-use spider_eye::loaded_world::World;
-use spider_eye::loaded_world::WorldCoords;
-use spider_eye::ResourceLoader;
+use ray_tracing::{Camera, Octree, Scene, TileRenderer};
+use spider_eye::{loaded_world::WorldCoords, ResourceLoader};
 pub const ASPECT_RATIO: f32 = 1.5;
 
 fn main() -> Result<(), anyhow::Error> {
-    blocks()?;
     //face_id_test();
     Ok(())
 }

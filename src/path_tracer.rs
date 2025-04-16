@@ -1,9 +1,8 @@
 use core::f32;
-use std::f32::{consts::PI, INFINITY};
+use std::f32::INFINITY;
 
 use crate::{
-    material, random_float, texture, EmitterSamplingStrategy, Material, MaterialFlags, Ray, Scene,
-    Texture,
+    material, random_float, EmitterSamplingStrategy, Material, MaterialFlags, Ray, Scene,
 };
 use rand::rngs::StdRng;
 

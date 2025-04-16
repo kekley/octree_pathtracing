@@ -1,4 +1,4 @@
-use glam::{Mat3A, Vec3, Vec3A, Vec4};
+use glam::{Mat3A, Vec3A, Vec4};
 
 use crate::{Material, Ray};
 #[derive(Debug, Clone)]

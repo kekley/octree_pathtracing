@@ -1,7 +1,7 @@
 use std::{fmt::Debug, hash::Hash, mem};
 
 use glam::UVec3;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::ParallelIterator;
 
 pub type OctantId = u32;
 

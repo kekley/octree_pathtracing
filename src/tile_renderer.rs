@@ -1,16 +1,13 @@
 use std::sync::Mutex;
-use std::{fs::File, io::Write, sync::Arc, thread, vec};
+use std::{sync::Arc, vec};
 
 use rand::rngs::StdRng;
 
-use glam::Vec2;
-use image::{
-    EncodableLayout, ExtendedColorType, GenericImage, ImageBuffer, Rgb, Rgb32FImage, RgbImage,
-};
+use image::RgbImage;
 use rand::{Rng, SeedableRng};
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::ParallelIterator;
 
-use crate::{linear_to_gamma, random_float_in_range, sample_square, util, Scene};
+use crate::Scene;
 pub struct Tile {
     bytes_per_pixel: usize,
     stride: usize,

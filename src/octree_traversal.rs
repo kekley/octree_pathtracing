@@ -3,9 +3,7 @@ pub const OCTREE_MAX_STEPS: usize = 1000;
 pub const OCTREE_MAX_SCALE: usize = 23;
 pub const OCTREE_EPSILON: f32 = 1.1920929e-7;
 use crate::{
-    axis::{self, Axis, AxisOps},
-    smoothstep, util, Cuboid, Face, HitRecord, Material, Octant, OctantId, Octree, Position, Ray,
-    AABB,
+    util, Face, OctantId, Octree, Position, Ray,
 };
 impl Position for Vec3A {
     fn construct(x: u32, y: u32, z: u32) -> Self {

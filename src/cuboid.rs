@@ -1,7 +1,7 @@
 use core::f32;
 use std::f32::INFINITY;
 
-use crate::{aabb::AABB, ray::Ray, util, Material, Scene};
+use crate::{aabb::AABB, ray::Ray, Material};
 
 use anyhow::Ok;
 use glam::Vec3A;

@@ -10,7 +10,7 @@ use spider_eye::{
 };
 
 use crate::{
-    octree_traversal::OctreeIntersectResult, quad, texture, Face, Material, Quad, QuadModel,
+    octree_traversal::OctreeIntersectResult, Material, Quad, QuadModel,
     RTWImage, Ray, SingleBlockModel, Texture,
 };
 

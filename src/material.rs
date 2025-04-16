@@ -1,6 +1,6 @@
-use crate::{ray::Ray, texture::Texture};
+use crate::texture::Texture;
 use bitflags::bitflags;
-use glam::{Vec3A, Vec4};
+use glam::Vec4;
 use smol_str::SmolStr;
 
 bitflags! {
