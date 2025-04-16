@@ -1,19 +1,12 @@
 use std::array;
 
-use fxhash::{FxBuildHasher, FxHashMap};
+use fxhash::FxBuildHasher;
 use glam::{Vec3, Vec3A, Vec4};
 use hashbrown::HashMap;
-use smol_str::{SmolStr, SmolStrBuilder};
+use smol_str::SmolStr;
 use spider_eye::{
-    block::Block,
-    block_element::{self, ElementRotation},
-    block_face::FaceName,
-    block_models::{BlockModel, BlockRotation},
-    block_texture::Uv,
-    loaded_world::BlockName,
-    resource::BlockStates,
-    resource_loader::ResourceLoader,
-    variant::{ModelVariant, Variants},
+    block::InternedBlock, block_face::FaceName, block_models::InternedBlockModel,
+    resource::BlockStates, resource_loader::ResourceLoader, variant::ModelVariant,
 };
 
 use crate::{
@@ -27,28 +20,23 @@ pub struct ResourceManager {
     pub resource_loader: ResourceLoader,
     materials: HashMap<SmolStr, Material, FxBuildHasher>,
     models: Vec<ResourceModel>,
-    cache: HashMap<BlockName, BlockStates, FxBuildHasher>,
 }
 
 impl ResourceManager {
-    pub fn load_resource(&mut self, block: Block) -> ModelID {
+    pub fn load_resource(&mut self, block: &InternedBlock) -> ModelID {
         let rodeo = &self.resource_loader.rodeo;
-        let block_states = if let Some(cached) = self.cache.get(&block.block_name) {
-            cached
-        } else {
-            dbg!(rodeo.resolve(&block.block_name));
-            let path = "./test_assets/assets/minecraft/blockstates/".to_string()
-                + rodeo
-                    .resolve(&block.block_name)
-                    .strip_prefix("minecraft:")
-                    .unwrap()
-                + ".json";
-            &BlockStates::new(&path, rodeo)
-        };
-        let model: Vec<ModelVariant> = match block_states {
-            BlockStates::MultiPart(multi_part) => multi_part.get(&block.block_state),
-            BlockStates::Variants(variants) => variants.get(&block.block_state),
-        };
+        let resolved_block = block.resolve(rodeo);
+        dbg!(&resolved_block);
+        let path = "./test_assets/assets/minecraft/blockstates/".to_string()
+            + resolved_block
+                .block_name
+                .strip_prefix("minecraft:")
+                .unwrap()
+            + ".json";
+        let block_states = BlockStates::new(&path, rodeo);
+
+        let model = self.resource_loader.load_models(block);
+
         let id = self.build_variant(model);
         id
     }
@@ -60,7 +48,6 @@ impl ResourceManager {
             materials,
             models: vec![],
             resource_loader: resource_loader.clone(),
-            cache: HashMap::with_hasher(FxBuildHasher::default()),
         }
     }
     fn get_material(&self, mat: &SmolStr) -> &Material {
@@ -119,7 +106,11 @@ impl ResourceManager {
         }
     }
 
-    fn build_model(&mut self, block_model: &BlockModel, model_type: ModelType) -> ResourceModel {
+    fn build_model(
+        &mut self,
+        block_model: &InternedBlockModel,
+        model_type: ModelType,
+    ) -> ResourceModel {
         let textures = block_model.get_textures();
         let materials = textures
             .iter()

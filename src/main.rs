@@ -7,7 +7,6 @@ use dashmap::DashMap;
 use glam::{UVec3, Vec3A};
 use ray_tracing::Camera;
 use ray_tracing::Material;
-use ray_tracing::OctreeChunkPos;
 use ray_tracing::TileRenderer;
 use ray_tracing::{MaterialFlags, Octree, Position, RTWImage, Scene, Texture};
 use rayon::iter::IntoParallelIterator;

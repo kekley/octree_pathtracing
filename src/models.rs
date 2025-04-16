@@ -2,11 +2,6 @@ use std::{array::from_fn, f32::INFINITY, usize};
 
 use glam::{Vec3, Vec3A, Vec4};
 use rayon::array;
-use spider_eye::{
-    block_models::{BlockModel, BlockRotation, IntermediateBlockModel},
-    block_texture::{BlockTextures, TextureVariable},
-    variant::ModelVariant,
-};
 
 use crate::{
     material, octree_traversal::OctreeIntersectResult, Cuboid, Face, Material, MaterialBuilder,
