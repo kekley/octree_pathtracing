@@ -1,4 +1,4 @@
-use crate::texture::Texture;
+use crate::ray_tracing::texture::Texture;
 use bitflags::bitflags;
 use glam::Vec4;
 use smol_str::SmolStr;
@@ -43,7 +43,7 @@ impl MaterialBuilder {
             emittance: self.emittance.unwrap_or(0.0),
             roughness: self.roughness.unwrap_or(0.0),
             metalness: self.metalness.unwrap_or(0.0),
-            albedo: Texture::DEFAULT_TEXTURE,
+            albedo: self.albedo.unwrap_or(Texture::DEFAULT_TEXTURE),
         }
     }
     pub fn index_of_refraction(self, ior: f32) -> Self {

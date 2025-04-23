@@ -2,7 +2,7 @@ use glam::Vec3A;
 use rand::{rngs::StdRng, Rng};
 use rand_distr::UnitDisc;
 
-use crate::Ray;
+use crate::ray_tracing::ray::Ray;
 
 /// A simple thin-lens perspective camera
 #[derive(Copy, Clone, Debug)]

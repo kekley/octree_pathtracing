@@ -2,9 +2,14 @@ use std::{f32::INFINITY, usize};
 
 use glam::{Vec3A, Vec4};
 
-use crate::{
-    octree_traversal::OctreeIntersectResult, Cuboid, Face, Material,
-    Quad, Ray, AABB,
+use crate::voxels::octree_traversal::OctreeIntersectResult;
+
+use super::{
+    aabb::AABB,
+    cuboid::{Cuboid, Face},
+    material::Material,
+    quad::Quad,
+    ray::Ray,
 };
 
 #[derive(Debug, Clone)]
@@ -47,7 +52,6 @@ impl QuadModel {
     const E1: Vec3A = Vec3A::splat(1.0 + Ray::EPSILON);
     pub fn intersect(&self, ray: &mut Ray) -> bool {
         let mut hit = false;
-
         ray.hit.t = INFINITY;
         let mut color = Vec4::ZERO;
         self.quads.iter().for_each(|quad| {

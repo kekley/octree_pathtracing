@@ -1,3 +1,4 @@
+use std::sync::atomic::AtomicBool;
 use std::sync::Mutex;
 use std::{sync::Arc, vec};
 
@@ -5,9 +6,10 @@ use rand::rngs::StdRng;
 
 use image::RgbImage;
 use rand::{Rng, SeedableRng};
-use rayon::iter::ParallelIterator;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use crate::Scene;
+use super::scene::Scene;
+
 pub struct Tile {
     bytes_per_pixel: usize,
     stride: usize,
@@ -23,11 +25,27 @@ pub struct Tile {
 }
 
 pub struct TileRenderer {
+    current_spp: u32,
+    paused: AtomicBool,
     pub thread_count: usize,
     pub resolution: (usize, usize),
     bytes_per_pixel: usize,
     frame_buffer: Arc<Mutex<Vec<f32>>>,
     scene: Arc<Scene>,
+}
+
+impl Default for TileRenderer {
+    fn default() -> Self {
+        Self {
+            current_spp: Default::default(),
+            paused: Default::default(),
+            thread_count: Default::default(),
+            resolution: Default::default(),
+            bytes_per_pixel: Default::default(),
+            frame_buffer: Default::default(),
+            scene: Default::default(),
+        }
+    }
 }
 
 impl Tile {
@@ -77,29 +95,61 @@ impl TileRenderer {
             ])),
             scene: Arc::new(scene),
             bytes_per_pixel: bytes_per_pixel,
+            paused: AtomicBool::new(false),
+            current_spp: 0,
         }
     }
-
-    pub fn render(&mut self, file_name: &str) {
+    pub fn get_frame_buffer(&self) -> &[f32] {}
+    pub fn collect_samples(&mut self) {
         let tile_width = (self.resolution.0 + self.thread_count - 1) / self.thread_count;
         let tile_height = (self.resolution.1 + self.thread_count - 1) / self.thread_count;
 
-        (0..self.thread_count).into_iter().for_each(|y| {
-            (0..self.thread_count).into_iter().for_each(|x| {
-                let tile = Tile::new(
-                    x * tile_width,
-                    y * tile_height,
-                    (x + 1) * tile_width,
-                    (y + 1) * tile_height,
-                    self.bytes_per_pixel,
-                    self.frame_buffer.clone(),
-                    self.resolution,
-                );
-                let scene = self.scene.clone();
-                TileRenderer::render_tile(tile, scene);
-            })
-        });
+        while !self.paused.load(std::sync::atomic::Ordering::Acquire) {
+            let branch_count = self.scene.get_current_branch_count(self.current_spp);
+            (0..self.thread_count).into_iter().for_each(|y| {
+                (0..self.thread_count).into_iter().for_each(|x| {
+                    let tile = Tile::new(
+                        x * tile_width,
+                        y * tile_height,
+                        (x + 1) * tile_width,
+                        (y + 1) * tile_height,
+                        self.bytes_per_pixel,
+                        self.frame_buffer.clone(),
+                        self.resolution,
+                    );
+                    let scene = self.scene.clone();
 
+                    TileRenderer::render_tile(tile, scene, self.current_spp, branch_count);
+                })
+            });
+        }
+    }
+
+    pub fn render_to_image(&mut self, file_name: &str) {
+        let tile_width = (self.resolution.0 + self.thread_count - 1) / self.thread_count;
+        let tile_height = (self.resolution.1 + self.thread_count - 1) / self.thread_count;
+
+        while self.current_spp < self.scene.target_spp {
+            let branch_count = self.scene.get_current_branch_count(self.current_spp);
+            (0..self.thread_count).into_iter().for_each(|y| {
+                (0..self.thread_count).into_iter().for_each(|x| {
+                    let tile = Tile::new(
+                        x * tile_width,
+                        y * tile_height,
+                        (x + 1) * tile_width,
+                        (y + 1) * tile_height,
+                        self.bytes_per_pixel,
+                        self.frame_buffer.clone(),
+                        self.resolution,
+                    );
+                    let scene = self.scene.clone();
+
+                    TileRenderer::render_tile(tile, scene, self.current_spp, branch_count);
+                })
+            });
+        }
+
+        //save image
         let u8_frame_buffer = self
             .frame_buffer
             .lock()
@@ -140,7 +190,7 @@ impl TileRenderer {
         //file_stream.write_all(&self.frame_buffer).unwrap();
     }
 
-    pub fn render_tile(mut tile: Tile, scene: Arc<Scene>) {
+    pub fn render_tile(mut tile: Tile, scene: Arc<Scene>, current_spp: u32, branch_count: u32) {
         let mut rng = StdRng::from_entropy();
 
         for y in tile.y0..tile.y1 {
@@ -150,36 +200,27 @@ impl TileRenderer {
                 let y_normalized = ((2 * (tile.frame_buffer_resolution.1 - y) - 1) as f32
                     - tile.frame_buffer_resolution.1 as f32)
                     / tile.dim;
-                let mut current_spp = 0;
-                while current_spp < scene.target_spp {
-                    let branch_count = scene.get_current_branch_count(current_spp);
-                    let sin_v = 1.0 / (branch_count + current_spp) as f32;
+                let sin_v = 1.0 / (branch_count + current_spp) as f32;
 
-                    let dx = rng.gen_range((-1.0 / tile.dim)..(1.0 / tile.dim));
-                    let dy = rng.gen_range((-1.0 / tile.dim)..(1.0 / tile.dim));
-                    let color = scene.get_color(
-                        x_normalized + dx,
-                        y_normalized + dy,
-                        &mut rng,
-                        current_spp,
-                    );
-                    let local_buffer_idx = Self::get_pixel_index(
-                        x - tile.x0,
-                        y - tile.y0,
-                        tile.bytes_per_pixel,
-                        tile.stride,
-                    );
-                    let r = color.x * branch_count as f32;
-                    let g = color.y * branch_count as f32;
-                    let b = color.z * branch_count as f32;
-                    tile.local_buffer[local_buffer_idx] =
-                        (tile.local_buffer[local_buffer_idx] * current_spp as f32 + r) * sin_v;
-                    tile.local_buffer[local_buffer_idx + 1] =
-                        (tile.local_buffer[local_buffer_idx + 1] * current_spp as f32 + g) * sin_v;
-                    tile.local_buffer[local_buffer_idx + 2] =
-                        (tile.local_buffer[local_buffer_idx + 2] * current_spp as f32 + b) * sin_v;
-                    current_spp += branch_count;
-                }
+                let dx = rng.gen_range((-1.0 / tile.dim)..(1.0 / tile.dim));
+                let dy = rng.gen_range((-1.0 / tile.dim)..(1.0 / tile.dim));
+                let color =
+                    scene.get_color(x_normalized + dx, y_normalized + dy, &mut rng, current_spp);
+                let local_buffer_idx = Self::get_pixel_index(
+                    x - tile.x0,
+                    y - tile.y0,
+                    tile.bytes_per_pixel,
+                    tile.stride,
+                );
+                let r = color.x * branch_count as f32;
+                let g = color.y * branch_count as f32;
+                let b = color.z * branch_count as f32;
+                tile.local_buffer[local_buffer_idx] =
+                    (tile.local_buffer[local_buffer_idx] * current_spp as f32 + r) * sin_v;
+                tile.local_buffer[local_buffer_idx + 1] =
+                    (tile.local_buffer[local_buffer_idx + 1] * current_spp as f32 + g) * sin_v;
+                tile.local_buffer[local_buffer_idx + 2] =
+                    (tile.local_buffer[local_buffer_idx + 2] * current_spp as f32 + b) * sin_v;
             }
         }
 

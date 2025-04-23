@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{rc::Rc, sync::Arc};
 
 use stb_image::image::load;
 
@@ -27,8 +27,8 @@ impl TryFrom<u32> for BytesPerPixel {
 #[derive(Debug, Clone)]
 pub struct RTWImage {
     bytes_per_pixel: BytesPerPixel,
-    fdata: Rc<[f32]>,
-    bdata: Rc<[u8]>,
+    fdata: Arc<[f32]>,
+    bdata: Arc<[u8]>,
     pub image_width: u32,
     pub image_height: u32,
     bytes_per_scanline: u32,
@@ -50,8 +50,8 @@ impl RTWImage {
                 let bytes_per_pixel = BytesPerPixel::try_from(image.depth as u32)?;
                 let bytes_per_scanline = image_width * image.depth as u32;
                 let fdata = Self::convert_to_floats(&bdata);
-                let bdata: Rc<[u8]> = Rc::from(bdata);
-                let fdata: Rc<[f32]> = Rc::from(fdata);
+                let bdata: Arc<[u8]> = Arc::from(bdata);
+                let fdata: Arc<[f32]> = Arc::from(fdata);
                 return Ok(RTWImage {
                     bytes_per_pixel,
                     fdata,
@@ -68,8 +68,8 @@ impl RTWImage {
                 let bytes_per_pixel = BytesPerPixel::try_from(image.depth as u32)?;
                 let bytes_per_scanline = image_width * image.depth as u32;
                 let bdata = Self::convert_to_bytes(&fdata);
-                let bdata: Rc<[u8]> = Rc::from(bdata);
-                let fdata: Rc<[f32]> = Rc::from(fdata);
+                let bdata: Arc<[u8]> = Arc::from(bdata);
+                let fdata: Arc<[f32]> = Arc::from(fdata);
                 return Ok(RTWImage {
                     bytes_per_pixel,
                     fdata,

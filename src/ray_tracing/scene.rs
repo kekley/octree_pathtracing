@@ -20,6 +20,12 @@ pub enum EmitterSamplingStrategy {
     },
 }
 
+impl Default for EmitterSamplingStrategy {
+    fn default() -> Self {
+        Self::NONE
+    }
+}
+
 impl EmitterSamplingStrategy {
     pub fn get_description(&self) -> &str {
         match self {
@@ -59,6 +65,12 @@ pub struct SunSamplingStrategy {
     pub strict_direct_light: bool,
     pub sun_luminosity: bool,
     pub importance_sampling: bool,
+}
+
+impl Default for SunSamplingStrategy {
+    fn default() -> Self {
+        Self::IMPORTANCE
+    }
 }
 
 impl SunSamplingStrategy {
@@ -114,15 +126,17 @@ impl SunSamplingStrategy {
 };
 }
 
-use crate::{
-    path_trace, random_float, Camera, Octree, Ray, ResourceManager, Texture,
-};
-
 use rand::rngs::StdRng;
 
 use glam::{Vec3, Vec3A, Vec3Swizzles, Vec4, Vec4Swizzles};
-use spider_eye::ResourceLoader;
-#[derive(Debug, Clone)]
+use spider_eye::MCLoader;
+
+use crate::{random_float, voxels::octree::Octree};
+
+use super::{
+    camera::Camera, path_tracer::path_trace, ray::Ray, resource_manager::ModelManager,
+    texture::Texture,
+};
 pub struct Scene {
     pub sun: Sun,
     pub sun_sampling_strategy: SunSamplingStrategy,
@@ -131,10 +145,28 @@ pub struct Scene {
     pub emitter_sampling_strategy: EmitterSamplingStrategy,
     pub f_sub_surface: f32,
     pub octree: Arc<Octree<u32>>,
-    pub resources: ResourceManager,
+    pub model_manager: ModelManager,
     pub target_spp: u32,
     pub branch_count: u32,
     pub camera: Camera,
+}
+
+impl Default for Scene {
+    fn default() -> Self {
+        Self {
+            sun: Default::default(),
+            sun_sampling_strategy: Default::default(),
+            emitters_enabled: Default::default(),
+            emmitter_intensity: Default::default(),
+            emitter_sampling_strategy: Default::default(),
+            f_sub_surface: Default::default(),
+            octree: Default::default(),
+            model_manager: Default::default(),
+            target_spp: Default::default(),
+            branch_count: Default::default(),
+            camera: Default::default(),
+        }
+    }
 }
 
 pub struct SceneBuilder {
@@ -144,19 +176,19 @@ pub struct SceneBuilder {
 }
 
 impl SceneBuilder {
-    pub fn build(self, resource_loader: &ResourceLoader) -> Scene {
+    pub fn build(self, resource_loader: &MCLoader) -> Scene {
         Scene {
             sun: Sun::new(
                 320.0,
                 50.0,
                 0.01,
                 Vec4::splat(1.0),
-                crate::Texture::Color(Vec4::splat(1.0)),
+                Texture::Color(Vec4::splat(1.0)),
                 true,
                 false,
                 Vec3A::splat(1.0),
             ),
-            resources: ResourceManager::new(resource_loader),
+            model_manager: ModelManager::new(resource_loader),
             branch_count: self.branch_count.unwrap_or(1),
             camera: self.camera.unwrap(),
             octree: Arc::new(Octree::new()),
@@ -219,7 +251,7 @@ impl Scene {
         if hit {
             let intersection = intersection.as_ref().unwrap();
 
-            let model = self.resources.get_model(*intersection.ty);
+            let model = self.model_manager.get_model(*intersection.ty);
             model.intersect(ray, intersection);
 
             return true;
@@ -319,6 +351,21 @@ pub struct Sun {
     radius_cos: f32,
     radius_sin: f32,
     pub emmittance: Vec4,
+}
+
+impl Default for Sun {
+    fn default() -> Self {
+        Sun::new(
+            320.0,
+            50.0,
+            0.01,
+            Vec4::splat(1.0),
+            Texture::Color(Vec4::splat(1.0)),
+            true,
+            false,
+            Vec3A::splat(1.0),
+        )
+    }
 }
 
 impl Sun {

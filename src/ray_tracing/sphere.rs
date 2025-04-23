@@ -1,9 +1,9 @@
 use std::f32::consts::PI;
 use std::f32::INFINITY;
 
-use crate::aabb::AABB;
-use crate::ray::Ray;
-use crate::Material;
+use crate::ray_tracing::aabb::AABB;
+use crate::ray_tracing::material::Material;
+use crate::ray_tracing::ray::Ray;
 use glam::Vec3A;
 
 #[derive(Debug, Clone)]

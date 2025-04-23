@@ -1,10 +1,14 @@
 use glam::{UVec3, Vec2, Vec3A};
+
+use crate::{
+    ray_tracing::{cuboid::Face, ray::Ray},
+    util,
+};
+
+use super::octree::{OctantId, Octree, Position};
 pub const OCTREE_MAX_STEPS: usize = 1000;
 pub const OCTREE_MAX_SCALE: usize = 23;
 pub const OCTREE_EPSILON: f32 = 1.1920929e-7;
-use crate::{
-    util, Face, OctantId, Octree, Position, Ray,
-};
 impl Position for Vec3A {
     fn construct(x: u32, y: u32, z: u32) -> Self {
         Self::new(x as f32, y as f32, z as f32)
@@ -146,9 +150,9 @@ impl<T: PartialEq + Default + Clone> Octree<T> {
 
             if !child.is_none() && t_min <= t_max {
                 if child.is_leaf() && t_min == 0.0 {
-                    //println!("inside block");
-                    //println!("ray origin: {}", ray.origin);
-                    //println!("ray dir: {}", ray.direction);
+                    println!("inside block");
+                    println!("ray origin: {}", ray.origin);
+                    println!("ray dir: {}", ray.direction);
                 }
 
                 if child.is_leaf() && t_min > 0.0 {

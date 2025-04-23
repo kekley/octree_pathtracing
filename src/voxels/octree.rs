@@ -140,7 +140,7 @@ impl<T> Octant<T> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Octree<T> {
     pub root: Option<OctantId>,
     pub octants: Vec<Octant<T>>,

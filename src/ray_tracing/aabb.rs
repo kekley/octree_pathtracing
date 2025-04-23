@@ -1,12 +1,10 @@
 use core::f32;
 use std::f32::{INFINITY, NEG_INFINITY};
 
-use crate::{
-    axis::{Axis, AxisOps},
-    interval::Interval,
-    ray::Ray,
-};
+use crate::{ray_tracing::axis::Axis, ray_tracing::interval::Interval, ray_tracing::ray::Ray};
 use glam::Vec3A;
+
+use super::axis::AxisOps;
 #[derive(Debug, Clone, Copy)]
 pub struct AABB {
     pub min: Vec3A,

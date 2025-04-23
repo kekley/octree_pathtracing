@@ -1,10 +1,16 @@
 use core::f32;
 use std::f32::{consts::PI, INFINITY};
 
-use crate::{angle_distance, random_float, HitRecord, Material, Scene, Sun};
+use crate::{angle_distance, random_float};
 use rand::rngs::StdRng;
 
 use glam::{Mat3A, Vec3A, Vec4};
+
+use super::{
+    hittable::HitRecord,
+    material::Material,
+    scene::{Scene, Sun},
+};
 
 #[derive(Debug, Clone, Default)]
 pub struct Ray {

@@ -1,28 +1,9 @@
-mod aabb;
-mod axis;
-mod bvh;
-mod camera;
-mod cuboid;
-mod hittable;
-mod interval;
-mod material;
-mod models;
-mod octree;
-mod octree_parallel;
-mod octree_traversal;
-mod path_tracer;
-mod quad;
-mod ray;
-mod resource_manager;
+pub mod app;
+pub mod voxels;
+
+pub mod ray_tracing;
+
 mod rtw_image;
-mod scene;
-mod sphere;
-mod texture;
-mod tile_renderer;
-mod translation;
+
 mod util;
-pub use {
-    aabb::*, bvh::*, camera::*, cuboid::*, hittable::*, interval::*, material::*, models::*,
-    octree::*, path_tracer::*, quad::*, ray::*, resource_manager::*,
-    rtw_image::*, scene::*, sphere::*, texture::*, tile_renderer::*, translation::*, util::*,
-};
+pub use {app::*, rtw_image::*, util::*};

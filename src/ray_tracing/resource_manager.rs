@@ -1,60 +1,80 @@
-use std::array;
+use std::{array, env::var};
 
+use aovec::Aovec;
+use dashmap::DashMap;
 use fxhash::FxBuildHasher;
 use glam::{Vec3, Vec3A, Vec4};
-use hashbrown::HashMap;
+use hashbrown::{HashMap, HashSet};
 use smol_str::SmolStr;
 use spider_eye::{
     block::InternedBlock, block_face::FaceName, block_models::InternedBlockModel,
-    resource::BlockStates, resource_loader::ResourceLoader, variant::ModelVariant,
+    block_states::InternedBlockState, block_texture::InternedTextureVariable,
+    resource::BlockStates, resource_loader::MCLoader, variant::ModelVariant,
 };
 
 use crate::{
-    octree_traversal::OctreeIntersectResult, Material, Quad, QuadModel,
-    RTWImage, Ray, SingleBlockModel, Texture,
+    ray_tracing::{
+        models::{QuadModel, SingleBlockModel},
+        quad::Quad,
+    },
+    voxels::octree_traversal::OctreeIntersectResult,
+    RTWImage,
 };
 
+use super::{material::Material, ray::Ray, texture::Texture};
+
 pub type ModelID = u32;
-#[derive(Debug, Clone)]
-pub struct ResourceManager {
-    pub resource_loader: ResourceLoader,
-    materials: HashMap<SmolStr, Material, FxBuildHasher>,
-    models: Vec<ResourceModel>,
+pub struct ModelManager {
+    pub resource_loader: MCLoader,
+    materials: DashMap<SmolStr, Material, FxBuildHasher>,
+    models: Aovec<ResourceModel>,
+    seen_blocks: DashMap<InternedBlock, u32, FxBuildHasher>,
 }
 
-impl ResourceManager {
-    pub fn load_resource(&mut self, block: &InternedBlock) -> ModelID {
-        let rodeo = &self.resource_loader.rodeo;
-        let resolved_block = block.resolve(rodeo);
-        dbg!(&resolved_block);
-        let path = "./test_assets/assets/minecraft/blockstates/".to_string()
-            + resolved_block
-                .block_name
-                .strip_prefix("minecraft:")
-                .unwrap()
-            + ".json";
-        let block_states = BlockStates::new(&path, rodeo);
-
-        let model = self.resource_loader.load_models(block);
-
-        let id = self.build_variant(model);
-        id
-    }
-    pub fn new(resource_loader: &ResourceLoader) -> Self {
-        let mut materials = HashMap::with_hasher(FxBuildHasher::default());
-
-        materials.insert(SmolStr::new("air"), Material::AIR);
+impl Default for ModelManager {
+    fn default() -> Self {
         Self {
+            resource_loader: Default::default(),
+            materials: Default::default(),
+            models: Aovec::new(16),
+            seen_blocks: Default::default(),
+        }
+    }
+}
+
+impl ModelManager {
+    pub fn load_resource(&self, block: &InternedBlock) -> ModelID {
+        if !self.seen_blocks.contains_key(block) {
+            println!("len: {}", self.seen_blocks.len());
+            let rodeo = &self.resource_loader.rodeo;
+            let resolved_block = block.resolve(rodeo);
+            dbg!(&resolved_block);
+            let model = self.resource_loader.load_models(block);
+            dbg!(&resolved_block);
+            let id = self.build_variant(model);
+            self.seen_blocks.insert(block.clone(), id);
+
+            id
+        } else {
+            let id = self.seen_blocks.get(block);
+            return id.unwrap().clone();
+        }
+    }
+    pub fn new(resource_loader: &MCLoader) -> Self {
+        let seen_blocks = DashMap::with_hasher(FxBuildHasher::default());
+        let materials = DashMap::with_hasher(FxBuildHasher::default());
+
+        materials.insert(SmolStr::from("air"), Material::AIR);
+        Self {
+            seen_blocks,
             materials,
-            models: vec![],
+            models: Aovec::new(16),
             resource_loader: resource_loader.clone(),
         }
     }
-    fn get_material(&self, mat: &SmolStr) -> &Material {
-        self.materials.get(mat).expect("")
-    }
 
-    pub fn build_variant(&mut self, variants: Vec<ModelVariant>) -> ModelID {
+    pub fn build_variant(&self, variants: Vec<ModelVariant>) -> ModelID {
+        assert!(variants.len() > 0);
         if variants.len() == 1 {
             match &variants[0] {
                 ModelVariant::SingleModel(variant_entry) => {
@@ -107,31 +127,43 @@ impl ResourceManager {
     }
 
     fn build_model(
-        &mut self,
+        &self,
         block_model: &InternedBlockModel,
         model_type: ModelType,
     ) -> ResourceModel {
         let textures = block_model.get_textures();
+
         let materials = textures
             .iter()
             .map(|texture| {
-                let material = if self
-                    .materials
-                    .contains_key(self.resource_loader.resolve_spur(&texture.1.get_inner()))
-                {
+                let mut current_texture_var = &texture.1;
+                while let InternedTextureVariable::Variable(var) = current_texture_var {
+                    //dbg!(self.resource_loader.resolve_spur(var));
+                    current_texture_var = &textures.iter().find(|tex_2| tex_2.0 == *var).unwrap().1;
+                }
+                let material = if self.materials.contains_key(
+                    self.resource_loader
+                        .resolve_spur(&current_texture_var.get_inner()),
+                ) {
                     self.materials
-                        .get(self.resource_loader.resolve_spur(&texture.1.get_inner()))
+                        .get(
+                            self.resource_loader
+                                .resolve_spur(&current_texture_var.get_inner()),
+                        )
                         .unwrap()
                         .clone()
                 } else {
+                    let a = self.resource_loader.resolve_spur(&texture.0);
+                    //dbg!(a);
                     let tex_path = self.resource_loader.get_texture_path(
-                        self.resource_loader.resolve_spur(&texture.1.get_inner()),
+                        self.resource_loader
+                            .resolve_spur(&current_texture_var.get_inner()),
                     );
-                    dbg!(&tex_path);
+                    //dbg!(&tex_path);
                     let image = RTWImage::load(&tex_path).unwrap();
                     Material::new(
                         self.resource_loader
-                            .resolve_spur(&texture.1.get_inner())
+                            .resolve_spur(&current_texture_var.get_inner())
                             .into(),
                     )
                     .albedo(Texture::Image(image))
@@ -143,11 +175,14 @@ impl ResourceManager {
 
         let model = match model_type {
             ModelType::SingleAABB => {
+                dbg!("single block");
                 let block_element = &block_model.elements[0];
                 let mut block_materials: [Material; 6] = array::from_fn(|_| Material::default());
                 block_element.faces.iter().for_each(|face| {
                     let face = face.as_ref().expect("single block model was missing face");
                     let ind: u32 = face.name as u32;
+                    let a = self.resource_loader.resolve_spur(&face.texture.get_inner());
+                    //dbg!(a);
                     let material = materials
                         .get(&face.texture.get_inner())
                         .expect("texture variable was not in material hashmap");
@@ -159,6 +194,8 @@ impl ResourceManager {
                 ResourceModel::SingleBlock(block_model)
             }
             ModelType::Quads => {
+                dbg!("quads");
+
                 let quads = block_model
                     .elements
                     .iter()

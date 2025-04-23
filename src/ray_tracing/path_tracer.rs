@@ -1,12 +1,17 @@
 use core::f32;
 use std::f32::INFINITY;
 
-use crate::{
-    material, random_float, EmitterSamplingStrategy, Material, MaterialFlags, Ray, Scene,
-};
 use rand::rngs::StdRng;
 
 use glam::{Vec3A, Vec4, Vec4Swizzles};
+
+use crate::random_float;
+
+use super::{
+    material::{self, Material, MaterialFlags},
+    ray::Ray,
+    scene::{EmitterSamplingStrategy, Scene},
+};
 pub fn path_trace(
     rng: &mut StdRng,
     scene: &Scene,
@@ -33,6 +38,7 @@ pub fn path_trace(
             break;
         }
         //println!("hit!");
+        hit = true;
         let current_material = ray.hit.current_material.clone();
         let prev_material = ray.hit.previous_material.clone();
 
@@ -63,7 +69,7 @@ pub fn path_trace(
             1
         };
 
-        for _ in 0..count {
+        for _ in 0..0 {
             let do_metal = metal > Ray::EPSILON && random_float(rng) < metal;
             if do_metal || (specular > Ray::EPSILON && random_float(rng) < specular) {
                 hit |= do_specular_reflection(
@@ -117,7 +123,7 @@ pub fn path_trace(
             }
         }
 
-        ray.hit.color = cumm_color / count as f32;
+        //ray.hit.color = cumm_color / count as f32;
 
         break;
     }

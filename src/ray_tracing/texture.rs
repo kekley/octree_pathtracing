@@ -1,6 +1,7 @@
 use std::{
     array::{self},
     rc::Rc,
+    sync::Arc,
 };
 
 use crate::rtw_image::RTWImage;
@@ -13,8 +14,8 @@ pub enum Texture {
     Image(RTWImage),
     CheckerBoard {
         inv_scale: f32,
-        a: Rc<Texture>,
-        b: Rc<Texture>,
+        a: Arc<Texture>,
+        b: Arc<Texture>,
     },
 }
 lazy_static! {

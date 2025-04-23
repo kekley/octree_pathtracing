@@ -20,6 +20,10 @@ rand = "0.8.5"
 rand_distr = "0.4.3"
 lazy_static = "1.5.0"
 hashbrown = "0.15.2"
+aovec = "1.1.0"
+eframe = "0.31.1"
+egui_extras = { version = "0.31.1", features = ["default", "image"] }
+env_logger = "0.11.8"
 
 [profile.release-with-debug]
 inherits = "release"

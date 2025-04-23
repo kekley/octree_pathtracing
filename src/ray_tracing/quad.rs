@@ -1,6 +1,7 @@
 use glam::{Mat3A, Vec3A, Vec4};
 
-use crate::{Material, Ray};
+use super::{material::Material, ray::Ray};
+
 #[derive(Debug, Clone)]
 pub struct Quad {
     pub origin: Vec3A,

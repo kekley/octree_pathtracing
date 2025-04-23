@@ -1,8 +1,10 @@
 use std::f32::INFINITY;
 
 pub type HittableIdx = u32;
-use crate::{aabb::AABB, bvh::BVHTree, cuboid::Cuboid, ray::Ray, sphere::Sphere};
+use crate::{ray_tracing::aabb::AABB, ray_tracing::bvh::BVHTree, ray_tracing::cuboid::Cuboid};
 use glam::{Vec3A, Vec4};
+
+use super::{ray::Ray, sphere::Sphere};
 
 #[derive(Debug, Clone)]
 pub struct HittableBVH {

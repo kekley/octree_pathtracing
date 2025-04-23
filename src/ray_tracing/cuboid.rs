@@ -1,10 +1,12 @@
 use core::f32;
 use std::f32::INFINITY;
 
-use crate::{aabb::AABB, ray::Ray, Material};
+use crate::{ray_tracing::aabb::AABB, ray_tracing::ray::Ray};
 
 use anyhow::Ok;
 use glam::Vec3A;
+
+use super::material::Material;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Face {
@@ -75,6 +77,7 @@ impl Cuboid {
     }
 
     pub fn intersect_texture(ray: &mut Ray, material: &Material) -> bool {
+        //dbg!(material);
         let color = material
             .albedo
             .value(ray.hit.u.abs(), ray.hit.v.abs(), &ray.at(ray.hit.t));

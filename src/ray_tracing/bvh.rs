@@ -1,10 +1,10 @@
 use std::{cmp::Ordering, f32::INFINITY, mem::swap};
 
 use crate::{
-    aabb::AABB,
-    axis::Axis,
-    hittable::{HitList, Hittable},
-    ray::Ray,
+    ray_tracing::aabb::AABB,
+    ray_tracing::axis::Axis,
+    ray_tracing::hittable::{HitList, Hittable},
+    ray_tracing::ray::Ray,
 };
 
 #[derive(Debug, Clone)]
