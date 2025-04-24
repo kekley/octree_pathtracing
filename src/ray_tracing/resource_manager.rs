@@ -47,10 +47,7 @@ impl ModelManager {
         if !self.seen_blocks.contains_key(block) {
             println!("len: {}", self.seen_blocks.len());
             let rodeo = &self.resource_loader.rodeo;
-            let resolved_block = block.resolve(rodeo);
-            dbg!(&resolved_block);
             let model = self.resource_loader.load_models(block);
-            dbg!(&resolved_block);
             let id = self.build_variant(model);
             self.seen_blocks.insert(block.clone(), id);
 
@@ -175,7 +172,6 @@ impl ModelManager {
 
         let model = match model_type {
             ModelType::SingleAABB => {
-                dbg!("single block");
                 let block_element = &block_model.elements[0];
                 let mut block_materials: [Material; 6] = array::from_fn(|_| Material::default());
                 block_element.faces.iter().for_each(|face| {
@@ -194,8 +190,6 @@ impl ModelManager {
                 ResourceModel::SingleBlock(block_model)
             }
             ModelType::Quads => {
-                dbg!("quads");
-
                 let quads = block_model
                     .elements
                     .iter()

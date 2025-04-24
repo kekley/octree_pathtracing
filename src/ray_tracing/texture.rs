@@ -19,7 +19,10 @@ pub enum Texture {
     },
 }
 lazy_static! {
-    static ref lut_table: [f32; 256] = Texture::linear_lut();
+    pub static ref LUT_TABLE_FLOAT: [f32; 256] = Texture::linear_lut();
+}
+lazy_static! {
+    pub static ref LUT_TABLE_BYTE: [u8; 256] = Texture::generate_gamma_lut();
 }
 impl Texture {
     pub const DEFAULT_TEXTURE: Self = Texture::Color(Vec4::new(1.0, 0.0, 1.0, 1.0));
@@ -27,6 +30,15 @@ impl Texture {
     fn linear_lut() -> [f32; 256] {
         let result: [f32; 256] = array::from_fn(|i| f32::powf(i as f32 / 255.0, 2.2));
         result
+    }
+    fn generate_gamma_lut() -> [u8; 256] {
+        let mut lut = [0u8; 256];
+        for i in 0..256 {
+            // Replicates the original computation:
+            //   ( (i/255.0).powf(1.0/2.2) * 255.0 ) as u8
+            lut[i] = (((i as f32 / 255.0).powf(1.0 / 2.2)) * 255.0) as u8;
+        }
+        lut
     }
 
     pub fn value(&self, u: f32, v: f32, point: &Vec3A) -> Vec4 {
@@ -53,9 +65,9 @@ impl Texture {
 
                 let mut val = Vec4::splat(0.0);
 
-                val[0] = lut_table[(0xFF & color[0]) as usize];
-                val[1] = lut_table[(0xFF & color[1]) as usize];
-                val[2] = lut_table[(0xFF & color[2]) as usize];
+                val[0] = LUT_TABLE_FLOAT[(0xFF & color[0]) as usize];
+                val[1] = LUT_TABLE_FLOAT[(0xFF & color[1]) as usize];
+                val[2] = LUT_TABLE_FLOAT[(0xFF & color[2]) as usize];
                 val[3] = (color[3] & 0xFF) as f32 / 255.0;
 
                 val

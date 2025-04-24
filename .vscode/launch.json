@@ -31,7 +31,26 @@
                 "args": [
                     "build",
                     "--bin=ray_tracing",
-                    "--package=ray_tracing"
+                    "--package=ray_tracing",
+                ],
+                "filter": {
+                    "name": "ray_tracing",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+                {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable optimized 'ray_tracing'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=ray_tracing",
+                    "--package=ray_tracing",
+                    "--profile=release-with-debug"
                 ],
                 "filter": {
                     "name": "ray_tracing",
