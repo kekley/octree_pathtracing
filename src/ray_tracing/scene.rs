@@ -128,8 +128,8 @@ impl SunSamplingStrategy {
 
 use rand::rngs::StdRng;
 
-use glam::{Vec3, Vec3A, Vec3Swizzles, Vec4, Vec4Swizzles};
-use spider_eye::MCLoader;
+use glam::{UVec3, Vec3, Vec3A, Vec3Swizzles, Vec4, Vec4Swizzles};
+use spider_eye::{loaded_world::WorldCoords, MCResourceLoader};
 
 use crate::{random_float, voxels::octree::Octree};
 
@@ -151,6 +151,50 @@ pub struct Scene {
     pub camera: Camera,
 }
 
+impl Scene {
+    pub fn mc() -> Scene {
+        let camera = Camera::look_at(
+            Vec3A::new(5.0, 17.0, 1.0),
+            Vec3A::new(5.0, 4.0, 7.0),
+            Vec3A::Y,
+            89.0,
+        );
+        let minecraft_loader = MCResourceLoader::new();
+
+        let mut scene = Scene::new()
+            .branch_count(1)
+            .camera(camera)
+            .spp(2)
+            .build(&minecraft_loader);
+        let world = minecraft_loader.open_world("./world");
+        let air = minecraft_loader.rodeo.get_or_intern("minecraft:air");
+
+        let f = |position: UVec3| -> Option<u32> {
+            let UVec3 { x, y, z } = position;
+            //println!("position: {}", position);
+            let block = world.get_block(&WorldCoords {
+                x: (x as i64),
+                y: (y as i64 - 64),
+                z: (z as i64),
+            });
+
+            if block.as_ref()?.block_name == air {
+                return None;
+            } else {
+                //println!("not air");
+                let model_id = scene.model_manager.load_resource(block.as_ref()?);
+                Some(model_id)
+            }
+        };
+
+        let tree: Octree<u32> = Octree::construct_parallel(8, &f);
+        let arc = Arc::new(tree);
+
+        //println!("{:?}", tree);
+        scene.octree = arc;
+        scene
+    }
+}
 impl Default for Scene {
     fn default() -> Self {
         Self {
@@ -176,7 +220,7 @@ pub struct SceneBuilder {
 }
 
 impl SceneBuilder {
-    pub fn build(self, resource_loader: &MCLoader) -> Scene {
+    pub fn build(self, resource_loader: &MCResourceLoader) -> Scene {
         Scene {
             sun: Sun::new(
                 320.0,

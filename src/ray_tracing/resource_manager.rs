@@ -9,7 +9,7 @@ use smol_str::SmolStr;
 use spider_eye::{
     block::InternedBlock, block_face::FaceName, block_models::InternedBlockModel,
     block_states::InternedBlockState, block_texture::InternedTextureVariable,
-    resource::BlockStates, resource_loader::MCLoader, variant::ModelVariant,
+    resource::BlockStates, variant::ModelVariant, MCResourceLoader,
 };
 
 use crate::{
@@ -25,7 +25,7 @@ use super::{material::Material, ray::Ray, texture::Texture};
 
 pub type ModelID = u32;
 pub struct ModelManager {
-    pub resource_loader: MCLoader,
+    pub resource_loader: MCResourceLoader,
     materials: DashMap<SmolStr, Material, FxBuildHasher>,
     models: Aovec<ResourceModel>,
     seen_blocks: DashMap<InternedBlock, u32, FxBuildHasher>,
@@ -60,7 +60,7 @@ impl ModelManager {
             return id.unwrap().clone();
         }
     }
-    pub fn new(resource_loader: &MCLoader) -> Self {
+    pub fn new(resource_loader: &MCResourceLoader) -> Self {
         let seen_blocks = DashMap::with_hasher(FxBuildHasher::default());
         let materials = DashMap::with_hasher(FxBuildHasher::default());
 

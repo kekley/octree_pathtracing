@@ -8,7 +8,7 @@ use ray_tracing::{
     voxels::octree::Octree,
     Application,
 };
-use spider_eye::{loaded_world::WorldCoords, MCLoader};
+use spider_eye::{loaded_world::WorldCoords, MCResourceLoader};
 pub const ASPECT_RATIO: f32 = 1.5;
 
 fn main() -> Result<(), anyhow::Error> {
@@ -41,7 +41,7 @@ fn blocks() -> Result<(), anyhow::Error> {
         Vec3A::Y,
         89.0,
     );
-    let minecraft_loader = MCLoader::new();
+    let minecraft_loader = MCResourceLoader::new();
 
     let mut scene = Scene::new()
         .branch_count(1)
@@ -90,7 +90,7 @@ fn blocks() -> Result<(), anyhow::Error> {
     println!("octree built");
     scene.octree = arc;
 
-    let mut a: TileRenderer = TileRenderer::new(RESOLUTION, 3, 1, scene);
+    let mut a: TileRenderer = TileRenderer::new(RESOLUTION, 1, scene);
     let start = Instant::now();
     a.render_to_image("render.png");
     let finish = Instant::now();
