@@ -27,3 +27,4 @@ callgrind.*
 *.ppm
 *debug*
 *.png
+.VSCodeCounter
