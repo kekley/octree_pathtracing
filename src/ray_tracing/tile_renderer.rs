@@ -282,7 +282,7 @@ impl TileRenderer {
                         resolution,
                     );
                     let scene = scene.clone();
-                    TileRenderer::render_tile_replace(tile, scene, current_spp);
+                    TileRenderer::render_tile_average(tile, scene, current_spp, branch_count);
                 })
             });
             spp_clone.fetch_add(branch_count, std::sync::atomic::Ordering::SeqCst);
@@ -308,7 +308,7 @@ impl TileRenderer {
                 );
                 let scene = self.scene.clone();
 
-                TileRenderer::render_tile_replace(tile, scene, current_spp);
+                TileRenderer::render_tile_average(tile, scene, current_spp, branch_count);
             })
         });
         self.spp_add(branch_count);
@@ -445,15 +445,8 @@ impl TileRenderer {
 
                 let dx = rng.gen_range((-1.0 / tile.dim)..(1.0 / tile.dim));
                 let dy = rng.gen_range((-1.0 / tile.dim)..(1.0 / tile.dim));
-                let color = mandelbrot(
-                    x_normalized,
-                    y_normalized,
-                    Vec2::new(
-                        tile.frame_buffer_resolution.0 as f32,
-                        tile.frame_buffer_resolution.1 as f32,
-                    ),
-                    time,
-                );
+                let color =
+                    scene.get_color(x_normalized + dx, y_normalized + dy, &mut rng, current_spp);
                 //scene.get_color(x_normalized + dx, y_normalized + dy, &mut rng, current_spp);
                 let local_buffer_idx = Self::get_pixel_index(x - tile.x0, y - tile.y0, tile.stride);
                 let r = color.x * branch_count as f32;
@@ -475,16 +468,12 @@ impl TileRenderer {
                 let r = tile.local_buffer[local_buffer_idx].r();
                 let g = tile.local_buffer[local_buffer_idx].g();
                 let b = tile.local_buffer[local_buffer_idx].b();
-                /*
-                frame_buffer[frame_buffer_idx].r =
-                    (frame_buffer[frame_buffer_idx].r * current_spp as f32 + r) * sin_v;
-                frame_buffer[frame_buffer_idx].g =
-                    (frame_buffer[frame_buffer_idx].g * current_spp as f32 + g) * sin_v;
-                frame_buffer[frame_buffer_idx].b =
-                    (frame_buffer[frame_buffer_idx].b * current_spp as f32 + b) * sin_v; */
-                *frame_buffer[frame_buffer_idx].r_mut() = r;
-                *frame_buffer[frame_buffer_idx].g_mut() = g;
-                *frame_buffer[frame_buffer_idx].b_mut() = b;
+                *frame_buffer[frame_buffer_idx].r_mut() =
+                    (frame_buffer[frame_buffer_idx].r() * current_spp as f32 + r) * sin_v;
+                *frame_buffer[frame_buffer_idx].g_mut() =
+                    (frame_buffer[frame_buffer_idx].g() * current_spp as f32 + g) * sin_v;
+                *frame_buffer[frame_buffer_idx].b_mut() =
+                    (frame_buffer[frame_buffer_idx].b() * current_spp as f32 + b) * sin_v;
             }
         }
     }

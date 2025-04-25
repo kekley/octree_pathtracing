@@ -68,7 +68,6 @@ pub fn path_trace(
         } else {
             1
         };
-
         for _ in 0..0 {
             let do_metal = metal > Ray::EPSILON && random_float(rng) < metal;
             if do_metal || (specular > Ray::EPSILON && random_float(rng) < specular) {
@@ -127,6 +126,7 @@ pub fn path_trace(
 
         break;
     }
+
     if !hit {
         ray.hit.color = Vec4::new(0.0, 0.0, 0.0, 1.0);
         if first_reflection {
@@ -228,7 +228,7 @@ pub fn do_diffuse_reflection(
         let mut direct_light_g = 0.0;
         let mut direct_light_b = 0.0;
 
-        let front_light = next.direction.dot(ray.hit.normal) > 0.0;
+        let front_light = next.get_direction().dot(ray.hit.normal) > 0.0;
 
         if front_light
             || (material
@@ -250,7 +250,7 @@ pub fn do_diffuse_reflection(
                 1.0
             };
             if attenuation.w > 0.0 {
-                let mult = next.direction.dot(ray.hit.normal).abs() * a;
+                let mult = next.get_direction().dot(ray.hit.normal).abs() * a;
                 direct_light_r = attenuation.x * attenuation.w * mult;
                 direct_light_g = attenuation.y * attenuation.w * mult;
                 direct_light_b = attenuation.z * attenuation.w * mult;
@@ -339,7 +339,7 @@ pub fn do_refraction(
             .contains(MaterialFlags::REFRACTIVE);
 
     let ior1overior2 = ior1 / ior2;
-    let cos_theta = -ray.direction.dot(ray.hit.normal);
+    let cos_theta = -ray.get_direction().dot(ray.hit.normal);
     let radicand = 1.0 - ior1overior2.powi(2) * (1.0 - cos_theta.powi(2));
 
     if do_refraction && radicand < Ray::EPSILON {
@@ -373,22 +373,22 @@ pub fn do_refraction(
             let n = ray.hit.normal;
             if cos_theta > 0.0 {
                 let refracted_direction =
-                    ior1overior2 * ray.direction + (ior1overior2 * cos_theta - t2) * n;
-                next.direction = refracted_direction;
+                    ior1overior2 * *ray.get_direction() + (ior1overior2 * cos_theta - t2) * n;
+                next.set_direction(refracted_direction);
             } else {
                 let refracted_direction =
-                    ior1overior2 * ray.direction - (-ior1overior2 * cos_theta - t2) * n;
-                next.direction = refracted_direction;
+                    ior1overior2 * *ray.get_direction() - (-ior1overior2 * cos_theta - t2) * n;
+                next.set_direction(refracted_direction);
             }
-            next.direction = next.direction.normalize();
+            next.set_direction(next.get_direction().normalize());
 
-            if next.hit.normal.dot(next.direction).signum()
-                != next.hit.normal.dot(ray.direction).signum()
+            if next.hit.normal.dot(*next.get_direction()).signum()
+                != next.hit.normal.dot(*ray.get_direction()).signum()
             {
-                let factor = next.hit.normal.dot(ray.direction).signum() * -Ray::EPSILON
-                    - next.direction.dot(next.hit.normal);
-                next.direction += factor * next.hit.normal;
-                next.direction = next.direction.normalize();
+                let factor = next.hit.normal.dot(*ray.get_direction()).signum() * -Ray::EPSILON
+                    - next.get_direction().dot(next.hit.normal);
+                next.set_direction(*next.get_direction() + factor * next.hit.normal);
+                next.set_direction(next.get_direction().normalize());
             }
             next.origin = next.at(Ray::OFFSET);
         }

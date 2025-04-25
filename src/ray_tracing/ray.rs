@@ -15,7 +15,8 @@ use super::{
 #[derive(Debug, Clone, Default)]
 pub struct Ray {
     pub(crate) origin: Vec3A,
-    pub(crate) direction: Vec3A,
+    direction: Vec3A,
+    inv_dir: Vec3A,
     pub(crate) distance_travelled: f32,
     pub(crate) hit: HitRecord<Material>,
 }
@@ -30,11 +31,30 @@ impl Ray {
     }
     #[inline]
     pub fn new(point: Vec3A, direction: Vec3A) -> Self {
+        const EPSILON: f32 = 1e-6;
+        let inv_dir = Vec3A::new(
+            if direction.x.abs() < EPSILON {
+                1.0 / EPSILON
+            } else {
+                1.0 / direction.x
+            },
+            if direction.y.abs() < EPSILON {
+                1.0 / EPSILON
+            } else {
+                1.0 / direction.y
+            },
+            if direction.z.abs() < EPSILON {
+                1.0 / EPSILON
+            } else {
+                1.0 / direction.z
+            },
+        );
         Self {
             origin: point,
             direction,
             hit: HitRecord::default(),
             distance_travelled: 0.0,
+            inv_dir: inv_dir,
         }
     }
 
@@ -55,6 +75,7 @@ impl Ray {
                 depth: self.hit.depth,
                 specular: self.hit.specular,
             },
+            inv_dir: self.inv_dir.clone(),
         }
     }
 
@@ -71,6 +92,34 @@ impl Ray {
         //self.hit.geom_normal = normal;
     }
 
+    pub fn get_direction(&self) -> &Vec3A {
+        &self.direction
+    }
+    pub fn get_inverse_direction(&self) -> &Vec3A {
+        &self.inv_dir
+    }
+    pub fn set_direction(&mut self, direction: Vec3A) {
+        const EPSILON: f32 = 1e-6;
+        let inv_dir = Vec3A::new(
+            if direction.x.abs() < EPSILON {
+                1.0 / EPSILON
+            } else {
+                1.0 / direction.x
+            },
+            if direction.y.abs() < EPSILON {
+                1.0 / EPSILON
+            } else {
+                1.0 / direction.y
+            },
+            if direction.z.abs() < EPSILON {
+                1.0 / EPSILON
+            } else {
+                1.0 / direction.z
+            },
+        );
+        self.direction = direction;
+        self.inv_dir = inv_dir;
+    }
     pub fn specular_reflection(&self, roughness: f32, rng: &mut StdRng) -> Self {
         let mut tmp = Ray {
             origin: self.origin,
@@ -88,6 +137,7 @@ impl Ray {
                 depth: self.hit.depth,
                 specular: self.hit.specular,
             },
+            inv_dir: self.inv_dir,
         };
         tmp.hit.current_material = tmp.hit.previous_material.clone();
 
@@ -126,8 +176,10 @@ impl Ray {
             tmp.direction = tmp.direction.normalize();
             tmp.origin = tmp.at(Ray::OFFSET);
         } else {
-            tmp.direction =
-                self.direction - 2.0 * self.direction.dot(self.hit.normal) * self.hit.normal;
+            tmp.set_direction(
+                self.direction - 2.0 * self.direction.dot(self.hit.normal) * self.hit.normal,
+            );
+
             tmp.origin = tmp.at(Ray::OFFSET);
         }
 
@@ -163,7 +215,7 @@ impl Ray {
         let new_dir =
             rotation_matrix * Vec3A::new(r * theta.cos(), r * theta.sin(), (1.0 - x1).sqrt());
 
-        self.direction = new_dir;
+        self.set_direction(new_dir);
         self.origin = self.at(Ray::OFFSET);
     }
 
@@ -300,9 +352,12 @@ impl Ray {
         vy = uz * normal.x - ux * normal.z;
         vz = ux * normal.y - uy * normal.x;
 
-        self.direction.x = ux * tx + vx * ty + normal.x * tz;
-        self.direction.y = uy * tx + vy * ty + normal.y * tz;
-        self.direction.z = uz * tx + vz * ty + normal.z * tz;
+        let mut direction = Vec3A::default();
+        direction.x = ux * tx + vx * ty + normal.x * tz;
+        direction.y = uy * tx + vy * ty + normal.y * tz;
+        direction.z = uz * tx + vz * ty + normal.z * tz;
+
+        self.set_direction(direction);
 
         self.origin = self.at(Ray::OFFSET);
         //println!("new_dir: {:?}", new_dir);

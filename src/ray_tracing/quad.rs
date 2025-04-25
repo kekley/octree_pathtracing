@@ -56,13 +56,13 @@ impl Quad {
 
         let mut i = ray.origin - ray.at(Ray::OFFSET).floor();
 
-        let denominator = self.normal.dot(ray.direction);
+        let denominator = self.normal.dot(*ray.get_direction());
 
         if denominator < -Ray::EPSILON || (denominator > Ray::EPSILON) {
             let t = -(i.dot(self.normal) + self.d) / denominator;
 
             if t > -Ray::EPSILON && t < ray.hit.t {
-                i = i + ray.direction * t - self.origin;
+                i = i + ray.get_direction() * t - self.origin;
                 u = i.dot(self.xv) * self.xvl;
                 v = i.dot(self.yv) * self.yvl;
                 if u >= 0.0 && u <= 1.0 && v >= 0.0 && v <= 1.0 {

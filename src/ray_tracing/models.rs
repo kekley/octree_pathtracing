@@ -22,22 +22,17 @@ impl SingleBlockModel {
             octree_result.voxel_position,
             octree_result.voxel_position + 1.0,
         );
-        let (t0, t1) = bounds.intersects_new(ray);
-        if !t0.is_finite() {
-            println!("ray: {:?}", ray);
-            println!("box: {:?}", bounds);
-            println!("{:?}", (t0, t1));
-            panic!();
-        }
+        let t0 = octree_result.t0;
         let normal = Face::to_normal(octree_result.face);
         let material = &self.materials[octree_result.face as usize];
         ray.hit.previous_material = ray.hit.current_material.clone();
         ray.hit.current_material = self.materials[octree_result.face as usize].clone();
-        ray.origin = ray.at(t0);
+        ray.origin = ray.at(t0 - 0.01);
         ray.hit.normal = normal;
         ray.hit.t = t0;
         ray.hit.u = octree_result.uv.x;
         ray.hit.v = octree_result.uv.y;
+
         Cuboid::intersect_texture(ray, material);
         true
     }
@@ -59,7 +54,7 @@ impl QuadModel {
                 let c = quad
                     .material
                     .albedo
-                    .value(ray.hit.u, ray.hit.v, &Vec3A::ZERO);
+                    .value(ray.hit.u, ray.hit.v, &ray.at(ray.hit.t_next));
                 if c.w > Ray::EPSILON {
                     color = c;
                     ray.hit.t = ray.hit.t_next;
@@ -70,7 +65,8 @@ impl QuadModel {
         });
 
         if hit {
-            let p = ray.origin - (ray.at(Ray::OFFSET)).floor() + ray.direction * ray.hit.t_next;
+            let p =
+                ray.origin - (ray.at(Ray::OFFSET)).floor() + *ray.get_direction() * ray.hit.t_next;
             let gt = p.cmpgt(Self::E1);
             let lt = p.cmplt(Self::E0);
 
@@ -80,7 +76,7 @@ impl QuadModel {
 
             ray.hit.color = color;
             ray.distance_travelled += ray.hit.t;
-            ray.origin = ray.at(ray.hit.t);
+            ray.origin = ray.at(ray.hit.t - 0.001);
         }
         hit
     }

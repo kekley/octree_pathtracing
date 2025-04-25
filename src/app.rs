@@ -32,9 +32,9 @@ impl Default for Application {
             window_title: "hi there".to_string(),
             render_texture: None,
             spp: 0,
-            renderer: TileRenderer::new((1280, 720), 12, Scene::mc()),
+            renderer: TileRenderer::new((500, 500), 8, Scene::mc()),
             refresh_time: Instant::now(),
-            local_texture_buffer: vec![U8Pixel::BLACK; 1280 * 720],
+            local_texture_buffer: vec![U8Pixel::BLACK; 500 * 500],
             pause: true,
         }
     }
@@ -88,19 +88,13 @@ impl eframe::App for Application {
             }
         }
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("hi");
-            ui.horizontal(|ui| {
-                let name_label = ui.label("greasy balls");
-                ui.text_edit_singleline(&mut self.window_title)
-                    .labelled_by(name_label.id);
-            });
-            if ui.button("do thing").clicked() {
+            if ui.button("Start Rendering").clicked() {
                 self.pause = false;
                 if self.renderer.worker_thread.is_none() {
                     self.renderer.collect_samples()
                 };
             }
-            if ui.button("stop").clicked() {
+            if ui.button("Stop").clicked() {
                 self.renderer.send_pause_signal();
                 self.pause = true;
             }

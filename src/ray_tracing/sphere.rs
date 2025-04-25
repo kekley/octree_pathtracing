@@ -32,8 +32,8 @@ impl Sphere {
     pub fn hit(&self, ray: &mut Ray) -> bool {
         todo!("Implement Sphere::hit");
         let origin_to_center = self.center - ray.origin;
-        let a = ray.direction.length_squared();
-        let h = ray.direction.dot(origin_to_center);
+        let a = ray.get_direction().length_squared();
+        let h = ray.get_direction().dot(origin_to_center);
         let c = origin_to_center.length_squared() - self.radius * self.radius;
 
         let discriminant = h * h - a * c;

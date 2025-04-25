@@ -103,7 +103,7 @@ impl AABB {
             let box_axis_min = self.get_interval(axis).min;
             let box_axis_max = self.get_interval(axis).max;
             let ray_axis_origin = ray.origin.get_axis(axis);
-            let ray_axis_dir_inverse = (1.0 / ray.direction).get_axis(axis);
+            let ray_axis_dir_inverse = (1.0 / ray.get_direction()).get_axis(axis);
 
             let t0 = (box_axis_min - ray_axis_origin) * ray_axis_dir_inverse;
             let t1 = (box_axis_max - ray_axis_origin) * ray_axis_dir_inverse;
@@ -129,16 +129,19 @@ impl AABB {
         let box_min = self.min;
         let box_max = self.max;
         let ray_origin = ray.origin;
-        let ray_inv_dir = 1.0 / ray.direction;
-        let t_bot = (box_min - ray_origin) * ray_inv_dir;
-        let t_top = (box_max - ray_origin) * ray_inv_dir;
+        let t_bot = (box_min - ray_origin) * ray.get_inverse_direction();
+        let t_top = (box_max - ray_origin) * ray.get_inverse_direction();
 
         let mins = t_bot.min(t_top);
         let maxs = t_bot.max(t_top);
 
-        let t0 = mins.max_element();
+        let mut t0 = mins.max_element();
         let t1 = maxs.min_element();
 
+        if !t0.is_finite() {
+            dbg!("s");
+            t0 = t1;
+        }
         (t0, t1)
     }
 }

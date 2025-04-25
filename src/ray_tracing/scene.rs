@@ -69,7 +69,7 @@ pub struct SunSamplingStrategy {
 
 impl Default for SunSamplingStrategy {
     fn default() -> Self {
-        Self::IMPORTANCE
+        Self::OFF
     }
 }
 
@@ -131,10 +131,13 @@ use rand::rngs::StdRng;
 use glam::{UVec3, Vec3, Vec3A, Vec3Swizzles, Vec4, Vec4Swizzles};
 use spider_eye::{loaded_world::WorldCoords, MCResourceLoader};
 
-use crate::{random_float, voxels::octree::Octree};
+use crate::{random_float, ray_tracing::axis::UP, voxels::octree::Octree};
 
 use super::{
-    camera::Camera, path_tracer::path_trace, ray::Ray, resource_manager::ModelManager,
+    camera::Camera,
+    path_tracer::{flat_shading, path_trace},
+    ray::Ray,
+    resource_manager::ModelManager,
     texture::Texture,
 };
 pub struct Scene {
@@ -154,8 +157,8 @@ pub struct Scene {
 impl Scene {
     pub fn mc() -> Scene {
         let camera = Camera::look_at(
-            Vec3A::new(5.0, 17.0, 1.0),
-            Vec3A::new(5.0, 4.0, 7.0),
+            Vec3A::new(0.0, 8.0, 0.0),
+            Vec3A::new(5.0, 7.0, 5.0),
             Vec3A::Y,
             89.0,
         );
@@ -279,13 +282,11 @@ impl Scene {
 
     pub fn hit(&self, ray: &mut Ray) -> bool {
         let mut hit = false;
-
-        if ray.direction.x == 0.0 && ray.direction.y == 0.0 && ray.direction.z == 0.0
-            || ray.direction.is_nan()
-        {
+        let direction = ray.get_direction();
+        if direction.x == 0.0 && direction.y == 0.0 && direction.z == 0.0 || direction.is_nan() {
             println!("invalid ray direction");
-            println!("ray dir: {}", ray.direction);
-            ray.direction = Vec3A::Y;
+            println!("ray dir: {}", direction);
+            ray.set_direction(UP);
         }
 
         let max_dst = 1024.0;
@@ -489,15 +490,16 @@ impl Sun {
         sun
     }
     pub fn intersect(&self, ray: &mut Ray) -> bool {
-        if !self.draw_texture || ray.direction.dot(self.sw) < 0.5 {
+        let direction = ray.get_direction();
+        if !self.draw_texture || direction.dot(self.sw) < 0.5 {
             return false;
         }
 
         let width = self.radius * 4.0;
         let width2 = width * 2.0;
-        let a = PI / 2.0 - ray.direction.dot(self.su).acos() + width;
+        let a = PI / 2.0 - direction.dot(self.su).acos() + width;
         if a >= 0.0 && a < width2 {
-            let b = PI / 2.0 - ray.direction.dot(self.sv).acos() + width;
+            let b = PI / 2.0 - direction.dot(self.sv).acos() + width;
             if b >= 0.0 && b < width2 {
                 ray.hit.color = self.texture.value(a / width2, b / width2, &Vec3A::ZERO);
                 ray.hit.color.x *= self.apparent_texture_brightness.x * 10.0;
@@ -510,15 +512,16 @@ impl Sun {
         return false;
     }
     pub fn intersect_diffuse(&self, ray: &mut Ray) -> bool {
-        if ray.direction.dot(self.sw) < 0.5 {
+        let direction = ray.get_direction();
+        if direction.dot(self.sw) < 0.5 {
             return false;
         }
         let width = self.radius * 4.0;
         let width2 = width * 2.0;
 
-        let a = PI / 2.0 - ray.direction.dot(self.su).acos() + width;
+        let a = PI / 2.0 - direction.dot(self.su).acos() + width;
         if a >= 0.0 && a < width2 {
-            let b = PI / 2.0 - ray.direction.dot(self.sv).acos() + width;
+            let b = PI / 2.0 - direction.dot(self.sv).acos() + width;
             if b >= 0.0 && b < width2 {
                 ray.hit.color = self.texture.value(a / width2, b / width2, &Vec3A::ZERO);
                 ray.hit.color.x *= self.color.x * 10.0;
@@ -544,9 +547,9 @@ impl Sun {
         v *= phi.sin() * sin_a;
         w *= cos_a;
 
-        reflected.direction = u + v;
-        reflected.direction += w;
-        reflected.direction = reflected.direction.normalize();
+        let mut reflected_dir = u + v;
+        reflected_dir += w.normalize();
+        reflected.set_direction(reflected_dir);
     }
 
     pub fn flat_shading(&self, ray: &mut Ray) {

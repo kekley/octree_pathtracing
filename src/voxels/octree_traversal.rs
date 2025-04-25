@@ -46,12 +46,14 @@ impl Position for Vec3A {
     }
 }
 
+#[derive(Debug)]
 pub struct OctreeIntersectResult<'a, T> {
     pub ty: &'a T,
     pub voxel_position: Vec3A,
     pub hit_position: Vec3A,
     pub uv: Vec2,
     pub face: Face,
+    pub t0: f32,
 }
 
 impl<T: PartialEq + Default + Clone> Octree<T> {
@@ -67,7 +69,7 @@ impl<T: PartialEq + Default + Clone> Octree<T> {
             [Default::default(); OCTREE_MAX_SCALE as usize + 1];
         let mut ro = ray.origin * octree_scale;
 
-        let mut rd: Vec3A = ray.direction;
+        let mut rd: Vec3A = *ray.get_direction();
 
         let max_dst = max_dst * octree_scale;
 
@@ -150,9 +152,8 @@ impl<T: PartialEq + Default + Clone> Octree<T> {
 
             if !child.is_none() && t_min <= t_max {
                 if child.is_leaf() && t_min == 0.0 {
-                    println!("inside block");
-                    println!("ray origin: {}", ray.origin);
-                    println!("ray dir: {}", ray.direction);
+                    dbg!("inside");
+                    return None;
                 }
 
                 if child.is_leaf() && t_min > 0.0 {
@@ -226,6 +227,7 @@ impl<T: PartialEq + Default + Clone> Octree<T> {
                         hit_position,
                         uv,
                         face: face_id.try_into().unwrap(),
+                        t0: t_min / octree_scale,
                     });
                 } else {
                     let half_scale = scale_exp2 * 0.5;
