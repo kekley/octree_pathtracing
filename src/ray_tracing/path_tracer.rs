@@ -39,6 +39,7 @@ pub fn path_trace(
         }
         //println!("hit!");
         hit = true;
+
         let current_material = ray.hit.current_material.clone();
         let prev_material = ray.hit.previous_material.clone();
 
@@ -133,6 +134,7 @@ pub fn path_trace(
             let air_distance = ray.distance_travelled;
         }
     }
+
     hit
 }
 

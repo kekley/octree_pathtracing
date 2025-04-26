@@ -1,4 +1,4 @@
-use std::{rc::Rc, sync::Arc};
+use std::{fmt::Debug, rc::Rc, sync::Arc};
 
 use stb_image::image::load;
 
@@ -24,7 +24,7 @@ impl TryFrom<u32> for BytesPerPixel {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct RTWImage {
     bytes_per_pixel: BytesPerPixel,
     fdata: Arc<[f32]>,
@@ -34,6 +34,16 @@ pub struct RTWImage {
     bytes_per_scanline: u32,
 }
 
+impl Debug for RTWImage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RTWImage")
+            .field("bytes_per_pixel", &self.bytes_per_pixel)
+            .field("image_width", &self.image_width)
+            .field("image_height", &self.image_height)
+            .field("bytes_per_scanline", &self.bytes_per_scanline)
+            .finish()
+    }
+}
 impl RTWImage {
     pub fn load(file_path: &str) -> Result<Self, String> {
         //println!("{}", file_path);

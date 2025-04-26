@@ -8,7 +8,7 @@ use glam::Vec3A;
 
 use super::material::Material;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum Face {
     West = 0,
     East = 1,

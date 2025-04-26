@@ -75,6 +75,7 @@ impl Camera {
             origin += (x * right + y * self.up) * self.aperture;
             new_dir = focal_point - origin;
         }
+
         Ray::new(origin, new_dir.normalize())
     }
 }

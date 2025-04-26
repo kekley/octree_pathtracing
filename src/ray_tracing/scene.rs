@@ -69,7 +69,7 @@ pub struct SunSamplingStrategy {
 
 impl Default for SunSamplingStrategy {
     fn default() -> Self {
-        Self::OFF
+        Self::IMPORTANCE
     }
 }
 
@@ -157,17 +157,17 @@ pub struct Scene {
 impl Scene {
     pub fn mc() -> Scene {
         let camera = Camera::look_at(
-            Vec3A::new(0.0, 8.0, 0.0),
-            Vec3A::new(5.0, 7.0, 5.0),
+            Vec3A::new(30.0, 8.0, 30.0),
+            Vec3A::new(5.0, 6.0, 5.0),
             Vec3A::Y,
             89.0,
         );
         let minecraft_loader = MCResourceLoader::new();
 
         let mut scene = Scene::new()
-            .branch_count(1)
+            .branch_count(10)
             .camera(camera)
-            .spp(2)
+            .spp(20)
             .build(&minecraft_loader);
         let world = minecraft_loader.open_world("./world");
         let air = minecraft_loader.rodeo.get_or_intern("minecraft:air");
@@ -297,9 +297,7 @@ impl Scene {
             let intersection = intersection.as_ref().unwrap();
 
             let model = self.model_manager.get_model(*intersection.ty);
-            model.intersect(ray, intersection);
-
-            return true;
+            return model.intersect(ray, intersection);
         }
 
         return false;

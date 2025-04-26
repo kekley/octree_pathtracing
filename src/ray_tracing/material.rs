@@ -116,7 +116,7 @@ impl Material {
     pub fn new(name: SmolStr) -> MaterialBuilder {
         MaterialBuilder {
             name: name,
-            index_of_refraction: None,
+            index_of_refraction: Some(1.000293),
             material_flags: None,
             specular: None,
             emittance: None,

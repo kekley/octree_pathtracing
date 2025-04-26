@@ -27,7 +27,7 @@ impl SingleBlockModel {
         let material = &self.materials[octree_result.face as usize];
         ray.hit.previous_material = ray.hit.current_material.clone();
         ray.hit.current_material = self.materials[octree_result.face as usize].clone();
-        ray.origin = ray.at(t0 - 0.01);
+        ray.origin = ray.at(t0);
         ray.hit.normal = normal;
         ray.hit.t = t0;
         ray.hit.u = octree_result.uv.x;
@@ -45,17 +45,24 @@ pub struct QuadModel {
 impl QuadModel {
     const E0: Vec3A = Vec3A::splat(-Ray::EPSILON);
     const E1: Vec3A = Vec3A::splat(1.0 + Ray::EPSILON);
-    pub fn intersect(&self, ray: &mut Ray) -> bool {
+    pub fn intersect(
+        &self,
+        ray: &mut Ray,
+        octree_intersect_result: &OctreeIntersectResult<u32>,
+    ) -> bool {
         let mut hit = false;
         ray.hit.t = INFINITY;
-        let mut color = Vec4::ZERO;
+        let mut color = Vec4::ONE;
+        let mut closest: Option<&Quad> = None;
         self.quads.iter().for_each(|quad| {
-            if quad.hit(ray) {
+            if quad.hit(ray, octree_intersect_result) {
                 let c = quad
                     .material
                     .albedo
                     .value(ray.hit.u, ray.hit.v, &ray.at(ray.hit.t_next));
+
                 if c.w > Ray::EPSILON {
+                    closest = Some(quad);
                     color = c;
                     ray.hit.t = ray.hit.t_next;
                     ray.orient_normal(quad.normal);
@@ -65,19 +72,20 @@ impl QuadModel {
         });
 
         if hit {
-            let p =
+            /*             let p =
                 ray.origin - (ray.at(Ray::OFFSET)).floor() + *ray.get_direction() * ray.hit.t_next;
             let gt = p.cmpgt(Self::E1);
             let lt = p.cmplt(Self::E0);
 
             if gt.any() || lt.any() {
                 return false;
-            }
-
+            } */
             ray.hit.color = color;
             ray.distance_travelled += ray.hit.t;
-            ray.origin = ray.at(ray.hit.t - 0.001);
+            ray.origin = ray.at(ray.hit.t);
         }
+        //dbg!(ray.hit.t);
+
         hit
     }
 }

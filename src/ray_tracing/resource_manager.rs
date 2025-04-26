@@ -198,16 +198,18 @@ impl ModelManager {
                             let element_rotation = element.rotation.as_ref().map(|f| f.to_matrix());
                             let face = face.as_ref()?;
                             let (v0, v1, v2) =
-                                get_quad_coordinates(&element.from, &element.to, face.name);
+                                get_quad_vectors(&element.from, &element.to, face.name);
+
                             let uv = if let Some(uv) = &face.uv {
-                                uv.to_vec4()
+                                uv.to_vec4() / 16.0
                             } else {
                                 get_face_coordinates(&element.from, &element.to, face.name)
                             };
                             let material = materials
                                 .get(&face.texture.get_inner())
                                 .expect("texture variable was not in materials hashmap");
-                            let mut quad = Quad::new(v0, v1, v2, uv, material.clone());
+                            let mut quad = Quad::new(v0, v1, v2, material.clone());
+                            println!("{:?}", &quad);
                             if let Some(matrix) = element_rotation {
                                 quad.transform(&matrix);
                             }
@@ -227,42 +229,71 @@ impl ModelManager {
     }
 }
 
-fn get_quad_coordinates(from: &Vec3, to: &Vec3, face: FaceName) -> (Vec3A, Vec3A, Vec3A) {
+fn get_quad_vectors(from: &Vec3, to: &Vec3, face: FaceName) -> (Vec3A, Vec3A, Vec3A) {
+    // Convert from block space (0–16) into unit cube space (0–1).
+    let from = *from / 16.0;
+    let to = *to / 16.0;
+
     match face {
-        FaceName::Down => (
-            Vec3A::new(from.x, from.y, from.z),
-            Vec3A::new(to.x, from.y, from.z),
-            Vec3A::new(from.x, from.y, to.z),
-        ),
-        FaceName::Up => (
-            Vec3A::new(to.x, to.y, from.z),
-            Vec3A::new(from.x, to.y, from.z),
-            Vec3A::new(to.x, to.y, to.z),
-        ),
-        FaceName::North => (
-            Vec3A::new(to.x, from.y, from.z),
-            Vec3A::new(from.x, from.y, from.z),
-            Vec3A::new(to.x, to.y, from.z),
-        ),
-        FaceName::South => (
-            Vec3A::new(from.x, from.y, to.z),
-            Vec3A::new(to.x, from.y, to.z),
-            Vec3A::new(from.x, to.y, to.z),
-        ),
-        FaceName::West => (
-            Vec3A::new(from.x, from.y, from.z),
-            Vec3A::new(from.x, from.y, to.z),
-            Vec3A::new(from.x, to.y, from.z),
-        ),
-        FaceName::East => (
-            Vec3A::new(to.x, from.y, to.z),
-            Vec3A::new(to.x, from.y, from.z),
-            Vec3A::new(to.x, to.y, to.z),
-        ),
+        FaceName::Down => {
+            let origin = Vec3A::new(from.x, from.y, to.z);
+            let u = Vec3A::new(0.0, 0.0, from.z - to.z);
+            let v = Vec3A::new(to.x - from.x, 0.0, 0.0);
+            (origin, u, v)
+        }
+
+        FaceName::Up => {
+            let origin = Vec3A::new(from.x, to.y, from.z);
+            let u = Vec3A::new(0.0, 0.0, to.z - from.z);
+            let v = Vec3A::new(to.x - from.x, 0.0, 0.0);
+            (origin, u, v)
+        }
+
+        // North face: normal = (0,0,-1), so the face is on plane z = from.z.
+        // We set the origin at (to.x, from.y, from.z)
+        // with u running west (negative X) and v running up along Y.
+        FaceName::North => {
+            let origin = Vec3A::new(to.x, from.y, from.z);
+            let u = Vec3A::new(from.x - to.x, 0.0, 0.0); // note: negative delta in X
+            let v = Vec3A::new(0.0, to.y - from.y, 0.0);
+            (origin, u, v)
+        }
+
+        // South face: normal = (0,0,+1), so the face is on plane z = to.z.
+        // We choose the origin at (from.x, from.y, to.z)
+        // and let u run east (positive X) and v run up (positive Y).
+        FaceName::South => {
+            let origin = Vec3A::new(from.x, from.y, to.z);
+            let u = Vec3A::new(to.x - from.x, 0.0, 0.0);
+            let v = Vec3A::new(0.0, to.y - from.y, 0.0);
+            (origin, u, v)
+        }
+
+        // West face: normal = (-1,0,0), so the face is on plane x = from.x.
+        // We use origin = (from.x, from.y, to.z);
+        // let u run up (along Y) and v run “backward” (from high z to low z).
+        FaceName::West => {
+            let origin = Vec3A::new(to.x, from.y, to.z);
+            let u = Vec3A::new(0.0, 0.0, from.z - to.z);
+            let v = Vec3A::new(0.0, from.y - to.y, 0.0);
+            (origin, u, v)
+        }
+
+        // East face: normal = (+1,0,0), so it lies on plane x = to.x.
+        // We choose origin = (to.x, from.y, from.z)
+        // with u going up along Y and v going forward (positive Z).
+        FaceName::East => {
+            let origin = Vec3A::new(from.x, from.y, from.z);
+            let u = Vec3A::new(0.0, 0.0, to.z - from.z);
+            let v = Vec3A::new(0.0, to.y - from.y, 0.0);
+            (origin, u, v)
+        }
     }
 }
 
 fn get_face_coordinates(from: &Vec3, to: &Vec3, face: FaceName) -> Vec4 {
+    let from = from / 16.0;
+    let to = to / 16.0;
     match face {
         FaceName::Down => Vec4::new(from.x, to.x, from.z, to.z),
         FaceName::Up => Vec4::new(from.x, to.x, to.z, from.z),
@@ -295,7 +326,13 @@ impl ResourceModel {
             ResourceModel::SingleBlock(single_block_model) => {
                 single_block_model.intersect(&octree_result, ray)
             }
-            ResourceModel::Quad(quad_model) => quad_model.intersect(ray),
+            ResourceModel::Quad(quad_model) => {
+                if quad_model.intersect(ray, octree_result) {
+                    ray.origin = ray.at(Ray::OFFSET);
+                    return true;
+                }
+                return false;
+            }
         }
     }
 }

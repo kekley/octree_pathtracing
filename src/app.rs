@@ -32,9 +32,9 @@ impl Default for Application {
             window_title: "hi there".to_string(),
             render_texture: None,
             spp: 0,
-            renderer: TileRenderer::new((500, 500), 8, Scene::mc()),
+            renderer: TileRenderer::new((1500, 1500), 8, Scene::mc()),
             refresh_time: Instant::now(),
-            local_texture_buffer: vec![U8Pixel::BLACK; 500 * 500],
+            local_texture_buffer: vec![U8Pixel::BLACK; 1500 * 1500],
             pause: true,
         }
     }

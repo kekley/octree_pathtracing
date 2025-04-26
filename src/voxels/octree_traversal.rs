@@ -209,13 +209,11 @@ impl<T: PartialEq + Default + Clone> Octree<T> {
                             uv.x = 1.0 - uv.x;
                         }
                     }
-
+                    let dst = t_min/octree_scale;
                     let min = unmirrored_pos + OCTREE_EPSILON;
                     let max = unmirrored_pos + scale_exp2 - OCTREE_EPSILON;
-                    let mut hit_position = (ro + t_min * rd)
-                        .max(pos + OCTREE_EPSILON)
-                        .min(pos + scale_exp2 - OCTREE_EPSILON)
-                        .clamp(min, max);
+                    let mut hit_position = (ro + t_min * rd);
+
                     hit_position -= 1.0;
                     hit_position /= octree_scale;
                     unmirrored_pos -= 1.0;
@@ -227,7 +225,7 @@ impl<T: PartialEq + Default + Clone> Octree<T> {
                         hit_position,
                         uv,
                         face: face_id.try_into().unwrap(),
-                        t0: t_min / octree_scale,
+                        t0: dst,
                     });
                 } else {
                     let half_scale = scale_exp2 * 0.5;

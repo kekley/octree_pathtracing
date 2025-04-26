@@ -95,7 +95,7 @@ impl Into<[u8; 4]> for U8Pixel {
 
 impl From<&F32Pixel> for U8Pixel {
     fn from(value: &F32Pixel) -> Self {
-        let res = (value.data * 255.0);
+        let res = (value.data * 255.0).min(Vec4::splat(255.0));
         let r = LUT_TABLE_BYTE[res[0] as usize];
         let g = LUT_TABLE_BYTE[res[1] as usize];
         let b = LUT_TABLE_BYTE[res[2] as usize];
@@ -271,8 +271,14 @@ impl TileRenderer {
             let tile_height = (resolution.1 + thread_count - 1) / thread_count;
 
             let current_spp = spp_clone.load(std::sync::atomic::Ordering::SeqCst);
-            (0..thread_count).into_par_iter().for_each(|y| {
-                (0..thread_count).into_par_iter().for_each(|x| {
+            if scene.target_spp <= current_spp {
+                dbg!("finished!");
+                stop_bool.store(true, std::sync::atomic::Ordering::SeqCst);
+                pause_bool.store(true, std::sync::atomic::Ordering::SeqCst);
+                break;
+            }
+            (0..thread_count).into_iter().for_each(|y| {
+                (0..thread_count).into_iter().for_each(|x| {
                     let tile = Tile::new(
                         x * tile_width,
                         y * tile_height,
