@@ -11,7 +11,7 @@ use eframe::egui::{
 
 use crate::ray_tracing::{
     scene::Scene,
-    tile_renderer::{TileRenderer, U8Pixel},
+    tile_renderer::{TileRenderer, U8Color},
 };
 
 pub struct Application {
@@ -20,7 +20,7 @@ pub struct Application {
     window_size: (usize, usize),
     renderer: TileRenderer,
     render_texture: Option<TextureHandle>,
-    local_texture_buffer: Vec<U8Pixel>,
+    local_texture_buffer: Vec<U8Color>,
     spp: u32,
     pause: bool,
 }
@@ -34,15 +34,15 @@ impl Default for Application {
             spp: 0,
             renderer: TileRenderer::new((1500, 1500), 8, Scene::mc()),
             refresh_time: Instant::now(),
-            local_texture_buffer: vec![U8Pixel::BLACK; 1500 * 1500],
+            local_texture_buffer: vec![U8Color::BLACK; 1500 * 1500],
             pause: true,
         }
     }
 }
 
-fn pixel_slice_to_u8_slice(slice: &[U8Pixel]) -> &[u8] {
+fn pixel_slice_to_u8_slice(slice: &[U8Color]) -> &[u8] {
     let ptr = slice.as_ptr();
-    let len = slice.len() * size_of::<U8Pixel>();
+    let len = slice.len() * size_of::<U8Color>();
     unsafe { std::slice::from_raw_parts(ptr.cast(), len) }
 }
 impl eframe::App for Application {

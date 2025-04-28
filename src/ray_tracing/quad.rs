@@ -10,6 +10,7 @@ pub struct Quad {
     v: Vec3A,
     u: Vec3A,
     w: Vec3A,
+    d: f32,
     pub normal: Vec3A,
     pub material: Material,
     pub tint: Vec4,
@@ -21,19 +22,26 @@ impl Quad {
         let n = u.cross(v);
         let normal = n.normalize();
         let w = n / n.dot(n);
+        let d = normal.dot(origin);
         Quad {
             origin: origin,
             v: v,
             u: u,
             w: w,
+            d,
             normal: normal,
             material: material,
             tint: Vec4::ONE,
         }
     }
     pub fn transform(&mut self, matrix: &Mat3A) {
-        todo!();
+        self.origin = *matrix * self.origin;
+        self.u = *matrix * self.u;
+        self.v = *matrix * self.v;
+        self.w = *matrix * self.w;
+        self.normal = *matrix * self.normal;
     }
+
     /*    pub fn hit(&self, ray: &mut Ray, octree_intersect_result: &OctreeIntersectResult<u32>) -> bool {
         // ISSUE WHERE ray.at(Ray::OFFSET).floor() DOESN'T EQUAL VOXEL POS
         let test =
@@ -68,26 +76,23 @@ impl Quad {
         }
         return false;
     } */
-    pub fn hit(&self, ray: &mut Ray, octree_intersect_result: &OctreeIntersectResult<u32>) -> bool {
-        let ray_origin_translated = ray.origin - octree_intersect_result.voxel_position;
+    pub fn hit(&self, ray: &mut Ray, voxel_position: &Vec3A, hit_point: &Vec3A) -> bool {
+        let ray_origin_translated = *hit_point - voxel_position;
         let denom = self.normal.dot(*ray.get_direction());
 
         // ray parallel to plane
         if f32::abs(denom) < 1e-8 {
-            panic!();
             return false;
         }
 
-        let d = self.normal.dot(self.origin);
-
-        let t = (d - self.normal.dot(ray_origin_translated)) / denom;
+        let t = (self.d - self.normal.dot(ray_origin_translated)) / denom;
 
         let intersection = ray_origin_translated + ray.get_direction() * t;
         let planar_hit_point = intersection - self.origin;
         let alpha = self.w.dot(planar_hit_point.cross(self.v));
         let beta = self.w.dot(self.u.cross(planar_hit_point));
 
-        if alpha < 0.0 || alpha > 1.0 || beta < 0.0 || beta > 1.0 && ray.hit.t_next > t {
+        if alpha < 0.0 || alpha > 1.0 || beta < 0.0 || beta > 1.0 || ray.hit.t_next < t {
             return false;
         }
 

@@ -236,16 +236,16 @@ fn get_quad_vectors(from: &Vec3, to: &Vec3, face: FaceName) -> (Vec3A, Vec3A, Ve
 
     match face {
         FaceName::Down => {
-            let origin = Vec3A::new(from.x, from.y, to.z);
-            let u = Vec3A::new(0.0, 0.0, from.z - to.z);
-            let v = Vec3A::new(to.x - from.x, 0.0, 0.0);
+            let origin = Vec3A::new(from.x, from.y, from.z);
+            let u = Vec3A::new(to.x - from.x, 0.0, 0.0);
+            let v = Vec3A::new(0.0, 0.0, to.z - from.z);
             (origin, u, v)
         }
 
         FaceName::Up => {
-            let origin = Vec3A::new(from.x, to.y, from.z);
-            let u = Vec3A::new(0.0, 0.0, to.z - from.z);
-            let v = Vec3A::new(to.x - from.x, 0.0, 0.0);
+            let origin = Vec3A::new(to.x, to.y, from.z);
+            let u = Vec3A::new(from.x - to.x, 0.0, 0.0);
+            let v = Vec3A::new(0.0, 0.0, to.z - from.z);
             (origin, u, v)
         }
 
@@ -273,9 +273,9 @@ fn get_quad_vectors(from: &Vec3, to: &Vec3, face: FaceName) -> (Vec3A, Vec3A, Ve
         // We use origin = (from.x, from.y, to.z);
         // let u run up (along Y) and v run “backward” (from high z to low z).
         FaceName::West => {
-            let origin = Vec3A::new(to.x, from.y, to.z);
-            let u = Vec3A::new(0.0, 0.0, from.z - to.z);
-            let v = Vec3A::new(0.0, from.y - to.y, 0.0);
+            let origin = Vec3A::new(from.x, from.y, from.z);
+            let u = Vec3A::new(0.0, 0.0, to.z - from.z);
+            let v = Vec3A::new(0.0, to.y - from.y, 0.0);
             (origin, u, v)
         }
 
@@ -283,8 +283,8 @@ fn get_quad_vectors(from: &Vec3, to: &Vec3, face: FaceName) -> (Vec3A, Vec3A, Ve
         // We choose origin = (to.x, from.y, from.z)
         // with u going up along Y and v going forward (positive Z).
         FaceName::East => {
-            let origin = Vec3A::new(from.x, from.y, from.z);
-            let u = Vec3A::new(0.0, 0.0, to.z - from.z);
+            let origin = Vec3A::new(to.x, from.y, to.z);
+            let u = Vec3A::new(0.0, 0.0, from.z - to.z);
             let v = Vec3A::new(0.0, to.y - from.y, 0.0);
             (origin, u, v)
         }
@@ -321,18 +321,15 @@ impl ResourceModel {
             ResourceModel::Quad(quad_model) => quad_model.quads,
         }
     }
-    pub fn intersect(&self, ray: &mut Ray, octree_result: &OctreeIntersectResult<u32>) -> bool {
+    /*     pub fn intersect(&self, ray: &mut Ray, voxel_position: Vec3A, t0: f32) -> bool {
         match self {
-            ResourceModel::SingleBlock(single_block_model) => {
-                single_block_model.intersect(&octree_result, ray)
-            }
+            ResourceModel::SingleBlock(single_block_model) => single_block_model.intersect(ray),
             ResourceModel::Quad(quad_model) => {
-                if quad_model.intersect(ray, octree_result) {
-                    ray.origin = ray.at(Ray::OFFSET);
+                if quad_model.intersect(ray,) {
                     return true;
                 }
                 return false;
             }
         }
-    }
+    } */
 }

@@ -38,7 +38,6 @@ pub fn path_trace(
             break;
         }
         //println!("hit!");
-        hit = true;
 
         let current_material = ray.hit.current_material.clone();
         let prev_material = ray.hit.previous_material.clone();
@@ -65,11 +64,12 @@ pub fn path_trace(
         let metal = current_material.metalness;
 
         let count = if first_reflection {
-            scene.get_current_branch_count(current_spp)
+            Scene::get_current_branch_count(scene.branch_count, current_spp)
         } else {
             1
         };
-        for _ in 0..0 {
+
+        for _ in 0..count {
             let do_metal = metal > Ray::EPSILON && random_float(rng) < metal;
             if do_metal || (specular > Ray::EPSILON && random_float(rng) < specular) {
                 hit |= do_specular_reflection(
@@ -123,7 +123,7 @@ pub fn path_trace(
             }
         }
 
-        //ray.hit.color = cumm_color / count as f32;
+        ray.hit.color = cumm_color * (1.0 / count as f32);
 
         break;
     }
@@ -223,6 +223,7 @@ pub fn do_diffuse_reflection(
     }
 
     if scene.sun_sampling_strategy.sun_sampling {
+        dbg!("huh?");
         *next = ray.clone();
         scene.sun.get_random_sun_direction(next, rng);
 

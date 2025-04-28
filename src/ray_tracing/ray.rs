@@ -221,8 +221,11 @@ impl Ray {
 
     pub fn diffuse_reflection(&mut self, ray: &mut Ray, rng: &mut StdRng, scene: &Scene) {
         *self = ray.clone();
-        let normal = self.hit.normal;
 
+        let normal = self.hit.normal;
+        if !normal.is_finite() {
+            dbg!(normal);
+        }
         let mut x1 = random_float(rng);
         let mut x2 = random_float(rng);
 
@@ -268,13 +271,17 @@ impl Ray {
             let mut sample_chance = scene.sun.importance_sample_chance;
 
             let sun_alt_relative = sun_tz.asin();
-
+            // check if there is any chance of the sun being visible
             if sun_alt_relative + circle_radius > Ray::EPSILON {
+                // if the sun is not at too shallow of an angle, then sample a circular region
                 if sun_tx.hypot(sun_ty) + circle_radius + Ray::EPSILON < 1.0 {
                     if random_float(rng) < sample_chance {
                         tx = sun_tx + tx * circle_radius;
                         ty = sun_ty + ty * circle_radius;
+                        // diminish the contribution of the ray based on the circle area and the sample chance
                         ray.hit.color *= circle_radius * circle_radius / sample_chance;
+                        // non-sun sampling
+                        // now, rather than guaranteeing that the ray is cast within a circle, instead guarantee that it does not
                     } else {
                         while (tx - sun_tx).hypot(ty - sun_ty) < circle_radius {
                             tx -= sun_tx;
@@ -285,10 +292,13 @@ impl Ray {
                             tx /= circle_radius;
                             ty /= circle_radius;
                         }
+
                         ray.hit.color *=
                             (1.0 - circle_radius * circle_radius) / (1.0 - sample_chance);
                     }
                 } else {
+                    // the sun is at a shallow angle, so instead we're using a "rectangular-ish segment"
+                    // it is important that we sample from a shape which we can easily calculate the area of
                     let min_r = (sun_alt_relative + circle_radius).cos();
                     let max_r = ((sun_alt_relative - circle_radius).max(0.0)).cos();
 
@@ -360,16 +370,16 @@ impl Ray {
         self.set_direction(direction);
 
         self.origin = self.at(Ray::OFFSET);
-        //println!("new_dir: {:?}", new_dir);
+        //dbg!("new_dir: {:?}", ray.direction);
 
         self.hit.current_material = self.hit.previous_material.clone();
         self.hit.specular = false;
 
-        /*         if (normal.dot(self.direction)).signum() == (normal.dot(ray.direction)).signum() {
-            let factor =
-                normal.dot(ray.direction).signum() * -Ray::EPSILON - self.direction.dot(normal);
+        if (normal.dot(self.direction)).signum() == (normal.dot(ray.direction)).signum() {
+            let factor = normal.dot(ray.direction).signum() * -Ray::EPSILON
+                - self.direction.dot(self.hit.normal);
             self.direction += normal * factor;
             self.direction = self.direction.normalize();
-        } */
+        }
     }
 }

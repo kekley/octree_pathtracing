@@ -1,6 +1,6 @@
 use std::{f32::INFINITY, usize};
 
-use glam::{Vec3A, Vec4};
+use glam::{Vec2, Vec3A, Vec4};
 
 use crate::voxels::octree_traversal::OctreeIntersectResult;
 
@@ -17,21 +17,27 @@ pub struct SingleBlockModel {
     pub materials: [Material; 6],
 }
 impl SingleBlockModel {
-    pub fn intersect(&self, octree_result: &OctreeIntersectResult<u32>, ray: &mut Ray) -> bool {
-        let bounds = AABB::from_points(
-            octree_result.voxel_position,
-            octree_result.voxel_position + 1.0,
-        );
-        let t0 = octree_result.t0;
-        let normal = Face::to_normal(octree_result.face);
-        let material = &self.materials[octree_result.face as usize];
+    pub fn intersect(
+        &self,
+        ray: &mut Ray,
+        voxel_position: &Vec3A,
+        t0: f32,
+        face: Face,
+        uv: &Vec2,
+    ) -> bool {
+        let bounds = AABB::from_points(*voxel_position, voxel_position + 1.0);
+
+        let normal = Face::to_normal(face);
+
+        let material = &self.materials[face as usize];
+
         ray.hit.previous_material = ray.hit.current_material.clone();
-        ray.hit.current_material = self.materials[octree_result.face as usize].clone();
+        ray.hit.current_material = self.materials[face as usize].clone();
         ray.origin = ray.at(t0);
         ray.hit.normal = normal;
         ray.hit.t = t0;
-        ray.hit.u = octree_result.uv.x;
-        ray.hit.v = octree_result.uv.y;
+        ray.hit.u = uv.x;
+        ray.hit.v = uv.y;
 
         Cuboid::intersect_texture(ray, material);
         true
@@ -45,17 +51,13 @@ pub struct QuadModel {
 impl QuadModel {
     const E0: Vec3A = Vec3A::splat(-Ray::EPSILON);
     const E1: Vec3A = Vec3A::splat(1.0 + Ray::EPSILON);
-    pub fn intersect(
-        &self,
-        ray: &mut Ray,
-        octree_intersect_result: &OctreeIntersectResult<u32>,
-    ) -> bool {
+    pub fn intersect(&self, ray: &mut Ray, voxel_position: &Vec3A, hit_point: &Vec3A) -> bool {
         let mut hit = false;
         ray.hit.t = INFINITY;
         let mut color = Vec4::ONE;
         let mut closest: Option<&Quad> = None;
         self.quads.iter().for_each(|quad| {
-            if quad.hit(ray, octree_intersect_result) {
+            if quad.hit(ray, voxel_position, hit_point) {
                 let c = quad
                     .material
                     .albedo

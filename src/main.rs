@@ -8,7 +8,10 @@ use ray_tracing::{
     voxels::octree::Octree,
     Application,
 };
-use spider_eye::{loaded_world::WorldCoords, MCResourceLoader};
+use spider_eye::{
+    loaded_world::{World, WorldCoords},
+    MCResourceLoader,
+};
 pub const ASPECT_RATIO: f32 = 1.5;
 
 fn main() -> Result<(), anyhow::Error> {
@@ -92,10 +95,25 @@ fn blocks() -> Result<(), anyhow::Error> {
 
     let mut a: TileRenderer = TileRenderer::new(RESOLUTION, 1, scene);
     let start = Instant::now();
-    a.render_to_image("render.png");
     let finish = Instant::now();
     let duration = finish - start;
 
     println!("time elapsed: {}", duration.as_millis());
     Ok(())
+}
+
+#[test]
+fn lichen() {
+    let loader = MCResourceLoader::new();
+    let world = loader.open_world("./biggerworld");
+    let lichen = world
+        .get_block(&WorldCoords {
+            x: 16 + 8,
+            y: -11,
+            z: 16 + 15,
+        })
+        .unwrap();
+
+    let resolved = lichen.resolve(&loader.rodeo);
+    dbg!(resolved);
 }

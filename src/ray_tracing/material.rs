@@ -3,6 +3,8 @@ use bitflags::bitflags;
 use glam::Vec4;
 use smol_str::SmolStr;
 
+use super::tile_renderer::U8Color;
+
 bitflags! {
     #[derive(Clone, Copy,Debug)]
     pub struct MaterialFlags: u32 {
@@ -111,7 +113,7 @@ impl Material {
         emittance: 0.0,
         roughness: 0.0,
         metalness: 0.0,
-        albedo: Texture::Color(Vec4::ZERO),
+        albedo: Texture::Color(U8Color::new(0, 0, 0, 0)),
     };
     pub fn new(name: SmolStr) -> MaterialBuilder {
         MaterialBuilder {

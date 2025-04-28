@@ -139,6 +139,7 @@ use super::{
     ray::Ray,
     resource_manager::ModelManager,
     texture::Texture,
+    tile_renderer::U8Color,
 };
 pub struct Scene {
     pub sun: Sun,
@@ -157,7 +158,7 @@ pub struct Scene {
 impl Scene {
     pub fn mc() -> Scene {
         let camera = Camera::look_at(
-            Vec3A::new(30.0, 8.0, 30.0),
+            Vec3A::new(0.0, 8.0, 0.0),
             Vec3A::new(5.0, 6.0, 5.0),
             Vec3A::Y,
             89.0,
@@ -167,7 +168,7 @@ impl Scene {
         let mut scene = Scene::new()
             .branch_count(10)
             .camera(camera)
-            .spp(20)
+            .spp(50)
             .build(&minecraft_loader);
         let world = minecraft_loader.open_world("./world");
         let air = minecraft_loader.rodeo.get_or_intern("minecraft:air");
@@ -226,11 +227,11 @@ impl SceneBuilder {
     pub fn build(self, resource_loader: &MCResourceLoader) -> Scene {
         Scene {
             sun: Sun::new(
-                320.0,
-                50.0,
-                0.01,
+                PI / 2.5,
+                PI / 3.0,
+                0.03,
                 Vec4::splat(1.0),
-                Texture::Color(Vec4::splat(1.0)),
+                Texture::Color(U8Color::new(30, 30, 30, 30)),
                 true,
                 false,
                 Vec3A::splat(1.0),
@@ -291,27 +292,21 @@ impl Scene {
 
         let max_dst = 1024.0;
 
-        let intersection = self.octree.intersect_octree(ray, max_dst);
-        hit = intersection.is_some();
-        if hit {
-            let intersection = intersection.as_ref().unwrap();
-
-            let model = self.model_manager.get_model(*intersection.ty);
-            return model.intersect(ray, intersection);
-        }
-
-        return false;
+        let intersection = self
+            .octree
+            .intersect_octree_new(ray, max_dst, &self.model_manager);
+        intersection
     }
 
-    pub fn get_current_branch_count(&self, current_spp: u32) -> u32 {
-        if current_spp < self.branch_count {
-            if current_spp <= (self.branch_count as f32).sqrt() as u32 {
+    pub fn get_current_branch_count(scene_branch_count: u32, current_spp: u32) -> u32 {
+        if current_spp < scene_branch_count {
+            if current_spp <= (scene_branch_count as f32).sqrt() as u32 {
                 return 1;
             } else {
-                return self.branch_count - current_spp;
+                return scene_branch_count - current_spp;
             }
         } else {
-            return self.branch_count;
+            return scene_branch_count;
         }
     }
 
@@ -325,6 +320,7 @@ impl Scene {
 
     pub fn get_sky_color(&self, ray: &mut Ray, draw_sun: bool) {
         self.get_sky_color_diffuse_inner(ray);
+        //TODO: RAY COLOR TIMES SKY EXPOSURE AND SKY LIGHT MODIFIER
         if draw_sun {
             self.add_sun_color(ray);
         }
@@ -333,6 +329,8 @@ impl Scene {
 
     pub fn get_sky_color_diffuse_sun(&self, ray: &mut Ray, diffuse_sun: bool) {
         self.get_sky_color_diffuse_inner(ray);
+        //TODO: RAY COLOR TIMES SKY EXPOSURE AND SKY LIGHT MODIFIER
+
         if diffuse_sun {
             self.add_sun_color_diffuse_sun(ray);
         }
@@ -344,6 +342,7 @@ impl Scene {
     }
     pub fn get_sky_color_interp(&self, ray: &mut Ray) {
         self.get_sky_color_diffuse_inner(ray);
+        // ray color times sky exposure and skylightmodifier
         self.add_sun_color(ray);
         ray.hit.color.w = 1.0;
     }
@@ -382,6 +381,7 @@ pub struct Sun {
     pub importance_sample_radius: f32,
     draw_texture: bool,
     texture_modification: bool,
+    apparent_brightness: f32,
     apparent_texture_brightness: Vec3A,
     texture: Texture,
     color: Vec4,
@@ -399,11 +399,11 @@ pub struct Sun {
 impl Default for Sun {
     fn default() -> Self {
         Sun::new(
-            320.0,
-            50.0,
-            0.01,
+            PI / 2.5,
+            PI / 3.0,
+            0.03,
             Vec4::splat(1.0),
-            Texture::Color(Vec4::splat(1.0)),
+            Texture::Color(U8Color::new(255, 255, 255, 255)),
             true,
             false,
             Vec3A::splat(1.0),
@@ -414,9 +414,11 @@ impl Default for Sun {
 impl Sun {
     pub const DEFAULT_AZIMUTH: f32 = PI / 2.5;
     pub const DEFAULT_ALTITUDE: f32 = PI / 3.0;
+    pub const DEFAULT_IMPORTANCE_SAMPLE_CHANCE: f32 = 0.1;
     pub const MAX_IMPORTANCE_SAMPLE_CHANCE: f32 = 0.9;
     pub const MIN_IMPORTANCE_SAMPLE_CHANCE: f32 = 0.001;
     pub const MAX_IMPORTANCE_SAMPLE_RADIUS: f32 = 5.0;
+    pub const DEFAULT_IMPORTANCE_SAMPLE_RADIUS: f32 = 1.2;
     pub const MIN_IMPORTANCE_SAMPLE_RADIUS: f32 = 0.1;
     const AMBIENT: f32 = 0.3;
     const INTENSITY: f32 = 1.25;
@@ -455,14 +457,14 @@ impl Sun {
 
         let mut emittance = color;
         emittance *= Sun::INTENSITY.powf(Sun::GAMMA);
-
+        let apparent_brightness = Sun::INTENSITY;
         let mut apparent_texture_brightness = if texture_modification {
             apparent_color
         } else {
             Vec3A::splat(1.0)
         };
 
-        apparent_texture_brightness *= Sun::INTENSITY.powf(Sun::GAMMA);
+        apparent_texture_brightness *= apparent_brightness.powf(Sun::GAMMA);
 
         let sun = Sun {
             draw_texture,
@@ -479,10 +481,11 @@ impl Sun {
             radius_sin,
             luminosity: 100.0,
             luminosity_pdf: 1.0 / 100.0,
-            importance_sample_chance: 0.1,
-            importance_sample_radius: 1.2,
+            importance_sample_chance: Sun::DEFAULT_IMPORTANCE_SAMPLE_CHANCE,
+            importance_sample_radius: Sun::DEFAULT_IMPORTANCE_SAMPLE_RADIUS,
             texture_modification,
             apparent_texture_brightness: apparent_texture_brightness,
+            apparent_brightness,
         };
 
         sun

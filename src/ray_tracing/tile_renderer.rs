@@ -9,7 +9,7 @@ use rand::rngs::StdRng;
 
 use image::{Pixel, RgbImage, Rgba32FImage, RgbaImage};
 use rand::{Rng, SeedableRng};
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 
 use crate::mandelbrot::mandelbrot;
 use crate::ourple;
@@ -70,36 +70,39 @@ impl F32Pixel {
 }
 
 #[repr(C)]
-#[derive(Clone)]
-pub struct U8Pixel {
-    r: u8,
-    g: u8,
-    b: u8,
-    a: u8,
+#[derive(Debug, Clone)]
+pub struct U8Color {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub a: u8,
 }
 
-impl U8Pixel {
-    pub const BLACK: U8Pixel = U8Pixel {
+impl U8Color {
+    pub const BLACK: U8Color = U8Color {
         r: 0,
         g: 0,
         b: 0,
         a: 255,
     };
-}
-
-impl Into<[u8; 4]> for U8Pixel {
-    fn into(self) -> [u8; 4] {
-        unsafe { transmute::<U8Pixel, [u8; 4]>(self) }
+    pub const fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
+        Self { r, g, b, a }
     }
 }
 
-impl From<&F32Pixel> for U8Pixel {
+impl Into<[u8; 4]> for U8Color {
+    fn into(self) -> [u8; 4] {
+        unsafe { transmute::<U8Color, [u8; 4]>(self) }
+    }
+}
+
+impl From<&F32Pixel> for U8Color {
     fn from(value: &F32Pixel) -> Self {
         let res = (value.data * 255.0).min(Vec4::splat(255.0));
         let r = LUT_TABLE_BYTE[res[0] as usize];
         let g = LUT_TABLE_BYTE[res[1] as usize];
         let b = LUT_TABLE_BYTE[res[2] as usize];
-        U8Pixel {
+        U8Color {
             r,
             g,
             b,
@@ -110,6 +113,7 @@ impl From<&F32Pixel> for U8Pixel {
 pub struct TileRenderer {
     pub worker_thread: Option<JoinHandle<()>>,
     pub current_spp: Arc<AtomicU32>,
+    tiles: Arc<Mutex<Vec<Tile>>>,
     paused: Arc<AtomicBool>,
     stopped: Arc<AtomicBool>,
     pub thread_count: usize,
@@ -129,6 +133,7 @@ impl Default for TileRenderer {
             scene: Default::default(),
             stopped: Arc::new(AtomicBool::new(true)),
             worker_thread: None,
+            tiles: Arc::new(Mutex::new(vec![])),
         }
     }
 }
@@ -162,30 +167,49 @@ impl Tile {
 
 impl TileRenderer {
     pub fn new(render_resolution: (usize, usize), threads: usize, scene: Scene) -> Self {
+        let frame_buffer = Arc::new(Mutex::new(
+            (0..render_resolution.0 * render_resolution.1)
+                .into_iter()
+                .map(|_| F32Pixel::BLACK)
+                .collect(),
+        ));
+        let tile_width = (render_resolution.0 + threads - 1) / threads;
+        let tile_height = (render_resolution.1 + threads - 1) / threads;
+        let mut tiles = Vec::with_capacity(threads * threads);
+        (0..threads).for_each(|y| {
+            (0..threads).for_each(|x| {
+                let tile = Tile::new(
+                    x * tile_width,
+                    y * tile_height,
+                    (x + 1) * tile_width,
+                    (y + 1) * tile_height,
+                    frame_buffer.clone(),
+                    render_resolution,
+                );
+                tiles.push(tile);
+            });
+        });
+
         Self {
             thread_count: threads,
             resolution: render_resolution,
-            frame_buffer: Arc::new(Mutex::new(
-                (0..render_resolution.0 * render_resolution.1)
-                    .into_iter()
-                    .map(|_| F32Pixel::BLACK)
-                    .collect(),
-            )),
+            frame_buffer,
             scene: Arc::new(scene),
             paused: Arc::new(AtomicBool::new(true)),
             stopped: Arc::new(AtomicBool::new(true)),
             current_spp: Arc::new(AtomicU32::new(0)),
             worker_thread: None,
+            tiles: Arc::new(Mutex::new(tiles)),
         }
     }
-    pub fn get_frame_buffer_data(&self, out_buffer: &mut [U8Pixel]) {
+    pub fn get_frame_buffer_data(&self, out_buffer: &mut [U8Color]) {
         let lock = self.frame_buffer.lock().unwrap();
         let float_data = lock.as_slice();
 
         float_data
             .iter()
             .zip(out_buffer.iter_mut())
-            .for_each(|(a, b)| *b = U8Pixel::from(a));
+            .for_each(|(a, b)| *b = U8Color::from(a));
     }
     pub fn current_spp(&self) -> u32 {
         self.current_spp.load(std::sync::atomic::Ordering::SeqCst)
@@ -217,7 +241,7 @@ impl TileRenderer {
         let spp_clone = self.current_spp.clone();
         let frame_buffer = self.frame_buffer.clone();
         let scene = self.scene.clone();
-        let branch_count = self.scene.get_current_branch_count(self.current_spp());
+        let branch_count = Scene::get_current_branch_count(scene.branch_count, self.current_spp());
         let thread_count = self.thread_count;
         let resolution = self.resolution;
         let pause_bool = self.paused.clone();
@@ -252,142 +276,121 @@ impl TileRenderer {
         self.worker_thread = Some(spawn(f));
     }
     pub fn collect_samples(&mut self) {
+        dbg!(&self.scene.sun_sampling_strategy);
         let spp_clone = self.current_spp.clone();
-        let frame_buffer = self.frame_buffer.clone();
         let scene = self.scene.clone();
-        let branch_count = self.scene.get_current_branch_count(self.current_spp());
-        let thread_count = self.thread_count;
-        let resolution = self.resolution;
         let pause_bool = self.paused.clone();
         let stop_bool = self.stopped.clone();
         pause_bool.store(false, std::sync::atomic::Ordering::SeqCst);
         stop_bool.store(false, std::sync::atomic::Ordering::SeqCst);
+        let tiles = self.tiles.clone();
         let f = move || loop {
+            let current_spp = spp_clone.load(std::sync::atomic::Ordering::SeqCst);
+
+            let branch_count = Scene::get_current_branch_count(scene.branch_count, current_spp);
+
             if pause_bool.load(std::sync::atomic::Ordering::SeqCst) {
                 stop_bool.store(true, std::sync::atomic::Ordering::SeqCst);
                 std::thread::park();
             }
-            let tile_width = (resolution.0 + thread_count - 1) / thread_count;
-            let tile_height = (resolution.1 + thread_count - 1) / thread_count;
 
-            let current_spp = spp_clone.load(std::sync::atomic::Ordering::SeqCst);
             if scene.target_spp <= current_spp {
                 dbg!("finished!");
                 stop_bool.store(true, std::sync::atomic::Ordering::SeqCst);
                 pause_bool.store(true, std::sync::atomic::Ordering::SeqCst);
                 break;
             }
-            (0..thread_count).into_iter().for_each(|y| {
-                (0..thread_count).into_iter().for_each(|x| {
-                    let tile = Tile::new(
-                        x * tile_width,
-                        y * tile_height,
-                        (x + 1) * tile_width,
-                        (y + 1) * tile_height,
-                        frame_buffer.clone(),
-                        resolution,
-                    );
-                    let scene = scene.clone();
-                    TileRenderer::render_tile_average(tile, scene, current_spp, branch_count);
-                })
+            let mut tiles = tiles.lock().unwrap();
+            dbg!(current_spp);
+            dbg!(branch_count);
+            tiles.par_iter_mut().for_each(|tile| {
+                let scene = scene.clone();
+                TileRenderer::render_tile_average(tile, scene, current_spp, branch_count);
             });
+
             spp_clone.fetch_add(branch_count, std::sync::atomic::Ordering::SeqCst);
         };
         self.worker_thread = Some(spawn(f));
     }
+    /*
+       pub fn collect_sample(&mut self) {
+           let tile_width: usize = (self.resolution.0 + self.thread_count - 1) / self.thread_count;
+           let tile_height = (self.resolution.1 + self.thread_count - 1) / self.thread_count;
 
-    pub fn collect_sample(&self) {
-        let tile_width: usize = (self.resolution.0 + self.thread_count - 1) / self.thread_count;
-        let tile_height = (self.resolution.1 + self.thread_count - 1) / self.thread_count;
+           let current_spp = self.current_spp();
 
-        let current_spp = self.current_spp();
-        let branch_count = self.scene.get_current_branch_count(current_spp);
-        (0..self.thread_count).into_par_iter().for_each(|y| {
-            (0..self.thread_count).into_par_iter().for_each(|x| {
-                let tile = Tile::new(
-                    x * tile_width,
-                    y * tile_height,
-                    (x + 1) * tile_width,
-                    (y + 1) * tile_height,
-                    self.frame_buffer.clone(),
-                    self.resolution,
-                );
-                let scene = self.scene.clone();
+           let branch_count = Scene::get_current_branch_count(self.scene.branch_count, current_spp);
+           let mut tiles = self.tiles.lock().unwrap();
+           tiles.par_iter_mut().for_each(|tile| {
+               let scene = self.scene.clone();
 
-                TileRenderer::render_tile_average(tile, scene, current_spp, branch_count);
-            })
-        });
-        self.spp_add(branch_count);
-        dbg!(current_spp);
-    }
+               TileRenderer::render_tile_average(tile, scene, current_spp, branch_count);
+           });
 
-    pub fn render_to_image(&mut self, file_name: &str) {
-        let tile_width = (self.resolution.0 + self.thread_count - 1) / self.thread_count;
-        let tile_height = (self.resolution.1 + self.thread_count - 1) / self.thread_count;
-        let mut current_spp = self.current_spp.load(std::sync::atomic::Ordering::SeqCst);
-        while current_spp < self.scene.target_spp {
-            let branch_count = self.scene.get_current_branch_count(current_spp);
-            (0..self.thread_count).into_iter().for_each(|y| {
-                (0..self.thread_count).into_iter().for_each(|x| {
-                    let tile = Tile::new(
-                        x * tile_width,
-                        y * tile_height,
-                        (x + 1) * tile_width,
-                        (y + 1) * tile_height,
-                        self.frame_buffer.clone(),
-                        self.resolution,
-                    );
-                    let scene = self.scene.clone();
+           self.spp_add(branch_count);
+           dbg!(current_spp);
+       }
 
-                    TileRenderer::render_tile_average(tile, scene, current_spp, branch_count);
-                    current_spp += branch_count;
-                    self.current_spp
-                        .fetch_add(branch_count, std::sync::atomic::Ordering::SeqCst);
-                })
-            });
-        }
+       pub fn render_to_image(&mut self, file_name: &str) {
+           let tile_width = (self.resolution.0 + self.thread_count - 1) / self.thread_count;
+           let tile_height = (self.resolution.1 + self.thread_count - 1) / self.thread_count;
+           let mut current_spp = self.current_spp.load(std::sync::atomic::Ordering::SeqCst);
+           let mut tiles = self.tiles.lock().unwrap();
 
-        //save image
-        let image_buffer = self.frame_buffer.lock().unwrap();
-        let float_copy: Vec<f32> = image_buffer
-            .as_slice()
-            .into_iter()
-            .map(|pixel| {
-                let a: [f32; 4] = pixel.data.to_array();
-                a
-            })
-            .flat_map(|floats| floats.into_iter())
-            .collect();
+           while current_spp < self.scene.target_spp {
+               let branch_count =
+                   Scene::get_current_branch_count(self.scene.branch_count, current_spp);
+               tiles.par_iter_mut().for_each(|tile| {
+                   let scene = self.scene.clone();
 
-        let image = Rgba32FImage::from_vec(
-            self.resolution.0 as u32,
-            self.resolution.1 as u32,
-            float_copy,
-        )
-        .unwrap();
+                   TileRenderer::render_tile_average(tile, scene, current_spp, branch_count);
+               });
+               current_spp += branch_count;
+               self.current_spp
+                   .fetch_add(branch_count, std::sync::atomic::Ordering::SeqCst);
+           }
 
-        image.save(file_name).unwrap();
+           //save image
+           let image_buffer = self.frame_buffer.lock().unwrap();
+           let float_copy: Vec<f32> = image_buffer
+               .as_slice()
+               .into_iter()
+               .map(|pixel| {
+                   let a: [f32; 4] = pixel.data.to_array();
+                   a
+               })
+               .flat_map(|floats| floats.into_iter())
+               .collect();
 
-        /*         let mut ppm_buffer: Vec<u8> =
-                   Vec::with_capacity(self.resolution.0 * self.resolution.1 * self.bytes_per_pixel * 3);
+           let image = Rgba32FImage::from_vec(
+               self.resolution.0 as u32,
+               self.resolution.1 as u32,
+               float_copy,
+           )
+           .unwrap();
 
-               ppm_buffer.write(header.as_bytes()).unwrap();
-               let frame_buffer = self.frame_buffer.lock().unwrap().to_owned();
-               for (i, byte) in frame_buffer.iter().enumerate() {
-                   let byte_as_str = byte.to_string();
-                   ppm_buffer.write(byte_as_str.as_bytes()).unwrap();
-                   if (i + 1) % (self.bytes_per_pixel * 3) == 0 {
-                       ppm_buffer.write("\n".as_bytes()).unwrap();
-                   } else {
-                       ppm_buffer.write(" ".as_bytes()).unwrap();
-                   }
-               }
-        */
-        //let mut file_stream = File::create(file_name).unwrap();
+           image.save(file_name).unwrap();
 
-        //file_stream.write_all(&self.frame_buffer).unwrap();
-    }
+           /*         let mut ppm_buffer: Vec<u8> =
+                      Vec::with_capacity(self.resolution.0 * self.resolution.1 * self.bytes_per_pixel * 3);
 
+                  ppm_buffer.write(header.as_bytes()).unwrap();
+                  let frame_buffer = self.frame_buffer.lock().unwrap().to_owned();
+                  for (i, byte) in frame_buffer.iter().enumerate() {
+                      let byte_as_str = byte.to_string();
+                      ppm_buffer.write(byte_as_str.as_bytes()).unwrap();
+                      if (i + 1) % (self.bytes_per_pixel * 3) == 0 {
+                          ppm_buffer.write("\n".as_bytes()).unwrap();
+                      } else {
+                          ppm_buffer.write(" ".as_bytes()).unwrap();
+                      }
+                  }
+           */
+           //let mut file_stream = File::create(file_name).unwrap();
+
+           //file_stream.write_all(&self.frame_buffer).unwrap();
+       }
+    */
     pub fn render_tile_replace(mut tile: Tile, scene: Arc<Scene>, current_spp: u32) {
         let time = (current_spp as f32 / 100.0);
         let mut rng = StdRng::from_entropy();
@@ -434,7 +437,7 @@ impl TileRenderer {
         }
     }
     pub fn render_tile_average(
-        mut tile: Tile,
+        tile: &mut Tile,
         scene: Arc<Scene>,
         current_spp: u32,
         branch_count: u32,
@@ -465,7 +468,7 @@ impl TileRenderer {
         }
 
         let mut frame_buffer = tile.frame_buffer.lock().unwrap();
-        let sin_v = 1.0 / (branch_count + current_spp) as f32;
+        let s_inv = 1.0 / (branch_count + current_spp) as f32;
 
         for y in tile.y0..tile.y1 {
             for x in tile.x0..tile.x1 {
@@ -475,11 +478,11 @@ impl TileRenderer {
                 let g = tile.local_buffer[local_buffer_idx].g();
                 let b = tile.local_buffer[local_buffer_idx].b();
                 *frame_buffer[frame_buffer_idx].r_mut() =
-                    (frame_buffer[frame_buffer_idx].r() * current_spp as f32 + r) * sin_v;
+                    (frame_buffer[frame_buffer_idx].r() * current_spp as f32 + r) * s_inv;
                 *frame_buffer[frame_buffer_idx].g_mut() =
-                    (frame_buffer[frame_buffer_idx].g() * current_spp as f32 + g) * sin_v;
+                    (frame_buffer[frame_buffer_idx].g() * current_spp as f32 + g) * s_inv;
                 *frame_buffer[frame_buffer_idx].b_mut() =
-                    (frame_buffer[frame_buffer_idx].b() * current_spp as f32 + b) * sin_v;
+                    (frame_buffer[frame_buffer_idx].b() * current_spp as f32 + b) * s_inv;
             }
         }
     }
