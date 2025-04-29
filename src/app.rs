@@ -1,4 +1,5 @@
 use std::{
+    fmt::format,
     future::{poll_fn, Future, IntoFuture},
     pin::Pin,
     sync::{atomic::AtomicBool, Arc},
@@ -8,25 +9,27 @@ use std::{
 };
 
 use eframe::egui::{
-    self, include_image, load::SizedTexture, mutex::Mutex, Color32, ColorImage, Image, ImageData,
-    ImageOptions, ImageSource, Slider, TextureHandle, TextureOptions,
+    self, include_image, load::SizedTexture, mutex::Mutex, Color32, ColorImage, DragValue, Image,
+    ImageData, ImageOptions, ImageSource, Label, RadioButton, Slider, TextureHandle,
+    TextureOptions,
 };
 
 use crate::ray_tracing::{
     scene::Scene,
-    tile_renderer::{TileRenderer, U8Color},
+    tile_renderer::{RendererMode, RendererStatus, TileRenderer, U8Color},
 };
 
 pub struct Application {
     refresh_time: Instant,
     window_title: String,
     window_size: (usize, usize),
-    spp_field: String,
     renderer: TileRenderer,
     render_texture: Option<TextureHandle>,
-    local_renderer_image: Option<Vec<U8Color>>,
-    spp: u32,
-    pause: bool,
+
+    local_renderer_mode: RendererMode,
+    local_renderer_resolution: (usize, usize),
+    local_current_spp: u32,
+    local_target_spp: u32,
 }
 
 impl Default for Application {
@@ -35,12 +38,12 @@ impl Default for Application {
             window_size: (1280, 720),
             window_title: "hi there".to_string(),
             render_texture: None,
-            spp: 0,
-            renderer: TileRenderer::new((1500, 1500), 8, Scene::mc()),
+            local_current_spp: 0,
+            renderer: TileRenderer::new((1280, 720), 100, 8, Scene::mc()),
+            local_renderer_resolution: (1280, 720),
             refresh_time: Instant::now(),
-            local_renderer_image: Some(vec![U8Color::BLACK; 1500 * 1500]),
-            pause: true,
-            spp_field: String::new(),
+            local_target_spp: 100,
+            local_renderer_mode: RendererMode::Preview,
         }
     }
 }
@@ -64,42 +67,111 @@ impl eframe::App for Application {
             )
         });
 
-        let new_spp = self.renderer.get_current_spp();
-        let render_res = self.renderer.resolution;
-        if new_spp > self.spp
-            && !self.pause
-            && (Instant::now().duration_since(self.refresh_time) > Duration::from_millis(16))
+        let latest_render_resolution = self.renderer.get_resolution();
+
+        let latest_spp = self.renderer.get_current_spp();
+        if (latest_spp != self.local_current_spp)
+            || (self.local_renderer_mode == RendererMode::Preview)
+                && (Instant::now().duration_since(self.refresh_time) > Duration::from_millis(16))
         {
             let image = self.renderer.get_image();
             if image.is_some() {
                 let u8_buffer = pixel_slice_to_u8_slice(image.unwrap());
 
                 let color_image: Arc<ColorImage> = Arc::new(ColorImage::from_rgba_premultiplied(
-                    render_res.into(),
+                    latest_render_resolution.into(),
                     u8_buffer,
                 ));
 
                 texture.set(color_image, TextureOptions::default());
 
-                self.spp = new_spp;
+                self.local_current_spp = latest_spp;
                 self.refresh_time = Instant::now();
             }
         }
         egui::CentralPanel::default().show(ctx, |ui| {
-            if ui.button("Start Rendering").clicked() {
-                self.pause = false;
-                if self.renderer.render_thread.is_none() {
-                    self.renderer.collect_samples()
-                } else {
-                    self.renderer.resume();
-                };
-            }
-            if ui.button("Stop").clicked() {
-                self.renderer.pause();
-                self.pause = true;
-            }
+            ui.horizontal(|ui| {
+                if ui.button("Start Rendering").clicked() {
+                    match self.renderer.get_renderer_status() {
+                        crate::ray_tracing::tile_renderer::RendererStatus::Busy => {}
+                        crate::ray_tracing::tile_renderer::RendererStatus::Paused => {
+                            self.renderer.resume()
+                        }
+                        crate::ray_tracing::tile_renderer::RendererStatus::Stopped => {
+                            self.renderer.start()
+                        }
+                    }
+                }
+                if ui.button("Pause").clicked() {
+                    self.renderer.pause();
+                }
+                if ui.button("Stop").clicked() {
+                    self.renderer.stop();
+                }
+                ui.add(Label::new(format(format_args!(
+                    "Renderer Status: {}",
+                    self.renderer.get_renderer_status().to_str()
+                ))));
+                ui.separator();
+                ui.add(Label::new("Rendering Mode: "));
+                if ui
+                    .add(RadioButton::new(
+                        self.local_renderer_mode == RendererMode::Preview,
+                        "Preview",
+                    ))
+                    .clicked()
+                {
+                    self.local_renderer_mode = RendererMode::Preview;
+                    self.renderer.set_mode(RendererMode::Preview);
+                }
+                if ui
+                    .add(RadioButton::new(
+                        self.local_renderer_mode == RendererMode::Preview,
+                        "Preview",
+                    ))
+                    .clicked()
+                {
+                    self.local_renderer_mode = RendererMode::PathTraced;
+                    self.renderer.set_mode(RendererMode::PathTraced);
+                }
+            });
+            ui.separator();
 
-            ui.text_edit_singleline(&mut self.spp_field);
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    ui.add(Label::new(format(format_args!(
+                        "Current Rendered Samples: {}",
+                        self.local_current_spp
+                    ))));
+                    ui.horizontal(|ui| {
+                        ui.add(Label::new("Target Samples Per Pixel: "));
+                        ui.add(
+                            DragValue::new(&mut self.local_target_spp)
+                                .speed(self.renderer.get_branch_count())
+                                .update_while_editing(false),
+                        );
+                        if ui.button("Apply").clicked() {
+                            self.renderer.set_target_spp(self.local_target_spp);
+                        }
+                    });
+                });
+                ui.separator();
+                ui.vertical(|ui| {
+                    ui.add(Label::new("X Resolution: "));
+                    ui.add(DragValue::new(&mut self.local_renderer_resolution.0).range(100..=5000));
+                });
+                ui.vertical(|ui| {
+                    ui.add(Label::new("Y Resolution: "));
+                    ui.add(DragValue::new(&mut self.local_renderer_resolution.1).range(100..=5000))
+                });
+                if ui.button("Apply").clicked() {
+                    if self.local_renderer_resolution != self.renderer.get_resolution() {
+                        self.renderer.set_resolution(self.local_renderer_resolution);
+                    }
+                }
+                ui.separator()
+            });
+            ui.separator();
 
             ui.image(SizedTexture::from_handle(texture));
         });

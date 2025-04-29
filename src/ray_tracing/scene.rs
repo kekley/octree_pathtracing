@@ -135,7 +135,7 @@ use crate::{random_float, ray_tracing::axis::UP, voxels::octree::Octree};
 
 use super::{
     camera::Camera,
-    path_tracer::{flat_shading, path_trace},
+    path_tracer::{path_trace, preview_render},
     ray::Ray,
     resource_manager::ModelManager,
     texture::Texture,
@@ -150,7 +150,6 @@ pub struct Scene {
     pub f_sub_surface: f32,
     pub octree: Arc<Octree<u32>>,
     pub model_manager: ModelManager,
-    pub target_spp: u32,
     pub branch_count: u32,
     pub camera: Camera,
 }
@@ -168,7 +167,7 @@ impl Scene {
         let mut scene = Scene::new()
             .branch_count(10)
             .camera(camera)
-            .spp(50)
+            .spp(100)
             .build(&minecraft_loader);
         let world = minecraft_loader.open_world("./world");
         let air = minecraft_loader.rodeo.get_or_intern("minecraft:air");
@@ -210,7 +209,6 @@ impl Default for Scene {
             f_sub_surface: Default::default(),
             octree: Default::default(),
             model_manager: Default::default(),
-            target_spp: Default::default(),
             branch_count: Default::default(),
             camera: Default::default(),
         }
@@ -245,7 +243,6 @@ impl SceneBuilder {
             emitters_enabled: false,
             emmitter_intensity: 13.0,
             f_sub_surface: 0.3,
-            target_spp: self.spp.unwrap_or(1),
         }
     }
 
@@ -309,7 +306,12 @@ impl Scene {
             return scene_branch_count;
         }
     }
-
+    pub fn get_preview_color(&self, x: f32, y: f32, rng: &mut StdRng) -> Vec3 {
+        let mut ray = self.camera.get_ray(rng, x, y);
+        let mut attenuation = Vec4::ZERO;
+        preview_render(rng, &self, &mut ray, &mut attenuation);
+        ray.hit.color.xyz()
+    }
     pub fn get_color(&self, x: f32, y: f32, rng: &mut StdRng, current_spp: u32) -> Vec3 {
         let mut ray = self.camera.get_ray(rng, x, y);
         let mut attenuation = Vec4::ZERO;

@@ -138,9 +138,11 @@ pub fn path_trace(
     hit
 }
 
-pub fn flat_shading(rng: &mut StdRng, scene: &Scene, ray: &mut Ray, attenuation: &mut Vec4) {
+pub fn preview_render(rng: &mut StdRng, scene: &Scene, ray: &mut Ray, attenuation: &mut Vec4) {
     loop {
         if !next_intersection(scene, ray) {
+            break;
+        } else if !(ray.hit.current_material.name == "air") && ray.hit.color.w > 0.0 {
             break;
         } else {
             ray.origin = ray.at(Ray::OFFSET);
