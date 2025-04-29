@@ -1,7 +1,11 @@
+use std::cell::Cell;
+use std::future::Future;
 use std::mem::transmute;
-use std::sync::atomic::{AtomicBool, AtomicU32};
-use std::sync::{Arc, Mutex, MutexGuard};
-use std::thread::{spawn, JoinHandle};
+use std::pin::{pin, Pin};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize};
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::{self, Arc, Mutex, MutexGuard, RwLock};
+use std::thread::{park, spawn, JoinHandle};
 use std::time::Instant;
 
 use glam::{Vec2, Vec3, Vec4};
@@ -10,6 +14,7 @@ use rand::rngs::StdRng;
 use image::{Pixel, RgbImage, Rgba32FImage, RgbaImage};
 use rand::{Rng, SeedableRng};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
+use rayon::result;
 
 use crate::mandelbrot::mandelbrot;
 use crate::ourple;
@@ -24,19 +29,19 @@ pub struct Tile {
     y0: usize,
     x1: usize,
     y1: usize,
-    local_buffer: Vec<F32Pixel>,
+    local_buffer: Vec<F32Color>,
     frame_buffer_resolution: (usize, usize),
     dim: f32,
-    frame_buffer: Arc<Mutex<Vec<F32Pixel>>>,
+    frame_buffer: Arc<Mutex<Vec<F32Color>>>,
 }
 
 #[repr(C)]
 #[derive(Clone, Debug)]
-pub struct F32Pixel {
+pub struct F32Color {
     data: Vec4,
 }
 
-impl F32Pixel {
+impl F32Color {
     pub fn r(&self) -> f32 {
         self.data[0]
     }
@@ -63,8 +68,8 @@ impl F32Pixel {
     }
 }
 
-impl F32Pixel {
-    pub const BLACK: F32Pixel = F32Pixel {
+impl F32Color {
+    pub const BLACK: F32Color = F32Color {
         data: Vec4::new(0.0, 0.0, 0.0, 1.0),
     };
 }
@@ -96,8 +101,8 @@ impl Into<[u8; 4]> for U8Color {
     }
 }
 
-impl From<&F32Pixel> for U8Color {
-    fn from(value: &F32Pixel) -> Self {
+impl From<&F32Color> for U8Color {
+    fn from(value: &F32Color) -> Self {
         let res = (value.data * 255.0).min(Vec4::splat(255.0));
         let r = LUT_TABLE_BYTE[res[0] as usize];
         let g = LUT_TABLE_BYTE[res[1] as usize];
@@ -110,30 +115,53 @@ impl From<&F32Pixel> for U8Color {
         }
     }
 }
+
+enum RendererMessage {
+    GetImage,
+    Pause,
+    Stop,
+    Resume,
+}
+#[derive(Debug, Clone, Copy)]
+#[repr(usize)]
+pub enum RendererStatus {
+    Busy = 0,
+    Paused = 1,
+    Stopped = 2,
+}
+impl RendererStatus {
+    pub fn from_usize(value: usize) -> RendererStatus {
+        match value {
+            0 => RendererStatus::Busy,
+            1 => RendererStatus::Paused,
+            2 => RendererStatus::Stopped,
+            _ => panic!(),
+        }
+    }
+}
+
 pub struct TileRenderer {
-    pub worker_thread: Option<JoinHandle<()>>,
-    pub current_spp: Arc<AtomicU32>,
-    tiles: Arc<Mutex<Vec<Tile>>>,
-    paused: Arc<AtomicBool>,
-    stopped: Arc<AtomicBool>,
+    status: Arc<AtomicUsize>,
+    render_thread: Option<JoinHandle<Vec<Tile>>>,
+    msg_channel: Option<Sender<RendererMessage>>,
+    output_image_receiver: Option<Receiver<Vec<U8Color>>>,
+    current_spp: Arc<AtomicU32>,
     pub thread_count: usize,
-    pub resolution: (usize, usize),
-    frame_buffer: Arc<Mutex<Vec<F32Pixel>>>,
-    pub scene: Arc<Scene>,
+    resolution: (usize, usize),
+    scene: Arc<RwLock<Scene>>,
 }
 
 impl Default for TileRenderer {
     fn default() -> Self {
         Self {
             current_spp: Default::default(),
-            paused: Arc::new(AtomicBool::new(true)),
             thread_count: Default::default(),
             resolution: Default::default(),
-            frame_buffer: Default::default(),
             scene: Default::default(),
-            stopped: Arc::new(AtomicBool::new(true)),
-            worker_thread: None,
-            tiles: Arc::new(Mutex::new(vec![])),
+            render_thread: None,
+            msg_channel: None,
+            status: Arc::new(AtomicUsize::new(RendererStatus::Stopped as usize)),
+            output_image_receiver: None,
         }
     }
 }
@@ -144,7 +172,7 @@ impl Tile {
         y0: usize,
         x1: usize,
         y1: usize,
-        frame_buffer: Arc<Mutex<Vec<F32Pixel>>>,
+        frame_buffer: Arc<Mutex<Vec<F32Color>>>,
         frame_buffer_resolution: (usize, usize),
     ) -> Self {
         let x1 = x1.min(frame_buffer_resolution.0);
@@ -157,7 +185,7 @@ impl Tile {
             y0,
             x1,
             y1,
-            local_buffer: vec![F32Pixel::BLACK; (y1 - y0) * (x1 - x0)],
+            local_buffer: vec![F32Color::BLACK; (y1 - y0) * (x1 - x0)],
             frame_buffer: frame_buffer,
             frame_buffer_resolution,
             dim,
@@ -167,150 +195,157 @@ impl Tile {
 
 impl TileRenderer {
     pub fn new(render_resolution: (usize, usize), threads: usize, scene: Scene) -> Self {
+        Self {
+            thread_count: threads,
+            resolution: render_resolution,
+            scene: Arc::new(RwLock::new(scene)),
+            current_spp: Arc::new(AtomicU32::new(0)),
+            render_thread: None,
+            msg_channel: None,
+            status: Arc::new(AtomicUsize::new(RendererStatus::Stopped as usize)),
+            output_image_receiver: None,
+        }
+    }
+
+    pub fn get_resolution(&self) -> (usize, usize) {
+        self.resolution.clone()
+    }
+
+    pub fn set_resolution(&mut self, resolution: (usize, usize)) {
+        self.resolution = resolution;
+    }
+    pub fn get_image(&mut self) -> Option<&[U8Color]> {}
+    pub fn get_current_spp(&self) -> u32 {
+        self.current_spp.load(std::sync::atomic::Ordering::SeqCst)
+    }
+    fn spp_add(&self, amount: u32) {
+        self.current_spp
+            .fetch_add(amount, std::sync::atomic::Ordering::SeqCst);
+    }
+    pub fn pause(&self) {
+        self.msg_channel
+            .as_ref()
+            .unwrap()
+            .send(RendererMessage::Pause)
+            .unwrap();
+    }
+    pub fn stop(&self) {
+        self.msg_channel
+            .as_ref()
+            .unwrap()
+            .send(RendererMessage::Stop)
+            .unwrap();
+    }
+    pub fn get_renderer_status(&self) -> RendererStatus {
+        RendererStatus::from_usize(self.status.load(sync::atomic::Ordering::SeqCst))
+    }
+    pub fn resume(&self) {
+        match &self.render_thread {
+            Some(thread) => thread.thread().unpark(),
+            None => {}
+        }
+    }
+    pub fn collect_samples(&mut self) {
+        if self.render_thread.is_some() {
+            return;
+        }
+
+        let (msg_sender, msg_receiver) = channel::<RendererMessage>();
+        let (img_sender, img_receiver) = channel::<Vec<U8Color>>();
+
+        self.msg_channel = Some(msg_sender);
+
+        let spp_arc = self.current_spp.clone();
+        let scene_arc = self.scene.clone();
+
+        let resolution = self.resolution;
+        let thread_count = self.thread_count;
+        let status_arc = self.status.clone();
+
+        Some(spawn(move || {
+            Self::thread_task(
+                spp_arc,
+                status_arc,
+                scene_arc,
+                msg_receiver,
+                img_sender,
+                resolution,
+                thread_count,
+            )
+        }));
+    }
+
+    fn thread_task(
+        spp_arc: Arc<AtomicU32>,
+        status_arc: Arc<AtomicUsize>,
+        scene_arc: Arc<RwLock<Scene>>,
+        msg_receiver: Receiver<RendererMessage>,
+        output_image_sender: Sender<Vec<U8Color>>,
+        resolution: (usize, usize),
+        rayon_thread_count: usize,
+    ) {
         let frame_buffer = Arc::new(Mutex::new(
-            (0..render_resolution.0 * render_resolution.1)
+            (0..resolution.0 * resolution.1)
                 .into_iter()
-                .map(|_| F32Pixel::BLACK)
-                .collect(),
+                .map(|_| F32Color::BLACK)
+                .collect::<Vec<_>>(),
         ));
-        let tile_width = (render_resolution.0 + threads - 1) / threads;
-        let tile_height = (render_resolution.1 + threads - 1) / threads;
-        let mut tiles = Vec::with_capacity(threads * threads);
-        (0..threads).for_each(|y| {
-            (0..threads).for_each(|x| {
+
+        let tile_width = (resolution.0 + rayon_thread_count - 1) / rayon_thread_count;
+        let tile_height = (resolution.1 + rayon_thread_count - 1) / rayon_thread_count;
+        let mut tiles = Vec::with_capacity(rayon_thread_count * rayon_thread_count);
+        (0..rayon_thread_count).for_each(|y| {
+            (0..rayon_thread_count).for_each(|x| {
                 let tile = Tile::new(
                     x * tile_width,
                     y * tile_height,
                     (x + 1) * tile_width,
                     (y + 1) * tile_height,
                     frame_buffer.clone(),
-                    render_resolution,
+                    resolution,
                 );
                 tiles.push(tile);
             });
         });
-
-        Self {
-            thread_count: threads,
-            resolution: render_resolution,
-            frame_buffer,
-            scene: Arc::new(scene),
-            paused: Arc::new(AtomicBool::new(true)),
-            stopped: Arc::new(AtomicBool::new(true)),
-            current_spp: Arc::new(AtomicU32::new(0)),
-            worker_thread: None,
-            tiles: Arc::new(Mutex::new(tiles)),
-        }
-    }
-    pub fn get_frame_buffer_data(&self, out_buffer: &mut [U8Color]) {
-        let lock = self.frame_buffer.lock().unwrap();
-        let float_data = lock.as_slice();
-
-        float_data
-            .iter()
-            .zip(out_buffer.iter_mut())
-            .for_each(|(a, b)| *b = U8Color::from(a));
-    }
-    pub fn current_spp(&self) -> u32 {
-        self.current_spp.load(std::sync::atomic::Ordering::SeqCst)
-    }
-    pub fn spp_add(&self, amount: u32) {
-        self.current_spp
-            .fetch_add(amount, std::sync::atomic::Ordering::SeqCst);
-    }
-    pub fn is_idle(&self) -> bool {
-        self.worker_thread.is_none()
-            || self.stopped.load(std::sync::atomic::Ordering::SeqCst)
-                && self.worker_thread.is_some()
-    }
-    pub fn send_pause_signal(&self) {
-        self.paused.store(true, std::sync::atomic::Ordering::SeqCst);
-    }
-
-    pub fn resume(&self) {
-        if let Some(worker) = self.worker_thread.as_ref() {
-            self.paused
-                .store(false, std::sync::atomic::Ordering::SeqCst);
-            self.stopped
-                .store(false, std::sync::atomic::Ordering::SeqCst);
-            worker.thread().unpark();
-        }
-    }
-
-    pub fn render(&mut self) {
-        let spp_clone = self.current_spp.clone();
-        let frame_buffer = self.frame_buffer.clone();
-        let scene = self.scene.clone();
-        let branch_count = Scene::get_current_branch_count(scene.branch_count, self.current_spp());
-        let thread_count = self.thread_count;
-        let resolution = self.resolution;
-        let pause_bool = self.paused.clone();
-        let stop_bool = self.stopped.clone();
-        pause_bool.store(false, std::sync::atomic::Ordering::SeqCst);
-        stop_bool.store(false, std::sync::atomic::Ordering::SeqCst);
-        let f = move || loop {
-            if pause_bool.load(std::sync::atomic::Ordering::SeqCst) {
-                stop_bool.store(true, std::sync::atomic::Ordering::SeqCst);
-                std::thread::park();
-            }
-            let tile_width = (resolution.0 + thread_count - 1) / thread_count;
-            let tile_height = (resolution.1 + thread_count - 1) / thread_count;
-
-            let current_spp = spp_clone.load(std::sync::atomic::Ordering::SeqCst);
-            (0..thread_count).into_par_iter().for_each(|y| {
-                (0..thread_count).into_par_iter().for_each(|x| {
-                    let tile = Tile::new(
-                        x * tile_width,
-                        y * tile_height,
-                        (x + 1) * tile_width,
-                        (y + 1) * tile_height,
-                        frame_buffer.clone(),
-                        resolution,
-                    );
-                    let scene = scene.clone();
-                    TileRenderer::render_tile_replace(tile, scene, current_spp);
-                    spp_clone.fetch_add(branch_count, std::sync::atomic::Ordering::SeqCst);
-                })
-            });
-        };
-        self.worker_thread = Some(spawn(f));
-    }
-    pub fn collect_samples(&mut self) {
-        dbg!(&self.scene.sun_sampling_strategy);
-        let spp_clone = self.current_spp.clone();
-        let scene = self.scene.clone();
-        let pause_bool = self.paused.clone();
-        let stop_bool = self.stopped.clone();
-        pause_bool.store(false, std::sync::atomic::Ordering::SeqCst);
-        stop_bool.store(false, std::sync::atomic::Ordering::SeqCst);
-        let tiles = self.tiles.clone();
-        let f = move || loop {
-            let current_spp = spp_clone.load(std::sync::atomic::Ordering::SeqCst);
-
+        loop {
+            let current_spp = spp_arc.load(std::sync::atomic::Ordering::SeqCst);
+            let scene = scene_arc.read().unwrap();
             let branch_count = Scene::get_current_branch_count(scene.branch_count, current_spp);
 
-            if pause_bool.load(std::sync::atomic::Ordering::SeqCst) {
-                stop_bool.store(true, std::sync::atomic::Ordering::SeqCst);
-                std::thread::park();
+            let mut should_pause = match msg_receiver.try_recv() {
+                Ok(RendererMessage::Pause) => {
+                    status_arc.store(
+                        RendererStatus::Paused as usize,
+                        sync::atomic::Ordering::SeqCst,
+                    );
+                    true
+                }
+                Ok(RendererMessage::Stop) => break,
+                Err(_) => false,
+                _ => false,
+            };
+
+            while should_pause {
+                match msg_receiver.recv() {
+                    Ok(RendererMessage::Resume) => should_pause = false,
+                    Ok(RendererMessage::GetImage) => {}
+                    Err(_) => break,
+                    _ => {}
+                }
             }
 
             if scene.target_spp <= current_spp {
-                dbg!("finished!");
-                stop_bool.store(true, std::sync::atomic::Ordering::SeqCst);
-                pause_bool.store(true, std::sync::atomic::Ordering::SeqCst);
+                dbg!("Reached target SPP!");
                 break;
             }
-            let mut tiles = tiles.lock().unwrap();
             dbg!(current_spp);
             dbg!(branch_count);
             tiles.par_iter_mut().for_each(|tile| {
-                let scene = scene.clone();
-                TileRenderer::render_tile_average(tile, scene, current_spp, branch_count);
+                TileRenderer::render_tile_average(tile, &scene, current_spp, branch_count);
             });
 
-            spp_clone.fetch_add(branch_count, std::sync::atomic::Ordering::SeqCst);
-        };
-        self.worker_thread = Some(spawn(f));
+            spp_arc.fetch_add(branch_count, std::sync::atomic::Ordering::SeqCst);
+        }
     }
     /*
        pub fn collect_sample(&mut self) {
@@ -438,7 +473,7 @@ impl TileRenderer {
     }
     pub fn render_tile_average(
         tile: &mut Tile,
-        scene: Arc<Scene>,
+        scene: &Scene,
         current_spp: u32,
         branch_count: u32,
     ) {

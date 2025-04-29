@@ -1,5 +1,8 @@
 use std::{
+    future::{poll_fn, Future, IntoFuture},
+    pin::Pin,
     sync::{atomic::AtomicBool, Arc},
+    task::Poll,
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
@@ -18,9 +21,10 @@ pub struct Application {
     refresh_time: Instant,
     window_title: String,
     window_size: (usize, usize),
+    spp_field: String,
     renderer: TileRenderer,
     render_texture: Option<TextureHandle>,
-    local_texture_buffer: Vec<U8Color>,
+    local_renderer_image: Option<Vec<U8Color>>,
     spp: u32,
     pause: bool,
 }
@@ -34,8 +38,9 @@ impl Default for Application {
             spp: 0,
             renderer: TileRenderer::new((1500, 1500), 8, Scene::mc()),
             refresh_time: Instant::now(),
-            local_texture_buffer: vec![U8Color::BLACK; 1500 * 1500],
+            local_renderer_image: Some(vec![U8Color::BLACK; 1500 * 1500]),
             pause: true,
+            spp_field: String::new(),
         }
     }
 }
@@ -45,6 +50,7 @@ fn pixel_slice_to_u8_slice(slice: &[U8Color]) -> &[u8] {
     let len = slice.len() * size_of::<U8Color>();
     unsafe { std::slice::from_raw_parts(ptr.cast(), len) }
 }
+
 impl eframe::App for Application {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         let texture: &mut egui::TextureHandle = self.render_texture.get_or_insert_with(|| {
@@ -58,21 +64,15 @@ impl eframe::App for Application {
             )
         });
 
-        let new_spp = self
-            .renderer
-            .current_spp
-            .load(std::sync::atomic::Ordering::SeqCst);
+        let new_spp = self.renderer.get_current_spp();
         let render_res = self.renderer.resolution;
         if new_spp > self.spp
             && !self.pause
             && (Instant::now().duration_since(self.refresh_time) > Duration::from_millis(16))
         {
-            self.renderer.send_pause_signal();
-            if self.renderer.is_idle() {
-                self.renderer
-                    .get_frame_buffer_data(&mut self.local_texture_buffer);
-
-                let u8_buffer = pixel_slice_to_u8_slice(&self.local_texture_buffer);
+            let image = self.renderer.get_image();
+            if image.is_some() {
+                let u8_buffer = pixel_slice_to_u8_slice(image.unwrap());
 
                 let color_image: Arc<ColorImage> = Arc::new(ColorImage::from_rgba_premultiplied(
                     render_res.into(),
@@ -82,24 +82,24 @@ impl eframe::App for Application {
                 texture.set(color_image, TextureOptions::default());
 
                 self.spp = new_spp;
-                self.renderer.resume();
-
                 self.refresh_time = Instant::now();
             }
         }
         egui::CentralPanel::default().show(ctx, |ui| {
             if ui.button("Start Rendering").clicked() {
                 self.pause = false;
-                if self.renderer.worker_thread.is_none() {
+                if self.renderer.render_thread.is_none() {
                     self.renderer.collect_samples()
+                } else {
+                    self.renderer.resume();
                 };
             }
             if ui.button("Stop").clicked() {
-                self.renderer.send_pause_signal();
+                self.renderer.pause();
                 self.pause = true;
             }
 
-            ui.label(format!("Hi {:p}", texture));
+            ui.text_edit_singleline(&mut self.spp_field);
 
             ui.image(SizedTexture::from_handle(texture));
         });

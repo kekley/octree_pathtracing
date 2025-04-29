@@ -231,7 +231,7 @@ impl SceneBuilder {
                 PI / 3.0,
                 0.03,
                 Vec4::splat(1.0),
-                Texture::Color(U8Color::new(30, 30, 30, 30)),
+                Texture::Color(U8Color::new(25, 25, 25, 25)),
                 true,
                 false,
                 Vec3A::splat(1.0),
