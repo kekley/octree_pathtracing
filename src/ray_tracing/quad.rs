@@ -54,6 +54,7 @@ impl Quad {
     }
 
     pub fn transform(&mut self, matrix: &Affine3A) {
+        dbg!("transform");
         self.origin = matrix.transform_point3a(self.origin);
         self.u = matrix.transform_vector3a(self.u);
         self.v = matrix.transform_vector3a(self.v);

@@ -21,6 +21,7 @@ use rayon::result;
 use crate::mandelbrot::mandelbrot;
 use crate::ourple;
 
+use super::camera::Camera;
 use super::scene::Scene;
 use super::texture::LUT_TABLE_BYTE;
 
@@ -124,6 +125,7 @@ enum RendererMessage {
     Stop,
     Resume,
     ChangeSpp(u32),
+    Reset,
 }
 #[derive(Debug, Clone, Copy)]
 #[repr(usize)]
@@ -252,32 +254,37 @@ impl TileRenderer {
         let mut write_lock = self.scene.write().unwrap();
         f(&mut write_lock);
         drop(write_lock);
-        self.collect_samples();
+        self.resume();
     }
 
     pub fn reset_render(&mut self) {
-        self.stop();
-
-        self.current_spp.store(0, sync::atomic::Ordering::SeqCst);
-        self.msg_channel = None;
-        self.output_image_buffer = None;
-        self.output_image_receiver = None;
+        self.pause();
+        match &self.msg_channel {
+            Some(msg_channel) => match msg_channel.send(RendererMessage::Reset) {
+                Ok(_) => {}
+                Err(error) => {
+                    dbg!(error.to_string());
+                }
+            },
+            None => {}
+        }
     }
     pub fn get_resolution(&self) -> (usize, usize) {
         self.resolution.clone()
     }
-
+    pub fn get_camera(&self) -> Camera {
+        self.scene.read().unwrap().camera.clone()
+    }
     pub fn get_mode(&self) -> RendererMode {
         self.mode
     }
     pub fn set_mode(&mut self, mode: RendererMode) {
-        self.reset_render();
+        self.stop();
         self.mode = mode;
     }
     pub fn set_resolution(&mut self, resolution: (usize, usize)) {
-        self.reset_render();
+        self.stop();
         self.resolution = resolution;
-        self.collect_samples();
     }
 
     pub fn get_branch_count(&mut self) -> u32 {
@@ -351,6 +358,7 @@ impl TileRenderer {
             Some(thread) => thread.join().unwrap(),
             None => {}
         }
+        self.current_spp.store(0, sync::atomic::Ordering::SeqCst);
     }
     pub fn get_renderer_status(&self) -> RendererStatus {
         RendererStatus::from_usize(self.status.load(sync::atomic::Ordering::SeqCst))
@@ -363,10 +371,6 @@ impl TileRenderer {
                     dbg!(error.to_string());
                 }
             }
-        }
-        match &self.render_thread {
-            Some(thread) => thread.thread().unpark(),
-            None => {}
         }
     }
 
@@ -505,6 +509,12 @@ impl TileRenderer {
                 };
 
                 match message {
+                    Some(RendererMessage::Reset) => {
+                        let mut frame_buffer_guard = frame_buffer.lock().unwrap();
+                        frame_buffer_guard
+                            .iter_mut()
+                            .for_each(|f| *f = F32Color::BLACK);
+                    }
                     Some(RendererMessage::ChangeSpp(new_spp)) => {
                         if target_spp < new_spp {
                             target_spp = new_spp;
@@ -591,7 +601,6 @@ impl TileRenderer {
             });
         });
         'outer: loop {
-            let scene = scene_arc.read().unwrap();
             loop {
                 let status =
                     RendererStatus::from_usize(status_arc.load(sync::atomic::Ordering::SeqCst));
@@ -604,6 +613,7 @@ impl TileRenderer {
                 };
 
                 match message {
+                    Some(RendererMessage::Reset) => {}
                     Some(RendererMessage::ChangeSpp(_)) => {}
                     Some(RendererMessage::Resume) => {
                         status_arc.store(
@@ -635,7 +645,8 @@ impl TileRenderer {
                     }
                 }
             }
-            tiles.iter_mut().for_each(|tile| {
+            let scene = scene_arc.read().unwrap();
+            tiles.par_iter_mut().for_each(|tile| {
                 TileRenderer::render_tile_replace(tile, &scene);
             });
         }

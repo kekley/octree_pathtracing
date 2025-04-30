@@ -1,11 +1,12 @@
-use glam::Vec3A;
+use eframe::egui::{self, Context};
+use glam::{Affine3A, Vec3, Vec3A};
 use rand::{rngs::StdRng, Rng};
 use rand_distr::UnitDisc;
 
 use crate::ray_tracing::ray::Ray;
 
 /// A simple thin-lens perspective camera
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Camera {
     /// Location of the camera
     pub eye: Vec3A,
@@ -24,8 +25,10 @@ pub struct Camera {
 
     /// Focal distance, if aperture radius is nonzero
     pub focal_distance: f32,
+    //sensitivity for mouse movement
+    yaw: f32,
+    pitch: f32,
 }
-
 impl Default for Camera {
     fn default() -> Self {
         Self {
@@ -35,6 +38,8 @@ impl Default for Camera {
             fov: std::f32::consts::FRAC_PI_6,
             aperture: 0.0,
             focal_distance: 0.0,
+            yaw: 0.0,
+            pitch: 0.0,
         }
     }
 }
@@ -51,6 +56,8 @@ impl Camera {
             fov,
             aperture: 0.0,
             focal_distance: 0.0,
+            yaw: 0.0,
+            pitch: 0.0,
         }
     }
 
@@ -77,5 +84,55 @@ impl Camera {
         }
 
         Ray::new(origin, new_dir.normalize())
+    }
+    pub fn move_with_wasd(&mut self, ctx: &Context) {
+        ctx.input(|input| {
+            let mut movement = Vec3A::ZERO;
+
+            if input.key_pressed(egui::Key::W) {
+                movement += self.direction * 0.1;
+            }
+            if input.key_pressed(egui::Key::S) {
+                movement -= self.direction * 0.1;
+            }
+            if input.key_pressed(egui::Key::A) {
+                let right = self.direction.cross(self.up).normalize();
+                movement -= right * 0.1;
+            }
+            if input.key_pressed(egui::Key::D) {
+                let right = self.direction.cross(self.up).normalize();
+                movement += right * 0.1;
+            }
+
+            self.eye += movement;
+        });
+    }
+}
+
+impl Camera {
+    pub fn rotate(&mut self, ctx: &egui::Context) {
+        ctx.input(|input| {
+            if input.pointer.primary_down() {
+                let delta = input.pointer.delta();
+
+                // Update accumulated yaw and pitch, clamping pitch to avoid flipping.
+                self.yaw -= delta.x * 0.05;
+                self.pitch =
+                    (self.pitch - delta.y * 0.05).clamp(-80_f32.to_radians(), 80_f32.to_radians());
+
+                // Recompute camera direction vector using spherical coordinates.
+                let (cp, sp) = (self.pitch.cos(), self.pitch.sin());
+                let (cy, sy) = (self.yaw.cos(), self.yaw.sin());
+
+                // Assuming the camera looks towards -Z by default:
+                self.direction = Vec3A::new(cp * sy, sp, cp * cy).normalize();
+
+                // For a camera that always remains "upright", you can define the "world up"
+                // as (0, 1, 0) and then compute right and a corrected up vector:
+                let world_up = Vec3A::new(0.0, 1.0, 0.0);
+                let right = self.direction.cross(world_up).normalize();
+                self.up = right.cross(self.direction).normalize();
+            }
+        });
     }
 }

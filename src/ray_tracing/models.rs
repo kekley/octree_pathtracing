@@ -67,7 +67,6 @@ impl QuadModel {
                     closest = Some(quad);
                     color = c;
                     ray.hit.t = ray.hit.t_next;
-                    ray.set_normals(quad.normal);
                     hit_any = true
                 }
             }
@@ -83,7 +82,7 @@ impl QuadModel {
                 return false;
             } */
             ray.hit.color = color;
-
+            ray.orient_normal(closest.unwrap().normal);
             ray.distance_travelled += ray.hit.t;
             ray.origin = ray.at(ray.hit.t);
             ray.hit.previous_material = ray.hit.current_material.clone();

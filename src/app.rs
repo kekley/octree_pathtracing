@@ -15,7 +15,8 @@ use eframe::egui::{
 };
 
 use crate::ray_tracing::{
-    scene::Scene,
+    camera::Camera,
+    scene::{self, Scene},
     tile_renderer::{RendererMode, RendererStatus, TileRenderer, U8Color},
 };
 
@@ -30,6 +31,7 @@ pub struct Application {
     local_renderer_resolution: (usize, usize),
     local_current_spp: u32,
     local_target_spp: u32,
+    local_camera: Camera,
 }
 
 impl Default for Application {
@@ -44,6 +46,7 @@ impl Default for Application {
             refresh_time: Instant::now(),
             local_target_spp: 100,
             local_renderer_mode: RendererMode::Preview,
+            local_camera: Camera::default(),
         }
     }
 }
@@ -57,6 +60,7 @@ fn pixel_slice_to_u8_slice(slice: &[U8Color]) -> &[u8] {
 impl eframe::App for Application {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         let texture: &mut egui::TextureHandle = self.render_texture.get_or_insert_with(|| {
+            self.local_camera = self.renderer.get_camera();
             ctx.load_texture(
                 "render_texture",
                 ImageData::Color(Arc::new(ColorImage {
@@ -68,11 +72,16 @@ impl eframe::App for Application {
         });
 
         let latest_render_resolution = self.renderer.get_resolution();
-
+        self.local_camera.move_with_wasd(ctx);
+        self.local_camera.rotate(ctx);
+        if self.renderer.get_camera() != self.local_camera {
+            self.renderer
+                .edit_scene_with(|f| f.camera = self.local_camera);
+        }
         let latest_spp = self.renderer.get_current_spp();
         if ((latest_spp != self.local_current_spp)
             || (self.local_renderer_mode == RendererMode::Preview))
-            && (Instant::now().duration_since(self.refresh_time) > Duration::from_millis(16))
+            && (Instant::now().duration_since(self.refresh_time) > Duration::from_millis(1))
         {
             let image = self.renderer.get_image();
             if image.is_some() {

@@ -182,7 +182,7 @@ impl Octree<u32> {
                     }
                     match model {
                         ResourceModel::SingleBlock(single_block_model) => {
-                            if !(child.is_leaf() && t_min == 0.0) {
+                            if !(t_min == 0.0) {
                                 let t_corner = (pos + scale_exp2) * t_coef - t_bias;
                                 let tc_min = t_corner.max_element();
 
@@ -230,6 +230,41 @@ impl Octree<u32> {
                             }
                         }
                         ResourceModel::Quad(quad_model) => {
+                            if quad_model.quads[0].material.name.contains("stone") {
+                                let t_corner = (pos + scale_exp2) * t_coef - t_bias;
+                                let tc_min = t_corner.max_element();
+
+                                let face_id;
+                                let mut uv;
+                                if tc_min == t_corner.x {
+                                    face_id = (rd.x.to_bits() >> 31) & 1;
+                                    uv = Vec2::new(
+                                        (ro.z + rd.z * t_corner.x) - unmirrored_pos.z,
+                                        (ro.y + rd.y * t_corner.x) - unmirrored_pos.y,
+                                    ) / scale_exp2;
+                                    if rd.x > 0.0 {
+                                        uv.x = 1.0 - uv.x;
+                                    }
+                                } else if tc_min == t_corner.y {
+                                    face_id = 2 | ((rd.y.to_bits() >> 31) & 1);
+                                    uv = Vec2::new(
+                                        (ro.x + rd.x * t_corner.y) - unmirrored_pos.x,
+                                        (ro.z + rd.z * t_corner.y) - unmirrored_pos.z,
+                                    ) / scale_exp2;
+                                    if rd.y > 0.0 {
+                                        uv.y = 1.0 - uv.y;
+                                    }
+                                } else {
+                                    face_id = 4 | ((rd.z.to_bits() >> 31) & 1);
+                                    uv = Vec2::new(
+                                        (ro.x + rd.x * t_corner.z) - unmirrored_pos.x,
+                                        (ro.y + rd.y * t_corner.z) - unmirrored_pos.y,
+                                    ) / scale_exp2;
+                                    if rd.z < 0.0 {
+                                        uv.x = 1.0 - uv.x;
+                                    }
+                                }
+                            }
                             unmirrored_pos -= 1.0;
                             unmirrored_pos /= octree_scale;
                             if quad_model.intersect(ray, &unmirrored_pos) {

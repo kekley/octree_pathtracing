@@ -157,10 +157,10 @@ pub struct Scene {
 impl Scene {
     pub fn mc() -> Scene {
         let camera = Camera::look_at(
-            Vec3A::new(0.0, 20.0, 0.0),
-            Vec3A::new(10.0, 3.0, 15.0),
+            Vec3A::new(3.0, 5.0, 11.0),
+            Vec3A::new(7.0, 7.0, 16.0),
             Vec3A::Y,
-            89.0,
+            90.0,
         );
         let minecraft_loader = MCResourceLoader::new();
 
