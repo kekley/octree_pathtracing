@@ -542,7 +542,7 @@ impl TileRenderer {
             }
 
             if current_spp < target_spp {
-                tiles.par_iter_mut().for_each(|tile| {
+                tiles.iter_mut().for_each(|tile| {
                     TileRenderer::render_tile_average(tile, &scene, current_spp, branch_count);
                 });
                 spp_arc.fetch_add(branch_count, std::sync::atomic::Ordering::SeqCst);

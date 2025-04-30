@@ -40,6 +40,9 @@ pub fn path_trace(
         //println!("hit!");
 
         let current_material = ray.hit.current_material.clone();
+        if current_material.name.contains("cobblestone") && ray.hit.depth == 0 {
+            let a = 4;
+        }
         let prev_material = ray.hit.previous_material.clone();
 
         let specular = current_material.specular;
@@ -293,9 +296,7 @@ pub fn do_diffuse_reflection(
         }
     } else {
         let ray_color = ray.hit.color.clone();
-
         next.diffuse_reflection(ray, rng, scene);
-
         hit = path_trace(rng, scene, next, false, attenuation, current_spp) || hit;
 
         if hit {

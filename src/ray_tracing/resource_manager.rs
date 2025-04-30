@@ -3,13 +3,18 @@ use std::{array, env::var};
 use aovec::Aovec;
 use dashmap::DashMap;
 use fxhash::FxBuildHasher;
-use glam::{Vec3, Vec3A, Vec4};
+use glam::{Vec3, Vec3A, Vec4, Vec4Swizzles};
 use hashbrown::{HashMap, HashSet};
 use smol_str::SmolStr;
 use spider_eye::{
-    block::InternedBlock, block_face::FaceName, block_models::InternedBlockModel,
-    block_states::InternedBlockState, block_texture::InternedTextureVariable,
-    resource::BlockStates, variant::ModelVariant, MCResourceLoader,
+    block::InternedBlock,
+    block_face::FaceName,
+    block_models::{BlockRotation, InternedBlockModel},
+    block_states::InternedBlockState,
+    block_texture::InternedTextureVariable,
+    resource::BlockStates,
+    variant::ModelVariant,
+    MCResourceLoader,
 };
 
 use crate::{
@@ -78,20 +83,41 @@ impl ModelManager {
                     let model = &variant_entry.model;
 
                     let resource = if model.is_cube() {
-                        self.build_model(&model, ModelType::SingleAABB)
+                        self.build_model(
+                            &model,
+                            ModelType::SingleAABB,
+                            variant_entry.rotation_x,
+                            variant_entry.rotation_y,
+                        )
                     } else {
-                        self.build_model(&model, ModelType::Quads)
+                        self.build_model(
+                            &model,
+                            ModelType::Quads,
+                            variant_entry.rotation_x,
+                            variant_entry.rotation_y,
+                        )
                     };
                     let model_id = self.models.len() as u32;
                     self.models.push(resource);
                     return model_id;
                 }
                 ModelVariant::ModelArray(items) => {
-                    let model = &items[0].model;
+                    let variant = &items[0];
+                    let model = &variant.model;
                     let resource = if model.is_cube() {
-                        self.build_model(&model, ModelType::SingleAABB)
+                        self.build_model(
+                            &model,
+                            ModelType::SingleAABB,
+                            variant.rotation_x,
+                            variant.rotation_y,
+                        )
                     } else {
-                        self.build_model(&model, ModelType::Quads)
+                        self.build_model(
+                            &model,
+                            ModelType::Quads,
+                            variant.rotation_x,
+                            variant.rotation_y,
+                        )
                     };
                     let model_id = self.models.len() as u32;
                     self.models.push(resource);
@@ -105,13 +131,24 @@ impl ModelManager {
                     ModelVariant::SingleModel(variant_entry) => {
                         let model = &variant_entry.model;
 
-                        let resource = self.build_model(&model, ModelType::Quads);
+                        let resource = self.build_model(
+                            &model,
+                            ModelType::Quads,
+                            variant_entry.rotation_x.clone(),
+                            variant_entry.rotation_y.clone(),
+                        );
                         resource.take_quads()
                     }
                     ModelVariant::ModelArray(items) => {
                         //FIXME: randomly choose model
-                        let model = &items[0].model;
-                        let resource = self.build_model(&model, ModelType::Quads);
+                        let variant = &items[0];
+                        let model = &variant.model;
+                        let resource = self.build_model(
+                            &model,
+                            ModelType::Quads,
+                            variant.rotation_x.clone(),
+                            variant.rotation_y.clone(),
+                        );
                         resource.take_quads()
                     }
                 })
@@ -127,6 +164,8 @@ impl ModelManager {
         &self,
         block_model: &InternedBlockModel,
         model_type: ModelType,
+        rotation_x: Option<BlockRotation>,
+        rotation_y: Option<BlockRotation>,
     ) -> ResourceModel {
         let textures = block_model.get_textures();
 
@@ -190,7 +229,7 @@ impl ModelManager {
                 ResourceModel::SingleBlock(block_model)
             }
             ModelType::Quads => {
-                let quads = block_model
+                let mut quads = block_model
                     .elements
                     .iter()
                     .flat_map(|element| {
@@ -203,13 +242,15 @@ impl ModelManager {
                             let uv = if let Some(uv) = &face.uv {
                                 uv.to_vec4() / 16.0
                             } else {
-                                get_face_coordinates(&element.from, &element.to, face.name)
+                                Vec4::new(0.0, 0.0, 1.0, 1.0)
                             };
+                            let x_uv = uv.xz();
+                            let y_uv = uv.yw();
                             let material = materials
                                 .get(&face.texture.get_inner())
                                 .expect("texture variable was not in materials hashmap");
-                            let mut quad = Quad::new(v0, v1, v2, material.clone());
-                            println!("{:?}", &quad);
+                            let mut quad = Quad::new(v0, v1, v2, x_uv, y_uv, material.clone());
+                            //dbg!("{:?}", &quad);
                             if let Some(matrix) = element_rotation {
                                 quad.transform(&matrix);
                             }
@@ -217,6 +258,18 @@ impl ModelManager {
                         })
                     })
                     .collect::<Vec<_>>();
+                if let Some(rotation_x) = rotation_x {
+                    let matrix = rotation_x.to_matrix_x();
+                    quads
+                        .iter_mut()
+                        .for_each(|quad| quad.transform_about_pivot(&matrix, Vec3A::splat(0.5)));
+                }
+                if let Some(rotation_y) = rotation_y {
+                    let matrix = rotation_y.to_matrix_y();
+                    quads
+                        .iter_mut()
+                        .for_each(|quad| quad.transform_about_pivot(&matrix, Vec3A::splat(0.5)));
+                }
                 let model = QuadModel { quads };
                 ResourceModel::Quad(model)
             }
@@ -288,19 +341,6 @@ fn get_quad_vectors(from: &Vec3, to: &Vec3, face: FaceName) -> (Vec3A, Vec3A, Ve
             let v = Vec3A::new(0.0, to.y - from.y, 0.0);
             (origin, u, v)
         }
-    }
-}
-
-fn get_face_coordinates(from: &Vec3, to: &Vec3, face: FaceName) -> Vec4 {
-    let from = from / 16.0;
-    let to = to / 16.0;
-    match face {
-        FaceName::Down => Vec4::new(from.x, to.x, from.z, to.z),
-        FaceName::Up => Vec4::new(from.x, to.x, to.z, from.z),
-        FaceName::North => Vec4::new(from.x, to.x, from.y, to.y),
-        FaceName::South => Vec4::new(to.x, from.x, from.y, to.y),
-        FaceName::West => Vec4::new(from.z, to.z, from.y, to.y),
-        FaceName::East => Vec4::new(to.z, from.z, from.y, to.y),
     }
 }
 

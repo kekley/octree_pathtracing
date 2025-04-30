@@ -157,8 +157,8 @@ pub struct Scene {
 impl Scene {
     pub fn mc() -> Scene {
         let camera = Camera::look_at(
-            Vec3A::new(0.0, 8.0, 0.0),
-            Vec3A::new(5.0, 6.0, 5.0),
+            Vec3A::new(0.0, 20.0, 0.0),
+            Vec3A::new(10.0, 3.0, 15.0),
             Vec3A::Y,
             89.0,
         );
@@ -310,7 +310,7 @@ impl Scene {
         let mut ray = self.camera.get_ray(rng, x, y);
         let mut attenuation = Vec4::ZERO;
         preview_render(rng, &self, &mut ray, &mut attenuation);
-        ray.hit.color.xyz()
+        ray.hit.color.xyz().into()
     }
     pub fn get_color(&self, x: f32, y: f32, rng: &mut StdRng, current_spp: u32) -> Vec3 {
         let mut ray = self.camera.get_ray(rng, x, y);

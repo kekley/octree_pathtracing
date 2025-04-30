@@ -116,7 +116,7 @@ impl AABB {
                 t_min = t_min.max(t1);
             }
             if t_max <= t_min {
-                println!("t_min: {}", t_min);
+                dbg!("t_min: {}", t_min);
                 return false;
             }
         }

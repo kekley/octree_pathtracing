@@ -1,7 +1,7 @@
 use super::{material::Material, ray::Ray};
 use crate::ray_tracing::cuboid::Face;
 use crate::voxels::octree_traversal::OctreeIntersectResult;
-use glam::{Mat3A, Vec3A, Vec4};
+use glam::{Affine3A, Mat3A, Mat4, Vec2, Vec3A, Vec4};
 use std::cmp::PartialEq;
 
 #[derive(Debug, Clone)]
@@ -10,38 +10,58 @@ pub struct Quad {
     v: Vec3A,
     u: Vec3A,
     w: Vec3A,
-    d: f32,
     pub normal: Vec3A,
     pub material: Material,
     pub tint: Vec4,
+    texture_u_range: Vec2,
+    texture_v_range: Vec2,
 }
 
 impl Quad {
-    //uv Minimum and maximum U/V texture coordinates (x0,y0 bottom left)
-    pub fn new(origin: Vec3A, u: Vec3A, v: Vec3A, material: Material) -> Self {
+    pub fn new(
+        origin: Vec3A,
+        u: Vec3A,
+        v: Vec3A,
+        texture_u_range: Vec2,
+        texture_v_range: Vec2,
+        material: Material,
+    ) -> Self {
         let n = u.cross(v);
         let normal = n.normalize();
         let w = n / n.dot(n);
-        let d = normal.dot(origin);
         Quad {
             origin: origin,
             v: v,
             u: u,
             w: w,
-            d,
             normal: normal,
             material: material,
             tint: Vec4::ONE,
+            texture_u_range,
+            texture_v_range,
         }
     }
-    pub fn transform(&mut self, matrix: &Mat3A) {
-        self.origin = *matrix * self.origin;
-        self.u = *matrix * self.u;
-        self.v = *matrix * self.v;
-        self.w = *matrix * self.w;
-        self.normal = *matrix * self.normal;
+    pub fn transform_about_pivot(&mut self, matrix: &Affine3A, pivot: Vec3A) {
+        self.origin -= pivot;
+        self.origin = matrix.transform_point3a(self.origin);
+        self.origin += pivot;
+        self.u = matrix.transform_vector3a(self.u);
+        self.v = matrix.transform_vector3a(self.v);
+        let n = self.u.cross(self.v);
+
+        self.normal = matrix.transform_vector3a(self.normal);
+        self.w = n / n.dot(n);
     }
 
+    pub fn transform(&mut self, matrix: &Affine3A) {
+        self.origin = matrix.transform_point3a(self.origin);
+        self.u = matrix.transform_vector3a(self.u);
+        self.v = matrix.transform_vector3a(self.v);
+        let n = self.u.cross(self.v);
+
+        self.normal = n.normalize();
+        self.w = n / n.dot(n);
+    }
     /*    pub fn hit(&self, ray: &mut Ray, octree_intersect_result: &OctreeIntersectResult<u32>) -> bool {
         // ISSUE WHERE ray.at(Ray::OFFSET).floor() DOESN'T EQUAL VOXEL POS
         let test =
@@ -76,30 +96,34 @@ impl Quad {
         }
         return false;
     } */
-    pub fn hit(&self, ray: &mut Ray, voxel_position: &Vec3A, hit_point: &Vec3A) -> bool {
-        let ray_origin_translated = *hit_point - voxel_position;
+    pub fn hit(&self, ray: &mut Ray, voxel_position: &Vec3A) -> bool {
+        let translated_quad_origin = self.origin + voxel_position;
         let denom = self.normal.dot(*ray.get_direction());
-
+        let d = self.normal.dot(translated_quad_origin);
         // ray parallel to plane
         if f32::abs(denom) < 1e-8 {
             return false;
         }
 
-        let t = (self.d - self.normal.dot(ray_origin_translated)) / denom;
-
-        let intersection = ray_origin_translated + ray.get_direction() * t;
-        let planar_hit_point = intersection - self.origin;
+        let t = (d - self.normal.dot(ray.origin)) / denom;
+        if t < 0.0 || !t.is_finite() || t > ray.hit.t_next {
+            return false;
+        }
+        let intersection = ray.origin + ray.get_direction() * t;
+        let planar_hit_point = intersection - translated_quad_origin;
         let alpha = self.w.dot(planar_hit_point.cross(self.v));
         let beta = self.w.dot(self.u.cross(planar_hit_point));
 
-        if alpha < 0.0 || alpha > 1.0 || beta < 0.0 || beta > 1.0 || ray.hit.t_next < t {
+        if alpha < 0.0 || alpha > 1.0 || beta < 0.0 || beta > 1.0 {
             return false;
         }
 
         ray.hit.t_next = t;
         ray.hit.normal = self.normal;
-        ray.hit.u = alpha;
-        ray.hit.v = beta;
+        ray.hit.u =
+            self.texture_u_range.x + alpha * (self.texture_u_range.y - self.texture_u_range.x);
+        ray.hit.v =
+            self.texture_v_range.x + beta * (self.texture_v_range.y - self.texture_v_range.x);
 
         true
     }

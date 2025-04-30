@@ -26,7 +26,7 @@ impl SingleBlockModel {
         uv: &Vec2,
     ) -> bool {
         let bounds = AABB::from_points(*voxel_position, voxel_position + 1.0);
-
+        let (t0, t1) = bounds.intersects_new(ray);
         let normal = Face::to_normal(face);
 
         let material = &self.materials[face as usize];
@@ -51,13 +51,13 @@ pub struct QuadModel {
 impl QuadModel {
     const E0: Vec3A = Vec3A::splat(-Ray::EPSILON);
     const E1: Vec3A = Vec3A::splat(1.0 + Ray::EPSILON);
-    pub fn intersect(&self, ray: &mut Ray, voxel_position: &Vec3A, hit_point: &Vec3A) -> bool {
-        let mut hit = false;
+    pub fn intersect(&self, ray: &mut Ray, voxel_position: &Vec3A) -> bool {
+        let mut hit_any = false;
         ray.hit.t = INFINITY;
-        let mut color = Vec4::ONE;
+        let mut color = Vec4::ZERO;
         let mut closest: Option<&Quad> = None;
         self.quads.iter().for_each(|quad| {
-            if quad.hit(ray, voxel_position, hit_point) {
+            if quad.hit(ray, voxel_position) {
                 let c = quad
                     .material
                     .albedo
@@ -67,13 +67,13 @@ impl QuadModel {
                     closest = Some(quad);
                     color = c;
                     ray.hit.t = ray.hit.t_next;
-                    ray.orient_normal(quad.normal);
-                    hit = true
+                    ray.set_normals(quad.normal);
+                    hit_any = true
                 }
             }
         });
 
-        if hit {
+        if hit_any {
             /*             let p =
                 ray.origin - (ray.at(Ray::OFFSET)).floor() + *ray.get_direction() * ray.hit.t_next;
             let gt = p.cmpgt(Self::E1);
@@ -83,11 +83,14 @@ impl QuadModel {
                 return false;
             } */
             ray.hit.color = color;
+
             ray.distance_travelled += ray.hit.t;
             ray.origin = ray.at(ray.hit.t);
+            ray.hit.previous_material = ray.hit.current_material.clone();
+            ray.hit.current_material = closest.as_ref().unwrap().material.clone();
         }
         //dbg!(ray.hit.t);
 
-        hit
+        hit_any
     }
 }
