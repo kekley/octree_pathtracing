@@ -1,3 +1,4 @@
+use core::error;
 use std::cell::{Cell, RefCell};
 use std::cmp::Ordering;
 use std::future::Future;
@@ -127,14 +128,14 @@ enum RendererMessage {
 #[derive(Debug, Clone, Copy)]
 #[repr(usize)]
 pub enum RendererStatus {
-    Busy = 0,
+    Running = 0,
     Paused = 1,
     Stopped = 2,
 }
 impl RendererStatus {
     pub fn from_usize(value: usize) -> RendererStatus {
         match value {
-            0 => RendererStatus::Busy,
+            0 => RendererStatus::Running,
             1 => RendererStatus::Paused,
             2 => RendererStatus::Stopped,
             _ => panic!(),
@@ -142,7 +143,7 @@ impl RendererStatus {
     }
     pub fn to_str(&self) -> &'static str {
         match self {
-            RendererStatus::Busy => "Busy",
+            RendererStatus::Running => "Running",
             RendererStatus::Paused => "Paused",
             RendererStatus::Stopped => "Stopped",
         }
@@ -330,7 +331,7 @@ impl TileRenderer {
             match msg_channel.send(RendererMessage::Pause) {
                 Ok(_) => {}
                 Err(error) => {
-                    dbg!(error);
+                    dbg!(error.to_string());
                 }
             }
         }
@@ -340,7 +341,7 @@ impl TileRenderer {
             match msg_channel.send(RendererMessage::Stop) {
                 Ok(_) => {}
                 Err(error) => {
-                    dbg!(error);
+                    dbg!(error.to_string());
                 }
             }
         }
@@ -355,12 +356,11 @@ impl TileRenderer {
         RendererStatus::from_usize(self.status.load(sync::atomic::Ordering::SeqCst))
     }
     pub fn resume(&self) {
-        dbg!("called resume");
         if let Some(msg_channel) = &self.msg_channel {
             match msg_channel.send(RendererMessage::Resume) {
                 Ok(_) => {}
                 Err(error) => {
-                    dbg!(error);
+                    dbg!(error.to_string());
                 }
             }
         }
@@ -462,7 +462,7 @@ impl TileRenderer {
         mut target_spp: u32,
     ) {
         status_arc.store(
-            RendererStatus::Busy as usize,
+            RendererStatus::Running as usize,
             sync::atomic::Ordering::SeqCst,
         );
         let frame_buffer = Arc::new(Mutex::new(
@@ -488,77 +488,56 @@ impl TileRenderer {
                 tiles.push(tile);
             });
         });
-        loop {
+        'outer: loop {
             let current_spp = spp_arc.load(std::sync::atomic::Ordering::SeqCst);
             let scene = scene_arc.read().unwrap();
             let branch_count = Scene::get_current_branch_count(scene.branch_count, current_spp);
 
-            let mut should_pause = match msg_receiver.try_recv() {
-                Ok(RendererMessage::ChangeSpp(new_spp)) => {
-                    if target_spp < new_spp {
-                        target_spp = new_spp;
+            loop {
+                let status =
+                    RendererStatus::from_usize(status_arc.load(sync::atomic::Ordering::SeqCst));
+                let message = match status {
+                    RendererStatus::Running => msg_receiver.try_recv().ok(),
+                    RendererStatus::Paused => {
+                        Some(msg_receiver.recv().unwrap_or(RendererMessage::Stop))
                     }
-                    false
-                }
-                Ok(RendererMessage::Pause) => {
-                    status_arc.store(
-                        RendererStatus::Paused as usize,
-                        sync::atomic::Ordering::SeqCst,
-                    );
-                    true
-                }
-                Ok(RendererMessage::Stop) => break,
-                Ok(RendererMessage::GetImage(mut buffer)) => {
-                    let frame_buffer_guard = frame_buffer.lock().unwrap();
-                    Self::float_buffer_to_u8(&mut buffer, &frame_buffer_guard);
-                    match output_image_sender.send(buffer) {
-                        Ok(_) => {}
-                        Err(error) => {
-                            dbg!(error);
-                        }
-                    }
-                    false
-                }
-                Err(_) => false,
-                _ => false,
-            };
+                    RendererStatus::Stopped => break 'outer,
+                };
 
-            while should_pause {
-                match msg_receiver.recv() {
-                    Ok(RendererMessage::ChangeSpp(new_spp)) => {
+                match message {
+                    Some(RendererMessage::ChangeSpp(new_spp)) => {
                         if target_spp < new_spp {
                             target_spp = new_spp;
                         }
                     }
-                    Ok(RendererMessage::Resume) => {
-                        should_pause = false;
+                    Some(RendererMessage::Resume) => {
                         status_arc.store(
-                            RendererStatus::Busy as usize,
+                            RendererStatus::Running as usize,
                             sync::atomic::Ordering::SeqCst,
                         );
                     }
-                    Ok(RendererMessage::GetImage(mut buffer)) => {
-                        status_arc.store(
-                            RendererStatus::Busy as usize,
-                            sync::atomic::Ordering::SeqCst,
-                        );
+                    Some(RendererMessage::GetImage(mut buffer)) => {
                         let frame_buffer_guard = frame_buffer.lock().unwrap();
                         Self::float_buffer_to_u8(&mut buffer, &frame_buffer_guard);
                         drop(frame_buffer_guard);
-                        output_image_sender.send(buffer).unwrap();
+                        match output_image_sender.send(buffer) {
+                            Ok(_) => {}
+                            Err(error) => {
+                                dbg!(error.to_string());
+                                drop(error.0);
+                            }
+                        }
+                    }
+                    Some(RendererMessage::Pause) => {
                         status_arc.store(
                             RendererStatus::Paused as usize,
                             sync::atomic::Ordering::SeqCst,
                         );
                     }
-                    Ok(RendererMessage::Pause) => {
-                        status_arc.store(
-                            RendererStatus::Paused as usize,
-                            sync::atomic::Ordering::SeqCst,
-                        );
+                    Some(RendererMessage::Stop) => break 'outer,
+                    None => {
+                        break;
                     }
-                    Ok(RendererMessage::Stop) => break,
-                    Err(_) => break,
                 }
             }
 
@@ -585,7 +564,7 @@ impl TileRenderer {
         rayon_thread_count: usize,
     ) {
         status_arc.store(
-            RendererStatus::Busy as usize,
+            RendererStatus::Running as usize,
             sync::atomic::Ordering::SeqCst,
         );
         let frame_buffer = Arc::new(Mutex::new(
@@ -611,68 +590,51 @@ impl TileRenderer {
                 tiles.push(tile);
             });
         });
-        loop {
+        'outer: loop {
             let scene = scene_arc.read().unwrap();
-
-            let mut should_pause = match msg_receiver.try_recv() {
-                Ok(RendererMessage::Pause) => {
-                    status_arc.store(
-                        RendererStatus::Paused as usize,
-                        sync::atomic::Ordering::SeqCst,
-                    );
-                    true
-                }
-                Ok(RendererMessage::Stop) => break,
-                Ok(RendererMessage::GetImage(mut buffer)) => {
-                    let frame_buffer_guard = frame_buffer.lock().unwrap();
-                    Self::float_buffer_to_u8(&mut buffer, &frame_buffer_guard);
-                    match output_image_sender.send(buffer) {
-                        Ok(_) => {}
-                        Err(error) => {
-                            dbg!(error);
-                        }
+            loop {
+                let status =
+                    RendererStatus::from_usize(status_arc.load(sync::atomic::Ordering::SeqCst));
+                let message = match status {
+                    RendererStatus::Running => msg_receiver.try_recv().ok(),
+                    RendererStatus::Paused => {
+                        Some(msg_receiver.recv().unwrap_or(RendererMessage::Stop))
                     }
-                    false
-                }
-                Err(_) => false,
-                _ => false,
-            };
+                    RendererStatus::Stopped => break 'outer,
+                };
 
-            while should_pause {
-                match msg_receiver.recv() {
-                    Ok(RendererMessage::Resume) => {
-                        should_pause = false;
+                match message {
+                    Some(RendererMessage::ChangeSpp(_)) => {}
+                    Some(RendererMessage::Resume) => {
                         status_arc.store(
-                            RendererStatus::Busy as usize,
+                            RendererStatus::Running as usize,
                             sync::atomic::Ordering::SeqCst,
                         );
                     }
-                    Ok(RendererMessage::GetImage(mut buffer)) => {
-                        status_arc.store(
-                            RendererStatus::Busy as usize,
-                            sync::atomic::Ordering::SeqCst,
-                        );
+                    Some(RendererMessage::GetImage(mut buffer)) => {
                         let frame_buffer_guard = frame_buffer.lock().unwrap();
                         Self::float_buffer_to_u8(&mut buffer, &frame_buffer_guard);
                         drop(frame_buffer_guard);
-                        output_image_sender.send(buffer).unwrap();
+                        match output_image_sender.send(buffer) {
+                            Ok(_) => {}
+                            Err(error) => {
+                                dbg!(error.to_string());
+                                drop(error.0);
+                            }
+                        }
+                    }
+                    Some(RendererMessage::Pause) => {
                         status_arc.store(
                             RendererStatus::Paused as usize,
                             sync::atomic::Ordering::SeqCst,
                         );
                     }
-                    Ok(RendererMessage::Pause) => {
-                        status_arc.store(
-                            RendererStatus::Paused as usize,
-                            sync::atomic::Ordering::SeqCst,
-                        );
+                    Some(RendererMessage::Stop) => break 'outer,
+                    None => {
+                        break;
                     }
-                    Ok(RendererMessage::Stop) => break,
-                    Err(_) => break,
-                    _ => {}
                 }
             }
-
             tiles.iter_mut().for_each(|tile| {
                 TileRenderer::render_tile_replace(tile, &scene);
             });

@@ -70,9 +70,9 @@ impl eframe::App for Application {
         let latest_render_resolution = self.renderer.get_resolution();
 
         let latest_spp = self.renderer.get_current_spp();
-        if (latest_spp != self.local_current_spp)
-            || (self.local_renderer_mode == RendererMode::Preview)
-                && (Instant::now().duration_since(self.refresh_time) > Duration::from_millis(16))
+        if ((latest_spp != self.local_current_spp)
+            || (self.local_renderer_mode == RendererMode::Preview))
+            && (Instant::now().duration_since(self.refresh_time) > Duration::from_millis(16))
         {
             let image = self.renderer.get_image();
             if image.is_some() {
@@ -93,7 +93,7 @@ impl eframe::App for Application {
             ui.horizontal(|ui| {
                 if ui.button("Start Rendering").clicked() {
                     match self.renderer.get_renderer_status() {
-                        crate::ray_tracing::tile_renderer::RendererStatus::Busy => {}
+                        crate::ray_tracing::tile_renderer::RendererStatus::Running => {}
                         crate::ray_tracing::tile_renderer::RendererStatus::Paused => {
                             self.renderer.resume()
                         }
@@ -126,8 +126,8 @@ impl eframe::App for Application {
                 }
                 if ui
                     .add(RadioButton::new(
-                        self.local_renderer_mode == RendererMode::Preview,
-                        "Preview",
+                        self.local_renderer_mode == RendererMode::PathTraced,
+                        "Path Traced",
                     ))
                     .clicked()
                 {
