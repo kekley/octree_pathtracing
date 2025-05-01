@@ -74,17 +74,22 @@ impl eframe::App for Application {
         let latest_render_resolution = self.renderer.get_resolution();
         self.local_camera.move_with_wasd(ctx);
         self.local_camera.rotate(ctx);
-        if self.renderer.get_camera() != self.local_camera {
+        if self.renderer.get_camera() != self.local_camera
+            && self.renderer.get_mode() == RendererMode::Preview
+        {
             self.renderer
                 .edit_scene_with(|f| f.camera = self.local_camera);
         }
         let latest_spp = self.renderer.get_current_spp();
         if ((latest_spp != self.local_current_spp)
             || (self.local_renderer_mode == RendererMode::Preview))
-            && (Instant::now().duration_since(self.refresh_time) > Duration::from_millis(1))
+            && (Instant::now().duration_since(self.refresh_time) > Duration::from_millis(5))
         {
             let image = self.renderer.get_image();
-            if image.is_some() {
+            if image.is_some()
+                && latest_render_resolution.0 * latest_render_resolution.1
+                    == image.as_ref().unwrap().len()
+            {
                 let u8_buffer = pixel_slice_to_u8_slice(image.unwrap());
 
                 let color_image: Arc<ColorImage> = Arc::new(ColorImage::from_rgba_premultiplied(
@@ -178,6 +183,21 @@ impl eframe::App for Application {
                         self.renderer.set_resolution(self.local_renderer_resolution);
                     }
                 }
+                ui.separator();
+                ui.vertical(|ui| {
+                    ui.add(Label::new("Camera Position: "));
+                    ui.horizontal(|ui| {
+                        ui.add(Label::new("X: "));
+                        ui.add(DragValue::new(&mut self.local_camera.eye.x));
+
+                        ui.add(Label::new("Y: "));
+                        ui.add(DragValue::new(&mut self.local_camera.eye.y));
+
+                        ui.add(Label::new("Z: "));
+                        ui.add(DragValue::new(&mut self.local_camera.eye.z));
+                    })
+                });
+
                 ui.separator()
             });
             ui.separator();

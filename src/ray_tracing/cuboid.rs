@@ -84,7 +84,6 @@ impl Cuboid {
         //println!("u:{} ,v: {}", ray.hit.u, ray.hit.v);
         if color.w > Ray::EPSILON {
             ray.hit.color = color;
-            ray.hit.color.w = 1.0;
             /*             ray.hit.color = Vec4::new(
                 ray.hit.outward_normal.x,
                 ray.hit.outward_normal.y,
@@ -94,8 +93,7 @@ impl Cuboid {
             true
         } else {
             ray.hit.color = color;
-            ray.hit.color.w = 1.0;
-            true
+            false
         }
     }
 }

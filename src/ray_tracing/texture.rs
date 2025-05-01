@@ -57,7 +57,7 @@ impl Texture {
                 }
 
                 let u = u.clamp(0.0, 1.0);
-                let v = v.clamp(0.0, 1.0);
+                let v = 1.0 - v.clamp(0.0, 1.0);
 
                 let i = (u * image.image_width as f32) as u32;
                 let j = (v * image.image_height as f32) as u32;

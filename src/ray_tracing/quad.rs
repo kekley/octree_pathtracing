@@ -10,6 +10,7 @@ pub struct Quad {
     v: Vec3A,
     u: Vec3A,
     w: Vec3A,
+    d: f32,
     pub normal: Vec3A,
     pub material: Material,
     pub tint: Vec4,
@@ -29,6 +30,8 @@ impl Quad {
         let n = u.cross(v);
         let normal = n.normalize();
         let w = n / n.dot(n);
+        let d = normal.dot(origin);
+
         Quad {
             origin: origin,
             v: v,
@@ -39,6 +42,7 @@ impl Quad {
             tint: Vec4::ONE,
             texture_u_range,
             texture_v_range,
+            d,
         }
     }
     pub fn transform_about_pivot(&mut self, matrix: &Affine3A, pivot: Vec3A) {
@@ -48,19 +52,20 @@ impl Quad {
         self.u = matrix.transform_vector3a(self.u);
         self.v = matrix.transform_vector3a(self.v);
         let n = self.u.cross(self.v);
-
-        self.normal = matrix.transform_vector3a(self.normal);
+        self.normal = matrix.transform_vector3a(self.normal).normalize();
+        self.d = self.normal.dot(self.origin);
         self.w = n / n.dot(n);
     }
 
     pub fn transform(&mut self, matrix: &Affine3A) {
-        dbg!("transform");
         self.origin = matrix.transform_point3a(self.origin);
         self.u = matrix.transform_vector3a(self.u);
         self.v = matrix.transform_vector3a(self.v);
         let n = self.u.cross(self.v);
 
         self.normal = n.normalize();
+        self.d = self.normal.dot(self.origin);
+
         self.w = n / n.dot(n);
     }
     /*    pub fn hit(&self, ray: &mut Ray, octree_intersect_result: &OctreeIntersectResult<u32>) -> bool {
@@ -98,20 +103,19 @@ impl Quad {
         return false;
     } */
     pub fn hit(&self, ray: &mut Ray, voxel_position: &Vec3A) -> bool {
-        let translated_quad_origin = self.origin + voxel_position;
-        let denom = self.normal.dot(*ray.get_direction());
-        let d = self.normal.dot(translated_quad_origin);
-        // ray parallel to plane
-        if f32::abs(denom) < 1e-8 {
+        let translated_ray_origin = ray.origin - voxel_position;
+        let denom = ray.get_direction().dot(self.normal);
+        // ray parallel to plane or backside of quad
+        if denom >= -Ray::EPSILON {
             return false;
         }
 
-        let t = (d - self.normal.dot(ray.origin)) / denom;
-        if t < 0.0 || !t.is_finite() || t > ray.hit.t_next {
+        let t = (self.d - self.normal.dot(translated_ray_origin)) / denom;
+        if t <= 0.0 || t > ray.hit.t_next {
             return false;
         }
-        let intersection = ray.origin + ray.get_direction() * t;
-        let planar_hit_point = intersection - translated_quad_origin;
+        let intersection = translated_ray_origin + ray.get_direction() * t;
+        let planar_hit_point = intersection - self.origin;
         let alpha = self.w.dot(planar_hit_point.cross(self.v));
         let beta = self.w.dot(self.u.cross(planar_hit_point));
 
@@ -120,7 +124,6 @@ impl Quad {
         }
 
         ray.hit.t_next = t;
-        ray.hit.normal = self.normal;
         ray.hit.u =
             self.texture_u_range.x + alpha * (self.texture_u_range.y - self.texture_u_range.x);
         ray.hit.v =

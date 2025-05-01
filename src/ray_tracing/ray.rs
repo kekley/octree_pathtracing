@@ -79,7 +79,7 @@ impl Ray {
         }
     }
 
-    pub fn set_normals(&mut self, normal: Vec3A) {
+    pub fn set_normal(&mut self, normal: Vec3A) {
         self.hit.normal = normal;
     }
 

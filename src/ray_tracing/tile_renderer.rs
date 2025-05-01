@@ -552,7 +552,7 @@ impl TileRenderer {
             }
 
             if current_spp < target_spp {
-                tiles.iter_mut().for_each(|tile| {
+                tiles.par_iter_mut().for_each(|tile| {
                     TileRenderer::render_tile_average(tile, &scene, current_spp, branch_count);
                 });
                 spp_arc.fetch_add(branch_count, std::sync::atomic::Ordering::SeqCst);
@@ -646,9 +646,12 @@ impl TileRenderer {
                 }
             }
             let scene = scene_arc.read().unwrap();
+            let start = Instant::now();
             tiles.par_iter_mut().for_each(|tile| {
                 TileRenderer::render_tile_replace(tile, &scene);
             });
+            let end = Instant::now();
+            dbg!(end.duration_since(start));
         }
         status_arc.store(
             RendererStatus::Stopped as usize,

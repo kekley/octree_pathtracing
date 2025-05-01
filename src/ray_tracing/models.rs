@@ -17,16 +17,9 @@ pub struct SingleBlockModel {
     pub materials: [Material; 6],
 }
 impl SingleBlockModel {
-    pub fn intersect(
-        &self,
-        ray: &mut Ray,
-        voxel_position: &Vec3A,
-        t0: f32,
-        face: Face,
-        uv: &Vec2,
-    ) -> bool {
-        let bounds = AABB::from_points(*voxel_position, voxel_position + 1.0);
-        let (t0, t1) = bounds.intersects_new(ray);
+    pub fn intersect(&self, ray: &mut Ray, t0: f32, face: Face, uv: &Vec2) -> bool {
+        ray.hit.t = INFINITY;
+        ray.hit.t_next = INFINITY;
         let normal = Face::to_normal(face);
 
         let material = &self.materials[face as usize];
@@ -51,11 +44,13 @@ pub struct QuadModel {
 impl QuadModel {
     const E0: Vec3A = Vec3A::splat(-Ray::EPSILON);
     const E1: Vec3A = Vec3A::splat(1.0 + Ray::EPSILON);
-    pub fn intersect(&self, ray: &mut Ray, voxel_position: &Vec3A) -> bool {
+    pub fn intersect(&self, ray: &mut Ray, voxel_position: &Vec3A, t_enter: f32) -> bool {
         let mut hit_any = false;
         ray.hit.t = INFINITY;
+        ray.hit.t_next = INFINITY;
         let mut color = Vec4::ZERO;
         let mut closest: Option<&Quad> = None;
+        ray.origin = ray.at(t_enter);
         self.quads.iter().for_each(|quad| {
             if quad.hit(ray, voxel_position) {
                 let c = quad
@@ -82,7 +77,7 @@ impl QuadModel {
                 return false;
             } */
             ray.hit.color = color;
-            ray.orient_normal(closest.unwrap().normal);
+            ray.set_normal(closest.unwrap().normal);
             ray.distance_travelled += ray.hit.t;
             ray.origin = ray.at(ray.hit.t);
             ray.hit.previous_material = ray.hit.current_material.clone();

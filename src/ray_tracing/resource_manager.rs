@@ -50,6 +50,8 @@ impl Default for ModelManager {
 impl ModelManager {
     pub fn load_resource(&self, block: &InternedBlock) -> ModelID {
         if !self.seen_blocks.contains_key(block) {
+            let resolve = block.resolve(&self.resource_loader.rodeo);
+
             println!("len: {}", self.seen_blocks.len());
             let rodeo = &self.resource_loader.rodeo;
             let model = self.resource_loader.load_models(block);
@@ -153,6 +155,7 @@ impl ModelManager {
                     }
                 })
                 .collect::<Vec<_>>();
+            println!("quads len: {}", quads.len());
             let resource = ResourceModel::Quad(QuadModel { quads });
             let model_id = self.models.len() as u32;
             self.models.push(resource);
@@ -242,7 +245,12 @@ impl ModelManager {
                             let uv = if let Some(uv) = &face.uv {
                                 uv.to_vec4() / 16.0
                             } else {
-                                Vec4::new(0.0, 0.0, 1.0, 1.0)
+                                Vec4::new(
+                                    element.from.x,
+                                    element.from.y,
+                                    element.to.x,
+                                    element.to.y,
+                                ) / 16.0
                             };
                             let x_uv = uv.xz();
                             let y_uv = uv.yw();

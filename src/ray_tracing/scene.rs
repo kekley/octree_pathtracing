@@ -157,8 +157,8 @@ pub struct Scene {
 impl Scene {
     pub fn mc() -> Scene {
         let camera = Camera::look_at(
-            Vec3A::new(3.0, 5.0, 11.0),
-            Vec3A::new(7.0, 7.0, 16.0),
+            Vec3A::new(0.0, 129.0, 0.0),
+            Vec3A::new(7.0, 130.0, 7.0),
             Vec3A::Y,
             90.0,
         );
@@ -171,17 +171,21 @@ impl Scene {
             .build(&minecraft_loader);
         let world = minecraft_loader.open_world("./world");
         let air = minecraft_loader.rodeo.get_or_intern("minecraft:air");
-
+        let cave_air = minecraft_loader.rodeo.get_or_intern("minecraft:cave_air");
+        let grass = minecraft_loader.rodeo.get_or_intern("minecraft:grass");
         let f = |position: UVec3| -> Option<u32> {
             let UVec3 { x, y, z } = position;
             //println!("position: {}", position);
             let block = world.get_block(&WorldCoords {
                 x: (x as i64),
-                y: (y as i64 - 64),
+                y: (y as i64) - 64,
                 z: (z as i64),
             });
 
-            if block.as_ref()?.block_name == air {
+            if block.as_ref()?.block_name == air
+                || block.as_ref()?.block_name == cave_air
+                || block.as_ref()?.block_name == grass
+            {
                 return None;
             } else {
                 //println!("not air");
@@ -289,9 +293,25 @@ impl Scene {
 
         let max_dst = 1024.0;
 
+        let intersection =
+            self.octree
+                .intersect_octree_path_tracer(ray, max_dst, &self.model_manager);
+        intersection
+    }
+    pub fn hit_preview(&self, ray: &mut Ray) -> bool {
+        let mut hit = false;
+        let direction = ray.get_direction();
+        if direction.x == 0.0 && direction.y == 0.0 && direction.z == 0.0 || direction.is_nan() {
+            println!("invalid ray direction");
+            println!("ray dir: {}", direction);
+            ray.set_direction(UP);
+        }
+
+        let max_dst = 1024.0;
+
         let intersection = self
             .octree
-            .intersect_octree_new(ray, max_dst, &self.model_manager);
+            .intersect_octree_preview(ray, max_dst, &self.model_manager);
         intersection
     }
 

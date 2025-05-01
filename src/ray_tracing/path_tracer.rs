@@ -143,7 +143,7 @@ pub fn path_trace(
 
 pub fn preview_render(rng: &mut StdRng, scene: &Scene, ray: &mut Ray, attenuation: &mut Vec4) {
     loop {
-        if !next_intersection(scene, ray) {
+        if !next_intersection_preview(scene, ray) {
             break;
         } else if !(ray.hit.current_material.name == "air") && ray.hit.color.w > 0.0 {
             break;
@@ -448,6 +448,15 @@ pub fn next_intersection(scene: &Scene, ray: &mut Ray) -> bool {
     ray.hit.previous_material = ray.hit.current_material.clone();
     ray.hit.t = INFINITY;
     if scene.hit(ray) {
+        return true;
+    }
+
+    return false;
+}
+pub fn next_intersection_preview(scene: &Scene, ray: &mut Ray) -> bool {
+    ray.hit.previous_material = ray.hit.current_material.clone();
+    ray.hit.t = INFINITY;
+    if scene.hit_preview(ray) {
         return true;
     }
 
