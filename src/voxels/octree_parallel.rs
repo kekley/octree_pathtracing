@@ -53,6 +53,7 @@ impl Octree<ResourceModel> {
                 mut octants,
                 mut free_list,
                 depth,
+                octree_scale,
             } = tree;
 
             if root.is_some() {
@@ -102,6 +103,7 @@ impl Octree<ResourceModel> {
             octants: new_octant_vec,
             free_list: new_free_list,
             depth: subtree_depth + 1,
+            octree_scale: f32::exp2(-((subtree_depth + 1) as f32)),
         };
         new_octree.compact();
         return Ok(new_octree);

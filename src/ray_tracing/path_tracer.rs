@@ -19,10 +19,9 @@ pub fn path_trace(
     ray: &mut Ray,
     first_reflection: bool,
     attenuation: &mut Vec4,
-    current_spp: u32,
+    branch_count: u32,
 ) -> bool {
     let mut hit: bool = false;
-    let materials = scene.model_manager.materials.read();
     loop {
         if !next_intersection(scene, ray) {
             if ray.hit.depth == 0 {
@@ -40,9 +39,9 @@ pub fn path_trace(
         }
         //println!("hit!");
 
-        let current_material = &materials[ray.hit.current_material as usize];
+        let current_material = scene.get_material(ray.hit.current_material);
 
-        let prev_material = &materials[ray.hit.previous_material as usize];
+        let prev_material = scene.get_material(ray.hit.previous_material);
 
         let specular = current_material.specular;
         let diffuse = ray.hit.color.w;
@@ -65,11 +64,7 @@ pub fn path_trace(
 
         let metal = current_material.metalness;
 
-        let count = if first_reflection {
-            Scene::get_current_branch_count(scene.branch_count, current_spp)
-        } else {
-            1
-        };
+        let count = if first_reflection { branch_count } else { 1 };
 
         for _ in 0..count {
             let do_metal = metal > Ray::EPSILON && random_float(rng) < metal;
@@ -82,8 +77,7 @@ pub fn path_trace(
                     rng,
                     scene,
                     attenuation,
-                    current_spp,
-                    &materials,
+                    branch_count,
                 );
             } else if random_float(rng) < diffuse {
                 //println!("diffuse");
@@ -91,19 +85,18 @@ pub fn path_trace(
                     ray,
                     &mut next,
                     &mut cumm_color,
-                    ray.hit.current_material,
+                    current_material,
                     rng,
                     scene,
                     attenuation,
-                    current_spp,
-                    &materials,
+                    branch_count,
                 );
             } else if (ior1 - ior2).abs() >= Ray::EPSILON {
                 hit |= do_refraction(
                     ray,
                     &mut next,
-                    ray.hit.current_material,
-                    ray.hit.previous_material,
+                    current_material,
+                    prev_material,
                     &mut cumm_color,
                     ior1,
                     ior2,
@@ -111,8 +104,7 @@ pub fn path_trace(
                     rng,
                     scene,
                     attenuation,
-                    current_spp,
-                    &materials,
+                    branch_count,
                 );
             } else {
                 hit |= do_transmission(
@@ -123,8 +115,7 @@ pub fn path_trace(
                     scene,
                     attenuation,
                     rng,
-                    current_spp,
-                    &materials,
+                    branch_count,
                 )
             }
         }
@@ -174,11 +165,10 @@ pub fn do_specular_reflection(
     scene: &Scene,
     attenuation: &mut Vec4,
     current_spp: u32,
-    materials: &[Material],
 ) -> bool {
     println!("specular");
     let mut hit = false;
-    *next = ray.specular_reflection(materials[ray.hit.current_material as usize].roughness, rng);
+    *next = ray.specular_reflection(scene.get_material(ray.hit.current_material).roughness, rng);
 
     if path_trace(rng, scene, next, false, attenuation, current_spp) {
         if do_metal {
@@ -200,17 +190,15 @@ pub fn do_diffuse_reflection(
     ray: &mut Ray,
     next: &mut Ray,
     cumulative_color: &mut Vec4,
-    material: MaterialID,
+    material: &Material,
     rng: &mut StdRng,
     scene: &Scene,
     attenuation: &mut Vec4,
-    current_spp: u32,
-    materials: &[Material],
+    branch_count: u32,
 ) -> bool {
     let mut hit = false;
     let mut emmitance = Vec3A::splat(0.0);
     let indirect_emmitter_color = Vec4::splat(0.0);
-    let material = &materials[material as usize];
     if scene.emitters_enabled
         && (scene.emitter_sampling_strategy == EmitterSamplingStrategy::NONE || ray.hit.depth == 1)
         && material.emittance > Ray::EPSILON
@@ -256,7 +244,7 @@ pub fn do_diffuse_reflection(
 
             next.hit.current_material = next.hit.previous_material.clone();
 
-            get_direct_light_attenuation(scene, next, attenuation, &materials);
+            get_direct_light_attenuation(scene, next, attenuation);
 
             let a = if scene.sun_sampling_strategy.sun_luminosity {
                 scene.sun.luminosity_pdf
@@ -272,7 +260,7 @@ pub fn do_diffuse_reflection(
             }
         }
         next.diffuse_reflection(ray, rng, scene);
-        hit = path_trace(rng, scene, next, false, attenuation, current_spp) || hit;
+        hit = path_trace(rng, scene, next, false, attenuation, branch_count) || hit;
 
         if hit {
             let sun_emittance = scene.sun.emmittance;
@@ -303,7 +291,7 @@ pub fn do_diffuse_reflection(
     } else {
         let ray_color = ray.hit.color.clone();
         next.diffuse_reflection(ray, rng, scene);
-        hit = path_trace(rng, scene, next, false, attenuation, current_spp) || hit;
+        hit = path_trace(rng, scene, next, false, attenuation, branch_count) || hit;
 
         if hit {
             cumulative_color.x +=
@@ -329,8 +317,8 @@ pub fn do_diffuse_reflection(
 pub fn do_refraction(
     ray: &Ray,
     next: &mut Ray,
-    current_material: MaterialID,
-    prev_material: MaterialID,
+    current_material: &Material,
+    prev_material: &Material,
     cumulative_color: &mut Vec4,
     ior1: f32,
     ior2: f32,
@@ -338,13 +326,9 @@ pub fn do_refraction(
     rng: &mut StdRng,
     scene: &Scene,
     attenuation: &mut Vec4,
-    current_spp: u32,
-    materials: &[Material],
+    branch_count: u32,
 ) -> bool {
     print!("refraction");
-    let materials = scene.model_manager.materials.read();
-    let current_material = &materials[current_material as usize];
-    let prev_material = &materials[prev_material as usize];
     let mut hit = false;
     let do_refraction = current_material
         .material_flags
@@ -359,7 +343,7 @@ pub fn do_refraction(
 
     if do_refraction && radicand < Ray::EPSILON {
         *next = ray.specular_reflection(current_material.roughness, rng);
-        if path_trace(rng, scene, next, false, attenuation, current_spp) {
+        if path_trace(rng, scene, next, false, attenuation, branch_count) {
             hit = true;
             cumulative_color.x += next.hit.color.x;
             cumulative_color.y += next.hit.color.y;
@@ -377,7 +361,7 @@ pub fn do_refraction(
 
         if random_float(rng) < rtheta {
             *next = ray.specular_reflection(current_material.roughness, rng);
-            if path_trace(rng, scene, next, false, attenuation, current_spp) {
+            if path_trace(rng, scene, next, false, attenuation, branch_count) {
                 hit = true;
                 cumulative_color.x += next.hit.color.x;
                 cumulative_color.y += next.hit.color.y;
@@ -407,7 +391,7 @@ pub fn do_refraction(
             }
             next.origin = next.at(Ray::OFFSET);
         }
-        if path_trace(rng, scene, next, false, attenuation, current_spp) {
+        if path_trace(rng, scene, next, false, attenuation, branch_count) {
             hit = true;
             translucent_ray_color(scene, ray, next, cumulative_color, absorption);
         }
@@ -423,15 +407,14 @@ pub fn do_transmission(
     scene: &Scene,
     attenuation: &mut Vec4,
     rng: &mut StdRng,
-    current_spp: u32,
-    materials: &[Material],
+    branch_count: u32,
 ) -> bool {
     println!("transmission");
     let mut hit = false;
     *next = ray.clone();
     next.origin = next.at(Ray::OFFSET);
 
-    if path_trace(rng, scene, next, false, attenuation, current_spp) {
+    if path_trace(rng, scene, next, false, attenuation, branch_count) {
         translucent_ray_color(scene, ray, next, cumulative_color, absorption);
         hit = true;
     }
@@ -474,12 +457,7 @@ pub fn next_intersection_preview(scene: &Scene, ray: &mut Ray) -> bool {
     return false;
 }
 
-pub fn get_direct_light_attenuation(
-    scene: &Scene,
-    ray: &mut Ray,
-    attenuation: &mut Vec4,
-    materials: &[Material],
-) {
+pub fn get_direct_light_attenuation(scene: &Scene, ray: &mut Ray, attenuation: &mut Vec4) {
     *attenuation = Vec4::splat(1.0);
     while attenuation.w > 0.0 {
         ray.origin = ray.at(Ray::OFFSET);
@@ -493,8 +471,12 @@ pub fn get_direct_light_attenuation(
         attenuation.w *= mult;
 
         if scene.sun_sampling_strategy.strict_direct_light
-            && materials[ray.hit.previous_material as usize].index_of_refraction
-                != materials[ray.hit.current_material as usize].index_of_refraction
+            && scene
+                .get_material(ray.hit.previous_material)
+                .index_of_refraction
+                != scene
+                    .get_material(ray.hit.current_material)
+                    .index_of_refraction
         {
             attenuation.w = 0.0;
             println!("umm");

@@ -142,6 +142,7 @@ impl<T> Octant<T> {
 
 #[derive(Debug, Clone, Default)]
 pub struct Octree<T> {
+    pub octree_scale: f32,
     pub root: Option<OctantId>,
     pub octants: Vec<Octant<T>>,
     pub free_list: Vec<OctantId>,
@@ -174,6 +175,7 @@ impl<T> Octree<T> {
 
     fn with_capacity_in(capacity: usize) -> Self {
         Self {
+            octree_scale: f32::exp2(-0.0),
             root: None,
             octants: Vec::with_capacity(capacity),
             free_list: Vec::new(),

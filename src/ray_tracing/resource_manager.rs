@@ -71,9 +71,9 @@ impl ModelManager {
             return id.unwrap().clone();
         }
     }
-    pub fn new(resource_loader: &MCResourceLoader) -> Self {
+    pub fn new() -> Self {
         let tmp = Self {
-            resource_loader: resource_loader.clone(),
+            resource_loader: MCResourceLoader::new(),
             ..Default::default()
         };
 

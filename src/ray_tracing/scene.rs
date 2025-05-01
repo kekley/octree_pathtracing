@@ -131,17 +131,23 @@ use rand::rngs::StdRng;
 use glam::{UVec3, Vec3, Vec3A, Vec3Swizzles, Vec4, Vec4Swizzles};
 use spider_eye::{block, loaded_world::WorldCoords, MCResourceLoader};
 
-use crate::{random_float, ray_tracing::axis::UP, voxels::octree::Octree};
+use crate::{
+    random_float,
+    ray_tracing::axis::UP,
+    voxels::octree::{self, Octree},
+};
 
 use super::{
     camera::Camera,
     material::Material,
     path_tracer::{path_trace, preview_render},
+    quad::Quad,
     ray::Ray,
-    resource_manager::{ModelManager, ResourceModel},
+    resource_manager::{MaterialID, ModelManager, ResourceModel},
     texture::Texture,
     tile_renderer::U8Color,
 };
+
 pub struct Scene {
     pub sun: Sun,
     pub sun_sampling_strategy: SunSamplingStrategy,
@@ -149,103 +155,40 @@ pub struct Scene {
     pub emmitter_intensity: f32,
     pub emitter_sampling_strategy: EmitterSamplingStrategy,
     pub f_sub_surface: f32,
-    pub octree: Arc<Octree<ResourceModel>>,
-    pub model_manager: ModelManager,
-    pub branch_count: u32,
-    pub camera: Camera,
+    pub octree: Octree<ResourceModel>,
+    pub quads: Box<[Quad]>,
+    pub textures: Box<[Texture]>,
+    pub materials: Box<[Material]>,
 }
 
 impl Scene {
-    pub fn mc() -> Scene {
-        let camera = Camera::look_at(
-            Vec3A::new(0.0, 129.0, 0.0),
-            Vec3A::new(7.0, 130.0, 7.0),
-            Vec3A::Y,
-            90.0,
-        );
-        let minecraft_loader = MCResourceLoader::new();
-
-        let mut scene = Scene::new()
-            .branch_count(10)
-            .camera(camera)
-            .spp(100)
-            .build(&minecraft_loader);
-        let world = minecraft_loader.open_world("./biggerworld");
-        let air = minecraft_loader.rodeo.get_or_intern("minecraft:air");
-        let cave_air = minecraft_loader.rodeo.get_or_intern("minecraft:cave_air");
-        let grass = minecraft_loader.rodeo.get_or_intern("minecraft:grass");
-        let water = minecraft_loader.rodeo.get_or_intern("minecraft:water");
-        let lava = minecraft_loader.rodeo.get_or_intern("minecraft:lava");
-        let chest = minecraft_loader.rodeo.get_or_intern("minecraft:chest");
-        let birch_wall_sign = minecraft_loader
-            .rodeo
-            .get_or_intern("minecraft:birch_wall_sign");
-        let bubble_column = minecraft_loader
-            .rodeo
-            .get_or_intern("minecraft:bubble_column");
-
-        let f = |position: UVec3| -> Option<ResourceModel> {
-            let UVec3 { x, y, z } = position;
-            //println!("position: {}", position);
-            let block = world.get_block(&WorldCoords {
-                x: (x as i64),
-                y: (y as i64),
-                z: (z as i64),
-            });
-            if let Some(block) = block {
-                if block.block_name == air
-                    || block.block_name == cave_air
-                    || block.block_name == grass
-                    || block.block_name == water
-                    || block.block_name == lava
-                    || block.block_name == chest
-                    || block.block_name == birch_wall_sign
-                    || block.block_name == bubble_column
-                {
-                    return None;
-                } else {
-                    //println!("not air");
-                    let model_id = scene.model_manager.load_resource(&block);
-                    Some(model_id)
-                }
-            } else {
-                None
-            }
-        };
-
-        let tree: Octree<ResourceModel> = Octree::construct_parallel(8, &f);
-        let arc = Arc::new(tree);
-
-        //println!("{:?}", tree);
-        scene.octree = arc;
-        scene
-    }
-}
-impl Default for Scene {
-    fn default() -> Self {
-        Self {
-            sun: Default::default(),
-            sun_sampling_strategy: Default::default(),
-            emitters_enabled: Default::default(),
-            emmitter_intensity: Default::default(),
-            emitter_sampling_strategy: Default::default(),
-            f_sub_surface: Default::default(),
-            octree: Default::default(),
-            model_manager: Default::default(),
-            branch_count: Default::default(),
-            camera: Default::default(),
-        }
+    pub fn get_material(&self, material_id: MaterialID) -> &Material {
+        &self.materials[material_id as usize]
     }
 }
 
 pub struct SceneBuilder {
     pub spp: Option<u32>,
     pub branch_count: Option<u32>,
-    pub camera: Option<Camera>,
 }
 
-impl SceneBuilder {
-    pub fn build(self, resource_loader: &MCResourceLoader) -> Scene {
+impl ModelManager {
+    pub fn build(&self, octree: Octree<ResourceModel>) -> Scene {
+        let mut write_lock = self.quads.write();
+        let quad_vec: &mut Vec<Quad> = write_lock.as_mut();
+        let quads: Vec<Quad> = std::mem::take(quad_vec);
+        let quad_box: Box<[Quad]> = Box::from(quads);
+
+        let mut write_lock = self.materials.write();
+        let materials_vec_ref: &mut Vec<Material> = write_lock.as_mut();
+        let materials_vec: Vec<Material> = std::mem::take(materials_vec_ref);
+        let materials_box: Box<[Material]> = Box::from(materials_vec);
+
+        let mut write_lock = self.textures.write();
+        let textures_ref: &mut Vec<Texture> = write_lock.as_mut();
+        let textures_vec: Vec<Texture> = std::mem::take(textures_ref);
+        let textures_box: Box<[Texture]> = Box::from(textures_vec);
+
         Scene {
             sun: Sun::new(
                 PI / 2.5,
@@ -257,54 +200,23 @@ impl SceneBuilder {
                 false,
                 Vec3A::splat(1.0),
             ),
-            model_manager: ModelManager::new(resource_loader),
-            branch_count: self.branch_count.unwrap_or(1),
-            camera: self.camera.unwrap(),
-            octree: Arc::new(Octree::new()),
             sun_sampling_strategy: SunSamplingStrategy::IMPORTANCE,
             emitter_sampling_strategy: EmitterSamplingStrategy::NONE,
             emitters_enabled: false,
             emmitter_intensity: 13.0,
             f_sub_surface: 0.3,
-        }
-    }
-
-    pub fn spp(self, spp: u32) -> Self {
-        Self {
-            spp: Some(spp),
-            ..self
-        }
-    }
-
-    pub fn branch_count(self, branch_count: u32) -> Self {
-        Self {
-            branch_count: Some(branch_count),
-            ..self
-        }
-    }
-
-    pub fn camera(self, camera: Camera) -> Self {
-        Self {
-            camera: Some(camera),
-            ..self
+            quads: quad_box,
+            textures: textures_box,
+            materials: materials_box,
+            octree: octree,
         }
     }
 }
 
 impl Scene {
-    pub fn new() -> SceneBuilder {
-        SceneBuilder {
-            spp: None,
-            branch_count: None,
-            camera: None,
-        }
-    }
     pub const SKY_COLOR: Vec4 = Vec4::new(0.5, 0.7, 1.0, 1.0);
 
     pub fn hit(&self, ray: &mut Ray) -> bool {
-        let materials = self.model_manager.materials.read();
-        let quads = self.model_manager.quads.read();
-        let textures = self.model_manager.textures.read();
         let mut hit = false;
         let direction = ray.get_direction();
         if direction.x == 0.0 && direction.y == 0.0 && direction.z == 0.0 || direction.is_nan() {
@@ -315,15 +227,16 @@ impl Scene {
 
         let max_dst = 1024.0;
 
-        let intersection = self
-            .octree
-            .intersect_octree_path_tracer(ray, max_dst, &materials, &textures, &quads);
+        let intersection = self.octree.intersect_octree_path_tracer(
+            ray,
+            max_dst,
+            &self.materials,
+            &self.textures,
+            &self.quads,
+        );
         intersection
     }
     pub fn hit_preview(&self, ray: &mut Ray) -> bool {
-        let materials = self.model_manager.materials.read();
-        let quads = self.model_manager.quads.read();
-        let textures = self.model_manager.textures.read();
         let mut hit = false;
         let direction = ray.get_direction();
         if direction.x == 0.0 && direction.y == 0.0 && direction.z == 0.0 || direction.is_nan() {
@@ -334,9 +247,13 @@ impl Scene {
 
         let max_dst = 1024.0;
 
-        let intersection = self
-            .octree
-            .intersect_octree_preview(ray, max_dst, &materials, &textures, &quads);
+        let intersection = self.octree.intersect_octree_preview(
+            ray,
+            max_dst,
+            &self.materials,
+            &self.textures,
+            &self.quads,
+        );
         intersection
     }
 
@@ -351,16 +268,13 @@ impl Scene {
             return scene_branch_count;
         }
     }
-    pub fn get_preview_color(&self, x: f32, y: f32, rng: &mut StdRng) -> Vec3 {
-        let mut ray = self.camera.get_ray(rng, x, y);
+    pub fn get_preview_color(&self, mut ray: Ray, x: f32, y: f32, rng: &mut StdRng) -> Vec3 {
         let mut attenuation = Vec4::ZERO;
         preview_render(rng, &self, &mut ray, &mut attenuation);
         ray.hit.color.xyz().into()
     }
-    pub fn get_color(&self, x: f32, y: f32, rng: &mut StdRng, current_spp: u32) -> Vec3 {
-        let mut ray = self.camera.get_ray(rng, x, y);
+    pub fn get_color(&self, mut ray: Ray, rng: &mut StdRng, current_spp: u32) -> Vec3 {
         let mut attenuation = Vec4::ZERO;
-        let materials = self.model_manager.materials.read();
         path_trace(rng, &self, &mut ray, true, &mut attenuation, current_spp);
         //Vec3::new(ray.hit.normal.x, ray.hit.normal.y, ray.hit.normal.z)
         ray.hit.color.xyz()

@@ -79,7 +79,7 @@ impl Octree<ResourceModel> {
             println!("no root");
             return false;
         };
-        let octree_scale = f32::exp2(-(self.depth() as f32));
+        let octree_scale = self.octree_scale;
         let mut stack: [(OctantId, f32); OCTREE_MAX_SCALE as usize + 1] =
             [Default::default(); OCTREE_MAX_SCALE as usize + 1];
         let mut ro = ray.origin * octree_scale;
@@ -368,7 +368,8 @@ impl Octree<ResourceModel> {
             println!("no root");
             return false;
         };
-        let octree_scale = f32::exp2(-(self.depth() as f32));
+        let octree_scale = self.octree_scale;
+
         let mut stack: [(OctantId, f32); OCTREE_MAX_SCALE as usize + 1] =
             [Default::default(); OCTREE_MAX_SCALE as usize + 1];
         let mut ro = ray.origin * octree_scale;

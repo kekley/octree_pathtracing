@@ -2,38 +2,94 @@ use std::{
     fmt::format,
     future::{poll_fn, Future, IntoFuture},
     pin::Pin,
-    sync::{atomic::AtomicBool, Arc},
+    sync::{atomic::AtomicBool, Arc, Mutex, RwLock},
     task::Poll,
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
 
 use eframe::egui::{
-    self, include_image, load::SizedTexture, mutex::Mutex, Color32, ColorImage, DragValue, Image,
-    ImageData, ImageOptions, ImageSource, Label, RadioButton, Slider, TextureHandle,
-    TextureOptions,
+    self, include_image, load::SizedTexture, Color32, ColorImage, DragValue, Image, ImageData,
+    ImageOptions, ImageSource, Label, RadioButton, Slider, TextureHandle, TextureOptions,
 };
+use glam::UVec3;
+use spider_eye::{loaded_world::WorldCoords, MCResourceLoader};
 
-use crate::ray_tracing::{
-    camera::Camera,
-    scene::{self, Scene},
-    tile_renderer::{RendererMode, RendererStatus, TileRenderer, U8Color},
+use crate::{
+    ray_tracing::{
+        camera::Camera,
+        resource_manager::{ModelManager, ResourceModel},
+        scene::{self, Scene},
+        tile_renderer::{RendererMode, RendererStatus, TileRenderer, U8Color},
+    },
+    voxels::octree::Octree,
 };
 
 pub struct Application {
     refresh_time: Instant,
     window_title: String,
     window_size: (usize, usize),
+    model_manager: ModelManager,
     renderer: TileRenderer,
     render_texture: Option<TextureHandle>,
-
+    scene: Option<Arc<RwLock<Scene>>>,
     local_renderer_mode: RendererMode,
     local_renderer_resolution: (usize, usize),
     local_current_spp: u32,
     local_target_spp: u32,
     local_camera: Camera,
 }
+pub fn mc() -> (ModelManager, Scene) {
+    let model_manager = ModelManager::new();
+    let minecraft_loader = &model_manager.resource_loader;
+    let world = minecraft_loader.open_world("./world");
+    let air = minecraft_loader.rodeo.get_or_intern("minecraft:air");
+    let cave_air = minecraft_loader.rodeo.get_or_intern("minecraft:cave_air");
+    let grass = minecraft_loader.rodeo.get_or_intern("minecraft:grass");
+    let water = minecraft_loader.rodeo.get_or_intern("minecraft:water");
+    let lava = minecraft_loader.rodeo.get_or_intern("minecraft:lava");
+    let chest = minecraft_loader.rodeo.get_or_intern("minecraft:chest");
+    let birch_wall_sign = minecraft_loader
+        .rodeo
+        .get_or_intern("minecraft:birch_wall_sign");
+    let bubble_column = minecraft_loader
+        .rodeo
+        .get_or_intern("minecraft:bubble_column");
 
+    let f = |position: UVec3| -> Option<ResourceModel> {
+        let UVec3 { x, y, z } = position;
+        //println!("position: {}", position);
+        let block = world.get_block(&WorldCoords {
+            x: (x as i64),
+            y: (y as i64 - 64),
+            z: (z as i64),
+        });
+        if let Some(block) = block {
+            if block.block_name == air
+                || block.block_name == cave_air
+                || block.block_name == grass
+                || block.block_name == water
+                || block.block_name == lava
+                || block.block_name == chest
+                || block.block_name == birch_wall_sign
+                || block.block_name == bubble_column
+            {
+                return None;
+            } else {
+                //println!("not air");
+                let model_id = model_manager.load_resource(&block);
+                Some(model_id)
+            }
+        } else {
+            None
+        }
+    };
+    let tree: Octree<ResourceModel> = Octree::construct_parallel(8, &f);
+
+    let scene = model_manager.build(tree);
+    //println!("{:?}", tree);
+    (model_manager, scene)
+}
 impl Default for Application {
     fn default() -> Self {
         Self {
@@ -41,12 +97,14 @@ impl Default for Application {
             window_title: "hi there".to_string(),
             render_texture: None,
             local_current_spp: 0,
-            renderer: TileRenderer::new((1280, 720), 100, 6, Scene::mc()),
+            model_manager: ModelManager::new(),
+            renderer: TileRenderer::new((1280, 720), 100, 10, 16),
             local_renderer_resolution: (1280, 720),
             refresh_time: Instant::now(),
             local_target_spp: 100,
             local_renderer_mode: RendererMode::Preview,
             local_camera: Camera::default(),
+            scene: None,
         }
     }
 }
@@ -57,10 +115,21 @@ fn pixel_slice_to_u8_slice(slice: &[U8Color]) -> &[u8] {
     unsafe { std::slice::from_raw_parts(ptr.cast(), len) }
 }
 
+impl Application {
+    pub fn build_scene(&mut self) {
+        let a = mc();
+        self.model_manager = a.0;
+        self.scene = Some(Arc::new(RwLock::new(a.1)));
+    }
+}
 impl eframe::App for Application {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        if self.scene.is_none() {
+            self.build_scene();
+        }
         let texture: &mut egui::TextureHandle = self.render_texture.get_or_insert_with(|| {
-            self.local_camera = self.renderer.get_camera();
+            self.local_camera = self.renderer.get_camera().clone();
+
             ctx.load_texture(
                 "render_texture",
                 ImageData::Color(Arc::new(ColorImage {
@@ -70,15 +139,17 @@ impl eframe::App for Application {
                 TextureOptions::default(),
             )
         });
-
+        self.renderer.do_it_syncronously(
+            self.scene.clone().unwrap(),
+            Arc::new(Mutex::new(self.local_camera.clone())),
+        );
         let latest_render_resolution = self.renderer.get_resolution();
-        self.local_camera.move_with_wasd(ctx);
-        self.local_camera.rotate(ctx);
-        if self.renderer.get_camera() != self.local_camera
-            && self.renderer.get_mode() == RendererMode::Preview
-        {
-            self.renderer
-                .edit_scene_with(|f| f.camera = self.local_camera);
+
+        if self.renderer.get_mode() == RendererMode::Preview {
+            self.renderer.edit_camera(|camera| {
+                camera.move_with_wasd(ctx);
+                camera.rotate(ctx);
+            });
         }
         let latest_spp = self.renderer.get_current_spp();
         if ((latest_spp != self.local_current_spp)
@@ -111,9 +182,9 @@ impl eframe::App for Application {
                         crate::ray_tracing::tile_renderer::RendererStatus::Paused => {
                             self.renderer.resume()
                         }
-                        crate::ray_tracing::tile_renderer::RendererStatus::Stopped => {
-                            self.renderer.start()
-                        }
+                        crate::ray_tracing::tile_renderer::RendererStatus::Stopped => self
+                            .renderer
+                            .render_scene(self.scene.as_ref().unwrap().clone()),
                     }
                 }
                 if ui.button("Pause").clicked() {
