@@ -89,17 +89,17 @@ impl Camera {
         ctx.input(|input| {
             let mut movement = Vec3A::ZERO;
 
-            if input.key_pressed(egui::Key::W) {
+            if input.key_down(egui::Key::W) {
                 movement += self.direction * 0.1;
             }
-            if input.key_pressed(egui::Key::S) {
+            if input.key_down(egui::Key::S) {
                 movement -= self.direction * 0.1;
             }
-            if input.key_pressed(egui::Key::A) {
+            if input.key_down(egui::Key::A) {
                 let right = self.direction.cross(self.up).normalize();
                 movement -= right * 0.1;
             }
-            if input.key_pressed(egui::Key::D) {
+            if input.key_down(egui::Key::D) {
                 let right = self.direction.cross(self.up).normalize();
                 movement += right * 0.1;
             }
