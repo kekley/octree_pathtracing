@@ -6,7 +6,7 @@ use crate::{ray_tracing::aabb::AABB, ray_tracing::ray::Ray};
 use anyhow::Ok;
 use glam::Vec3A;
 
-use super::material::Material;
+use super::{material::Material, texture::Texture};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum Face {
@@ -76,11 +76,9 @@ impl Cuboid {
         }
     }
 
-    pub fn intersect_texture(ray: &mut Ray, material: &Material) -> bool {
+    pub fn intersect_texture(ray: &mut Ray, texture: &Texture) -> bool {
         //dbg!(material);
-        let color = material
-            .albedo
-            .value(ray.hit.u.abs(), ray.hit.v.abs(), &ray.at(ray.hit.t));
+        let color = texture.value(ray.hit.u.abs(), ray.hit.v.abs(), &ray.at(ray.hit.t));
         //println!("u:{} ,v: {}", ray.hit.u, ray.hit.v);
         if color.w > Ray::EPSILON {
             ray.hit.color = color;
@@ -95,5 +93,14 @@ impl Cuboid {
             ray.hit.color = color;
             false
         }
+    }
+
+    pub fn intersect_texture_not_transparent(ray: &mut Ray, texture: &Texture) -> bool {
+        //dbg!(material);
+        let color = texture.value(ray.hit.u.abs(), ray.hit.v.abs(), &ray.at(ray.hit.t));
+        //println!("u:{} ,v: {}", ray.hit.u, ray.hit.v);
+        ray.hit.color = color;
+        ray.hit.color.w = 1.0;
+        true
     }
 }

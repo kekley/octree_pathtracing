@@ -1,10 +1,14 @@
-use super::{material::Material, ray::Ray};
+use super::{material::Material, ray::Ray, resource_manager::MaterialID};
 use crate::ray_tracing::cuboid::Face;
 use crate::voxels::octree_traversal::OctreeIntersectResult;
-use glam::{Affine3A, Mat3A, Mat4, Vec2, Vec3A, Vec4};
+use glam::{Affine3A, Mat3A, Mat4, Vec2, Vec3, Vec3A, Vec4};
+use spider_eye::{
+    block_face::{FaceName, InternedFace},
+    block_texture::Uv,
+};
 use std::cmp::PartialEq;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Quad {
     pub origin: Vec3A,
     v: Vec3A,
@@ -12,10 +16,77 @@ pub struct Quad {
     w: Vec3A,
     d: f32,
     pub normal: Vec3A,
-    pub material: Material,
+    pub material_id: MaterialID,
     pub tint: Vec4,
     texture_u_range: Vec2,
     texture_v_range: Vec2,
+}
+impl Quad {
+    pub fn from_face_name(
+        face: &FaceName,
+        uv: &Option<Uv>,
+        from: &Vec3,
+        to: &Vec3,
+        material_id: MaterialID,
+    ) -> Self {
+        let from = from / 16.0;
+
+        let to = to / 16.0;
+        let (origin, u, v) = match face {
+            FaceName::Down => {
+                let origin = Vec3A::new(from.x, from.y, from.z);
+                let u = Vec3A::new(to.x - from.x, 0.0, 0.0);
+                let v = Vec3A::new(0.0, 0.0, to.z - from.z);
+                (origin, u, v)
+            }
+
+            FaceName::Up => {
+                let origin = Vec3A::new(to.x, to.y, from.z);
+                let u = Vec3A::new(from.x - to.x, 0.0, 0.0);
+                let v = Vec3A::new(0.0, 0.0, to.z - from.z);
+                (origin, u, v)
+            }
+
+            FaceName::North => {
+                let origin = Vec3A::new(to.x, from.y, from.z);
+                let u = Vec3A::new(from.x - to.x, 0.0, 0.0); // note: negative delta in X
+                let v = Vec3A::new(0.0, to.y - from.y, 0.0);
+                (origin, u, v)
+            }
+
+            FaceName::South => {
+                let origin = Vec3A::new(from.x, from.y, to.z);
+                let u = Vec3A::new(to.x - from.x, 0.0, 0.0);
+                let v = Vec3A::new(0.0, to.y - from.y, 0.0);
+                (origin, u, v)
+            }
+
+            FaceName::West => {
+                let origin = Vec3A::new(from.x, from.y, from.z);
+                let u = Vec3A::new(0.0, 0.0, to.z - from.z);
+                let v = Vec3A::new(0.0, to.y - from.y, 0.0);
+                (origin, u, v)
+            }
+
+            FaceName::East => {
+                let origin = Vec3A::new(to.x, from.y, to.z);
+                let u = Vec3A::new(0.0, 0.0, from.z - to.z);
+                let v = Vec3A::new(0.0, to.y - from.y, 0.0);
+                (origin, u, v)
+            }
+        };
+        let texture_u_range = uv
+            .as_ref()
+            .map(|uv| Vec2::new(uv.x1, uv.x2))
+            .unwrap_or(Vec2::new(0.0, 16.0))
+            / 16.0;
+        let texture_v_range = uv
+            .as_ref()
+            .map(|uv| Vec2::new(uv.y1, uv.y2))
+            .unwrap_or(Vec2::new(0.0, 16.0))
+            / 16.0;
+        Quad::new(origin, u, v, texture_u_range, texture_v_range, material_id)
+    }
 }
 
 impl Quad {
@@ -25,7 +96,7 @@ impl Quad {
         v: Vec3A,
         texture_u_range: Vec2,
         texture_v_range: Vec2,
-        material: Material,
+        material_id: MaterialID,
     ) -> Self {
         let n = u.cross(v);
         let normal = n.normalize();
@@ -38,7 +109,7 @@ impl Quad {
             u: u,
             w: w,
             normal: normal,
-            material: material,
+            material_id,
             tint: Vec4::ONE,
             texture_u_range,
             texture_v_range,

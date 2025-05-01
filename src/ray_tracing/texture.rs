@@ -14,11 +14,6 @@ use super::tile_renderer::U8Color;
 pub enum Texture {
     Color(U8Color),
     Image(RTWImage),
-    CheckerBoard {
-        inv_scale: f32,
-        a: Arc<Texture>,
-        b: Arc<Texture>,
-    },
 }
 lazy_static! {
     pub static ref LUT_TABLE_FLOAT: [f32; 256] = Texture::linear_lut();
@@ -72,20 +67,6 @@ impl Texture {
                 val[3] = color[3] as f32 / 255.0;
 
                 val
-            }
-
-            Texture::CheckerBoard { inv_scale, a, b } => {
-                let x_int = (point.x as f32 * inv_scale).floor() as i64;
-                let y_int = (point.y as f32 * inv_scale).floor() as i64;
-                let z_int = (point.z as f32 * inv_scale).floor() as i64;
-
-                let is_even = (x_int + y_int + z_int) % 2 == 0;
-
-                if is_even {
-                    a.value(u, v, point)
-                } else {
-                    b.value(u, v, point)
-                }
             }
         }
     }

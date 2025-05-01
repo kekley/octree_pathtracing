@@ -41,7 +41,7 @@ impl Default for Application {
             window_title: "hi there".to_string(),
             render_texture: None,
             local_current_spp: 0,
-            renderer: TileRenderer::new((1280, 720), 100, 8, Scene::mc()),
+            renderer: TileRenderer::new((1280, 720), 100, 6, Scene::mc()),
             local_renderer_resolution: (1280, 720),
             refresh_time: Instant::now(),
             local_target_spp: 100,

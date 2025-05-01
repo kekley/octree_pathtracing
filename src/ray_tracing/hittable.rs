@@ -4,7 +4,7 @@ pub type HittableIdx = u32;
 use crate::{ray_tracing::aabb::AABB, ray_tracing::bvh::BVHTree, ray_tracing::cuboid::Cuboid};
 use glam::{Vec3A, Vec4};
 
-use super::{ray::Ray, sphere::Sphere};
+use super::{ray::Ray, resource_manager::MaterialID, sphere::Sphere};
 
 #[derive(Debug, Clone)]
 pub struct HittableBVH {
@@ -50,21 +50,21 @@ impl HittableHitList {
 }
 
 #[derive(Debug, Clone)]
-pub struct HitRecord<T> {
+pub struct HitRecord {
     pub t: f32, // closest hit
     pub t_next: f32,
     pub u: f32,
     pub v: f32,
-    pub current_material: T,
+    pub current_material: MaterialID,
     pub normal: Vec3A,
     //    pub geom_normal: Vec3A,
-    pub previous_material: T,
+    pub previous_material: MaterialID,
     pub color: Vec4,
     pub depth: u32,
     pub specular: bool,
 }
 
-impl<T: Default> Default for HitRecord<T> {
+impl Default for HitRecord {
     fn default() -> Self {
         Self {
             t: INFINITY,

@@ -6,16 +6,16 @@ pub mod cuboid;
 mod hittable;
 mod interval;
 mod path_tracer;
-mod quad;
+pub mod quad;
 pub mod ray;
 pub mod resource_manager;
 pub mod scene;
 mod sphere;
-mod texture;
+pub mod texture;
 pub mod tile_renderer;
 mod translation;
 
-mod material;
+pub mod material;
 pub mod models;
 
 use camera::*;

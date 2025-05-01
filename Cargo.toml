@@ -24,6 +24,7 @@ aovec = "1.1.0"
 eframe = "0.31.1"
 egui_extras = { version = "0.31.1", features = ["default", "image"] }
 env_logger = "0.11.8"
+lasso = "0.7.3"
 
 [profile.release-with-debug]
 inherits = "release"

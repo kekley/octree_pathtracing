@@ -3,7 +3,7 @@ use bitflags::bitflags;
 use glam::Vec4;
 use smol_str::SmolStr;
 
-use super::tile_renderer::U8Color;
+use super::{resource_manager::TextureID, tile_renderer::U8Color};
 
 bitflags! {
     #[derive(Clone, Copy,Debug)]
@@ -23,14 +23,13 @@ impl Default for MaterialFlags {
 }
 
 pub struct MaterialBuilder {
-    name: SmolStr,
     index_of_refraction: Option<f32>,
     material_flags: Option<MaterialFlags>,
     specular: Option<f32>,
     emittance: Option<f32>,
     roughness: Option<f32>,
     metalness: Option<f32>,
-    albedo: Option<Texture>,
+    texture: Option<TextureID>,
 }
 
 impl MaterialBuilder {
@@ -38,14 +37,13 @@ impl MaterialBuilder {
         pub const DEFAULT_IOR: f32 = 1.000293;
 
         Material {
-            name: self.name,
             index_of_refraction: self.index_of_refraction.unwrap_or(DEFAULT_IOR),
             material_flags: self.material_flags.unwrap_or(MaterialFlags::default()),
             specular: self.specular.unwrap_or(0.0),
             emittance: self.emittance.unwrap_or(0.0),
             roughness: self.roughness.unwrap_or(0.0),
             metalness: self.metalness.unwrap_or(0.0),
-            albedo: self.albedo.unwrap_or(Texture::DEFAULT_TEXTURE),
+            texture: self.texture.unwrap_or(0),
         }
     }
     pub fn index_of_refraction(self, ior: f32) -> Self {
@@ -78,9 +76,9 @@ impl MaterialBuilder {
             ..self
         }
     }
-    pub fn albedo(self, albedo: Texture) -> Self {
+    pub fn albedo(self, texture: TextureID) -> Self {
         Self {
-            albedo: Some(albedo),
+            texture: Some(texture),
             ..self
         }
     }
@@ -94,43 +92,40 @@ impl MaterialBuilder {
 
 #[derive(Debug, Clone)]
 pub struct Material {
-    pub name: SmolStr,
     pub index_of_refraction: f32,
     pub material_flags: MaterialFlags,
     pub specular: f32,
     pub emittance: f32,
     pub roughness: f32,
     pub metalness: f32,
-    pub albedo: Texture,
+    pub texture: TextureID,
 }
 
 impl Material {
     pub const AIR: Material = Material {
-        name: SmolStr::new_static("air"),
         index_of_refraction: 1.000293,
         material_flags: MaterialFlags::empty(),
         specular: 0.0,
         emittance: 0.0,
         roughness: 0.0,
         metalness: 0.0,
-        albedo: Texture::Color(U8Color::new(0, 0, 0, 0)),
+        texture: 0,
     };
-    pub fn new(name: SmolStr) -> MaterialBuilder {
+    pub fn new() -> MaterialBuilder {
         MaterialBuilder {
-            name: name,
             index_of_refraction: Some(1.000293),
             material_flags: None,
             specular: None,
             emittance: None,
             roughness: None,
             metalness: None,
-            albedo: None,
+            texture: None,
         }
     }
 }
 
 impl Default for Material {
     fn default() -> Self {
-        Material::new(SmolStr::new("DEFAULT")).build()
+        Material::new().build()
     }
 }

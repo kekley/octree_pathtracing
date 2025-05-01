@@ -129,15 +129,16 @@ impl SunSamplingStrategy {
 use rand::rngs::StdRng;
 
 use glam::{UVec3, Vec3, Vec3A, Vec3Swizzles, Vec4, Vec4Swizzles};
-use spider_eye::{loaded_world::WorldCoords, MCResourceLoader};
+use spider_eye::{block, loaded_world::WorldCoords, MCResourceLoader};
 
 use crate::{random_float, ray_tracing::axis::UP, voxels::octree::Octree};
 
 use super::{
     camera::Camera,
+    material::Material,
     path_tracer::{path_trace, preview_render},
     ray::Ray,
-    resource_manager::ModelManager,
+    resource_manager::{ModelManager, ResourceModel},
     texture::Texture,
     tile_renderer::U8Color,
 };
@@ -148,7 +149,7 @@ pub struct Scene {
     pub emmitter_intensity: f32,
     pub emitter_sampling_strategy: EmitterSamplingStrategy,
     pub f_sub_surface: f32,
-    pub octree: Arc<Octree<u32>>,
+    pub octree: Arc<Octree<ResourceModel>>,
     pub model_manager: ModelManager,
     pub branch_count: u32,
     pub camera: Camera,
@@ -169,32 +170,50 @@ impl Scene {
             .camera(camera)
             .spp(100)
             .build(&minecraft_loader);
-        let world = minecraft_loader.open_world("./world");
+        let world = minecraft_loader.open_world("./biggerworld");
         let air = minecraft_loader.rodeo.get_or_intern("minecraft:air");
         let cave_air = minecraft_loader.rodeo.get_or_intern("minecraft:cave_air");
         let grass = minecraft_loader.rodeo.get_or_intern("minecraft:grass");
-        let f = |position: UVec3| -> Option<u32> {
+        let water = minecraft_loader.rodeo.get_or_intern("minecraft:water");
+        let lava = minecraft_loader.rodeo.get_or_intern("minecraft:lava");
+        let chest = minecraft_loader.rodeo.get_or_intern("minecraft:chest");
+        let birch_wall_sign = minecraft_loader
+            .rodeo
+            .get_or_intern("minecraft:birch_wall_sign");
+        let bubble_column = minecraft_loader
+            .rodeo
+            .get_or_intern("minecraft:bubble_column");
+
+        let f = |position: UVec3| -> Option<ResourceModel> {
             let UVec3 { x, y, z } = position;
             //println!("position: {}", position);
             let block = world.get_block(&WorldCoords {
                 x: (x as i64),
-                y: (y as i64) - 64,
+                y: (y as i64),
                 z: (z as i64),
             });
-
-            if block.as_ref()?.block_name == air
-                || block.as_ref()?.block_name == cave_air
-                || block.as_ref()?.block_name == grass
-            {
-                return None;
+            if let Some(block) = block {
+                if block.block_name == air
+                    || block.block_name == cave_air
+                    || block.block_name == grass
+                    || block.block_name == water
+                    || block.block_name == lava
+                    || block.block_name == chest
+                    || block.block_name == birch_wall_sign
+                    || block.block_name == bubble_column
+                {
+                    return None;
+                } else {
+                    //println!("not air");
+                    let model_id = scene.model_manager.load_resource(&block);
+                    Some(model_id)
+                }
             } else {
-                //println!("not air");
-                let model_id = scene.model_manager.load_resource(block.as_ref()?);
-                Some(model_id)
+                None
             }
         };
 
-        let tree: Octree<u32> = Octree::construct_parallel(8, &f);
+        let tree: Octree<ResourceModel> = Octree::construct_parallel(8, &f);
         let arc = Arc::new(tree);
 
         //println!("{:?}", tree);
@@ -283,22 +302,9 @@ impl Scene {
     pub const SKY_COLOR: Vec4 = Vec4::new(0.5, 0.7, 1.0, 1.0);
 
     pub fn hit(&self, ray: &mut Ray) -> bool {
-        let mut hit = false;
-        let direction = ray.get_direction();
-        if direction.x == 0.0 && direction.y == 0.0 && direction.z == 0.0 || direction.is_nan() {
-            println!("invalid ray direction");
-            println!("ray dir: {}", direction);
-            ray.set_direction(UP);
-        }
-
-        let max_dst = 1024.0;
-
-        let intersection =
-            self.octree
-                .intersect_octree_path_tracer(ray, max_dst, &self.model_manager);
-        intersection
-    }
-    pub fn hit_preview(&self, ray: &mut Ray) -> bool {
+        let materials = self.model_manager.materials.read();
+        let quads = self.model_manager.quads.read();
+        let textures = self.model_manager.textures.read();
         let mut hit = false;
         let direction = ray.get_direction();
         if direction.x == 0.0 && direction.y == 0.0 && direction.z == 0.0 || direction.is_nan() {
@@ -311,7 +317,26 @@ impl Scene {
 
         let intersection = self
             .octree
-            .intersect_octree_preview(ray, max_dst, &self.model_manager);
+            .intersect_octree_path_tracer(ray, max_dst, &materials, &textures, &quads);
+        intersection
+    }
+    pub fn hit_preview(&self, ray: &mut Ray) -> bool {
+        let materials = self.model_manager.materials.read();
+        let quads = self.model_manager.quads.read();
+        let textures = self.model_manager.textures.read();
+        let mut hit = false;
+        let direction = ray.get_direction();
+        if direction.x == 0.0 && direction.y == 0.0 && direction.z == 0.0 || direction.is_nan() {
+            println!("invalid ray direction");
+            println!("ray dir: {}", direction);
+            ray.set_direction(UP);
+        }
+
+        let max_dst = 1024.0;
+
+        let intersection = self
+            .octree
+            .intersect_octree_preview(ray, max_dst, &materials, &textures, &quads);
         intersection
     }
 
@@ -335,6 +360,7 @@ impl Scene {
     pub fn get_color(&self, x: f32, y: f32, rng: &mut StdRng, current_spp: u32) -> Vec3 {
         let mut ray = self.camera.get_ray(rng, x, y);
         let mut attenuation = Vec4::ZERO;
+        let materials = self.model_manager.materials.read();
         path_trace(rng, &self, &mut ray, true, &mut attenuation, current_spp);
         //Vec3::new(ray.hit.normal.x, ray.hit.normal.y, ray.hit.normal.z)
         ray.hit.color.xyz()

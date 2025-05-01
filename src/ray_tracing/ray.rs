@@ -18,7 +18,7 @@ pub struct Ray {
     direction: Vec3A,
     inv_dir: Vec3A,
     pub(crate) distance_travelled: f32,
-    pub(crate) hit: HitRecord<Material>,
+    pub(crate) hit: HitRecord,
 }
 
 impl Ray {

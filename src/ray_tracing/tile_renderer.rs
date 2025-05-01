@@ -22,6 +22,7 @@ use crate::mandelbrot::mandelbrot;
 use crate::ourple;
 
 use super::camera::Camera;
+use super::material::Material;
 use super::scene::Scene;
 use super::texture::LUT_TABLE_BYTE;
 
@@ -377,10 +378,10 @@ impl TileRenderer {
     pub fn start(&mut self) {
         match self.mode {
             RendererMode::Preview => self.render_preview(),
-            RendererMode::PathTraced => self.collect_samples(),
+            RendererMode::PathTraced => self.render_path_traced(),
         }
     }
-    fn collect_samples(&mut self) {
+    fn render_path_traced(&mut self) {
         if self.render_thread.is_some() {
             return;
         }
@@ -424,6 +425,8 @@ impl TileRenderer {
         if self.render_thread.is_some() {
             return;
         }
+        self.current_spp.store(0, sync::atomic::Ordering::SeqCst);
+
         let (msg_sender, msg_receiver) = channel::<RendererMessage>();
         let (img_sender, img_receiver) = channel::<Vec<U8Color>>();
 
@@ -646,6 +649,7 @@ impl TileRenderer {
                 }
             }
             let scene = scene_arc.read().unwrap();
+
             let start = Instant::now();
             tiles.par_iter_mut().for_each(|tile| {
                 TileRenderer::render_tile_replace(tile, &scene);

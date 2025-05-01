@@ -3,8 +3,12 @@ use glam::{UVec3, Vec2, Vec3A};
 use crate::{
     ray_tracing::{
         cuboid::{Cuboid, Face},
+        material::Material,
+        models::SingleBlockModel,
+        quad::Quad,
         ray::Ray,
         resource_manager::{ModelManager, ResourceModel},
+        texture::Texture,
     },
     util,
 };
@@ -60,12 +64,14 @@ pub struct OctreeIntersectResult<'a, T> {
     pub t1: f32,
 }
 
-impl Octree<u32> {
+impl Octree<ResourceModel> {
     pub fn intersect_octree_path_tracer(
         &self,
         ray: &mut Ray,
         max_dst: f32,
-        model_manager: &ModelManager,
+        materials: &[Material],
+        textures: &[Texture],
+        quads: &[Quad],
     ) -> bool {
         let tree_root = if self.root.is_some() {
             self.root.unwrap()
@@ -167,7 +173,7 @@ impl Octree<u32> {
                         [unmirrored_idx as usize]
                         .get_leaf_value()
                         .unwrap();
-                    let model = model_manager.get_model(*leaf_value);
+                    let model = *leaf_value;
 
                     let mut unmirrored_pos = pos;
 
@@ -222,6 +228,9 @@ impl Octree<u32> {
                                     t_min / octree_scale,
                                     face_id.try_into().unwrap(),
                                     &uv,
+                                    quads,
+                                    materials,
+                                    textures,
                                 ) {
                                     return true;
                                 }
@@ -230,7 +239,14 @@ impl Octree<u32> {
                         ResourceModel::Quad(quad_model) => {
                             unmirrored_pos -= 1.0;
                             unmirrored_pos /= octree_scale;
-                            if quad_model.intersect(ray, &unmirrored_pos, t_min) {
+                            if quad_model.intersect(
+                                ray,
+                                &unmirrored_pos,
+                                t_min,
+                                quads,
+                                materials,
+                                textures,
+                            ) {
                                 return true;
                             } else {
                             }
@@ -337,12 +353,14 @@ impl Octree<u32> {
     }
 }
 
-impl Octree<u32> {
+impl Octree<ResourceModel> {
     pub fn intersect_octree_preview(
         &self,
         ray: &mut Ray,
         max_dst: f32,
-        model_manager: &ModelManager,
+        materials: &[Material],
+        textures: &[Texture],
+        quads: &[Quad],
     ) -> bool {
         let tree_root = if self.root.is_some() {
             self.root.unwrap()
@@ -444,7 +462,7 @@ impl Octree<u32> {
                         [unmirrored_idx as usize]
                         .get_leaf_value()
                         .unwrap();
-                    let model = model_manager.get_model(*leaf_value);
+                    let model = *leaf_value;
 
                     let mut unmirrored_pos = pos;
 
@@ -493,13 +511,18 @@ impl Octree<u32> {
                                         uv.x = 1.0 - uv.x;
                                     }
                                 }
-                                if single_block_model.intersect(
+                                if single_block_model.intersect_preview(
                                     ray,
                                     t_min / octree_scale,
                                     face_id.try_into().unwrap(),
                                     &uv,
+                                    quads,
+                                    materials,
+                                    textures,
                                 ) {
                                     return true;
+                                } else {
+                                    return false;
                                 }
                             }
                         }
@@ -539,8 +562,16 @@ impl Octree<u32> {
                             }
                             ray.hit.u = uv.x;
                             ray.hit.v = uv.y;
-                            if Cuboid::intersect_texture(ray, &quad_model.quads[0].material) {
+                            let texture = &textures[materials
+                                [quads[quad_model.starting_quad_id as usize].material_id as usize]
+                                .texture
+                                as usize];
+                            ray.hit.current_material =
+                                quads[quad_model.starting_quad_id as usize].material_id;
+                            if Cuboid::intersect_texture_not_transparent(ray, texture) {
                                 return true;
+                            } else {
+                                return false;
                             }
                         }
                     }

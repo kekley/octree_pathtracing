@@ -55,7 +55,7 @@ impl Sphere {
         ray.hit.u = u;
         ray.hit.v = v;
         ray.hit.normal = outward_normal;
-        ray.hit.current_material = Material::default();
+        ray.hit.current_material = 0;
     }
 
     pub fn get_uv(point: Vec3A) -> (f32, f32) {
