@@ -1,6 +1,10 @@
 extern crate ray_tracing;
 
-use std::{num::NonZeroU32, sync::Arc, time::Instant};
+use std::{
+    num::NonZeroU32,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use glam::{UVec3, Vec3A};
 use ray_tracing::{
@@ -48,6 +52,6 @@ fn lichen() {
         })
         .unwrap();
 
-    let resolved = lichen.resolve(&loader.rodeo);
+    let resolved = lichen.resolve(&loader);
     dbg!(resolved);
 }

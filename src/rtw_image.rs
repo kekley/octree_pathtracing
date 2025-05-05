@@ -7,6 +7,7 @@ pub enum BytesPerPixel {
     #[default]
     INVALID = 0,
     One = 1,
+    Two = 2,
     Three = 3,
     Four = 4,
 }
@@ -17,6 +18,7 @@ impl TryFrom<u32> for BytesPerPixel {
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         match value {
             1 => Ok(BytesPerPixel::One),
+            2 => Ok(BytesPerPixel::Two),
             3 => Ok(BytesPerPixel::Three),
             4 => Ok(BytesPerPixel::Four),
             _ => Err(format!("Invalid bytes per pixel: {}", value)),
@@ -27,8 +29,7 @@ impl TryFrom<u32> for BytesPerPixel {
 #[derive(Clone)]
 pub struct RTWImage {
     bytes_per_pixel: BytesPerPixel,
-    fdata: Arc<[f32]>,
-    bdata: Arc<[u8]>,
+    bdata: Box<[u8]>,
     pub image_width: u32,
     pub image_height: u32,
     bytes_per_scanline: u32,
@@ -60,11 +61,9 @@ impl RTWImage {
                 let bytes_per_pixel = BytesPerPixel::try_from(image.depth as u32)?;
                 let bytes_per_scanline = image_width * image.depth as u32;
                 let fdata = Self::convert_to_floats(&bdata);
-                let bdata: Arc<[u8]> = Arc::from(bdata);
-                let fdata: Arc<[f32]> = Arc::from(fdata);
+                let bdata: Box<[u8]> = Box::from(bdata);
                 return Ok(RTWImage {
                     bytes_per_pixel,
-                    fdata,
                     bdata,
                     image_width,
                     image_height,
@@ -78,11 +77,9 @@ impl RTWImage {
                 let bytes_per_pixel = BytesPerPixel::try_from(image.depth as u32)?;
                 let bytes_per_scanline = image_width * image.depth as u32;
                 let bdata = Self::convert_to_bytes(&fdata);
-                let bdata: Arc<[u8]> = Arc::from(bdata);
-                let fdata: Arc<[f32]> = Arc::from(fdata);
+                let bdata: Box<[u8]> = Box::from(bdata);
                 return Ok(RTWImage {
                     bytes_per_pixel,
-                    fdata,
                     bdata,
                     image_width,
                     image_height,
@@ -135,6 +132,14 @@ impl RTWImage {
                 let col = *self.bdata.get(index).unwrap();
                 ret_val = [col, col, col, 255];
             }
+            BytesPerPixel::Two => {
+                let col = [
+                    *self.bdata.get(index).unwrap(),
+                    *self.bdata.get(index + 1).unwrap(),
+                ];
+                let gray = (u16::from_be_bytes(col) >> 8) as u8;
+                ret_val = [gray, gray, gray, 255]
+            }
             BytesPerPixel::Three => {
                 let r = *self.bdata.get(index).unwrap();
                 let g = *self.bdata.get(index + 1).unwrap();
@@ -148,7 +153,7 @@ impl RTWImage {
                 let a = *self.bdata.get(index + 3).unwrap();
                 ret_val = [r, g, b, a];
             }
-            _ => {}
+            BytesPerPixel::INVALID => {}
         }
         ret_val
     }

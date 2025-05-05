@@ -12,7 +12,7 @@ use eframe::egui::{
     self, include_image, load::SizedTexture, Color32, ColorImage, DragValue, Image, ImageData,
     ImageOptions, ImageSource, Label, RadioButton, Slider, TextureHandle, TextureOptions,
 };
-use glam::UVec3;
+use glam::{UVec3, Vec3};
 use spider_eye::{loaded_world::WorldCoords, MCResourceLoader};
 
 use crate::{
@@ -22,7 +22,7 @@ use crate::{
         scene::{self, Scene},
         tile_renderer::{RendererMode, RendererStatus, TileRenderer, U8Color},
     },
-    voxels::octree::Octree,
+    voxels::octree::{Octant, Octree},
 };
 
 pub struct Application {
@@ -37,12 +37,12 @@ pub struct Application {
     local_renderer_resolution: (usize, usize),
     local_current_spp: u32,
     local_target_spp: u32,
-    local_camera: Camera,
+    local_camera_position: Vec3,
 }
 pub fn mc() -> (ModelManager, Scene) {
     let model_manager = ModelManager::new();
     let minecraft_loader = &model_manager.resource_loader;
-    let world = minecraft_loader.open_world("./world");
+    let world = minecraft_loader.open_world("./assets/worlds/server");
     let air = minecraft_loader.rodeo.get_or_intern("minecraft:air");
     let cave_air = minecraft_loader.rodeo.get_or_intern("minecraft:cave_air");
     let grass = minecraft_loader.rodeo.get_or_intern("minecraft:grass");
@@ -55,14 +55,14 @@ pub fn mc() -> (ModelManager, Scene) {
     let bubble_column = minecraft_loader
         .rodeo
         .get_or_intern("minecraft:bubble_column");
-
+    dbg!(size_of::<Octant<ResourceModel>>());
     let f = |position: UVec3| -> Option<ResourceModel> {
         let UVec3 { x, y, z } = position;
         //println!("position: {}", position);
         let block = world.get_block(&WorldCoords {
-            x: (x as i64),
-            y: (y as i64 - 64),
-            z: (z as i64),
+            x: (x as i64 + 739),
+            y: (y as i64 - 30),
+            z: (z as i64 + 148),
         });
         if let Some(block) = block {
             if block.block_name == air
@@ -77,15 +77,19 @@ pub fn mc() -> (ModelManager, Scene) {
                 return None;
             } else {
                 //println!("not air");
-                let model_id = model_manager.load_resource(&block);
-                Some(model_id)
+                let model = model_manager.load_resource(&block);
+                if let Some(model) = model {
+                    return Some(model);
+                } else {
+                    return None;
+                }
             }
         } else {
             None
         }
     };
-    let tree: Octree<ResourceModel> = Octree::construct_parallel(8, &f);
-
+    let tree: Octree<ResourceModel> = Octree::construct_parallel(11, &f);
+    dbg!(tree.octants.len());
     let scene = model_manager.build(tree);
     //println!("{:?}", tree);
     (model_manager, scene)
@@ -103,7 +107,7 @@ impl Default for Application {
             refresh_time: Instant::now(),
             local_target_spp: 100,
             local_renderer_mode: RendererMode::Preview,
-            local_camera: Camera::default(),
+            local_camera_position: Vec3::ZERO,
             scene: None,
         }
     }
@@ -128,8 +132,6 @@ impl eframe::App for Application {
             self.build_scene();
         }
         let texture: &mut egui::TextureHandle = self.render_texture.get_or_insert_with(|| {
-            self.local_camera = self.renderer.get_camera().clone();
-
             ctx.load_texture(
                 "render_texture",
                 ImageData::Color(Arc::new(ColorImage {
@@ -139,16 +141,17 @@ impl eframe::App for Application {
                 TextureOptions::default(),
             )
         });
-        self.renderer.do_it_syncronously(
-            self.scene.clone().unwrap(),
-            Arc::new(Mutex::new(self.local_camera.clone())),
-        );
+
         let latest_render_resolution = self.renderer.get_resolution();
 
-        if self.renderer.get_mode() == RendererMode::Preview {
+        if self.renderer.get_mode() == RendererMode::Preview
+            && self.renderer.get_renderer_status() == RendererStatus::Running
+        {
             self.renderer.edit_camera(|camera| {
+                camera.eye = self.local_camera_position.into();
                 camera.move_with_wasd(ctx);
                 camera.rotate(ctx);
+                self.local_camera_position = camera.eye.into();
             });
         }
         let latest_spp = self.renderer.get_current_spp();
@@ -258,14 +261,21 @@ impl eframe::App for Application {
                 ui.vertical(|ui| {
                     ui.add(Label::new("Camera Position: "));
                     ui.horizontal(|ui| {
+                        let mut camera_changed = false;
                         ui.add(Label::new("X: "));
-                        ui.add(DragValue::new(&mut self.local_camera.eye.x));
+                        camera_changed |= ui
+                            .add(DragValue::new(&mut self.local_camera_position.x))
+                            .changed();
 
                         ui.add(Label::new("Y: "));
-                        ui.add(DragValue::new(&mut self.local_camera.eye.y));
+                        camera_changed |= ui
+                            .add(DragValue::new(&mut self.local_camera_position.y))
+                            .changed();
 
                         ui.add(Label::new("Z: "));
-                        ui.add(DragValue::new(&mut self.local_camera.eye.z));
+                        camera_changed |= ui
+                            .add(DragValue::new(&mut self.local_camera_position.z))
+                            .changed();
                     })
                 });
 
@@ -273,7 +283,7 @@ impl eframe::App for Application {
             });
             ui.separator();
 
-            ui.image(SizedTexture::from_handle(texture));
+            ui.add(Image::new(SizedTexture::from_handle(texture)).shrink_to_fit())
         });
         ctx.request_repaint();
     }

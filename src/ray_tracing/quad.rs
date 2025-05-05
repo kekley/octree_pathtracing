@@ -129,7 +129,7 @@ impl Quad {
     }
 
     pub fn transform(&mut self, matrix: &Affine3A) {
-        self.origin = matrix.transform_point3a(self.origin);
+        /*         self.origin = matrix.transform_point3a(self.origin);
         self.u = matrix.transform_vector3a(self.u);
         self.v = matrix.transform_vector3a(self.v);
         let n = self.u.cross(self.v);
@@ -137,7 +137,7 @@ impl Quad {
         self.normal = n.normalize();
         self.d = self.normal.dot(self.origin);
 
-        self.w = n / n.dot(n);
+        self.w = n / n.dot(n); */
     }
     /*    pub fn hit(&self, ray: &mut Ray, octree_intersect_result: &OctreeIntersectResult<u32>) -> bool {
         // ISSUE WHERE ray.at(Ray::OFFSET).floor() DOESN'T EQUAL VOXEL POS

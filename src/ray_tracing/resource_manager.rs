@@ -1,7 +1,7 @@
 use std::{array, env::var, num::NonZeroU32, sync::Arc};
 
 use aovec::Aovec;
-use dashmap::{DashMap, RwLock};
+use dashmap::{mapref::one::Ref, DashMap, RwLock};
 use fxhash::FxBuildHasher;
 use glam::{Vec3, Vec3A, Vec4, Vec4Swizzles};
 use hashbrown::{HashMap, HashSet};
@@ -12,11 +12,13 @@ use spider_eye::{
     block_face::FaceName,
     block_models::{BlockRotation, InternedBlockModel},
     block_states::InternedBlockState,
-    block_texture::InternedTextureVariable,
+    block_texture::{InternedTextureVariable, TexPath},
+    loaded_world::InternedBlockName,
     resource::BlockStates,
     variant::ModelVariant,
     MCResourceLoader,
 };
+use wgpu::hal::auxil::db;
 
 use crate::{
     ray_tracing::{
@@ -36,22 +38,21 @@ use super::{
 pub type TextureID = u32;
 pub type QuadID = u32;
 pub type MaterialID = u32;
+
 pub struct ModelManager {
     pub resource_loader: MCResourceLoader,
     pub(crate) materials: Arc<RwLock<Vec<Material>>>,
     pub(crate) quads: Arc<RwLock<Vec<Quad>>>,
-    pub(crate) textures: Arc<RwLock<Vec<Texture>>>,
-    seen_materials: DashMap<SmolStr, MaterialID, FxBuildHasher>,
-    seen_blocks: DashMap<InternedBlock, ResourceModel, FxBuildHasher>,
+    seen_materials: DashMap<TexPath, MaterialID, FxBuildHasher>,
+    seen_blocks: DashMap<InternedBlock, Option<ResourceModel>, FxBuildHasher>,
 }
 
 impl Default for ModelManager {
     fn default() -> Self {
         Self {
-            resource_loader: Default::default(),
+            resource_loader: MCResourceLoader::new(),
             materials: Default::default(),
             quads: Default::default(),
-            textures: Default::default(),
             seen_materials: Default::default(),
             seen_blocks: Default::default(),
         }
@@ -59,16 +60,23 @@ impl Default for ModelManager {
 }
 
 impl ModelManager {
-    pub fn load_resource(&self, block: &InternedBlock) -> ResourceModel {
-        if !self.seen_blocks.contains_key(block) {
-            println!("len: {}", self.seen_blocks.len());
-            let model_variant = self.resource_loader.load_models(block);
-            let resource = self.build_variant(model_variant);
-            self.seen_blocks.insert(block.clone(), resource);
-            resource
+    pub fn load_resource(&self, block: &InternedBlock) -> Option<ResourceModel> {
+        if let Some(model) = self.seen_blocks.get(block) {
+            return model.clone();
         } else {
-            let id = self.seen_blocks.get(block);
-            return id.unwrap().clone();
+            let block_states = self
+                .resource_loader
+                .load_block_states_interned(block.block_name);
+            if let Some(states) = block_states {
+                let model_variants = self.resource_loader.load_variants_for(block, states);
+                let resource = self.build_variant(model_variants);
+                if let Some(resource) = resource {
+                    self.seen_blocks.insert(block.clone(), Some(resource));
+                    return Some(resource);
+                }
+            }
+            self.seen_blocks.insert(block.clone(), None);
+            return None;
         }
     }
     pub fn new() -> Self {
@@ -81,8 +89,10 @@ impl ModelManager {
         tmp
     }
 
-    pub fn build_variant(&self, variants: Vec<ModelVariant>) -> ResourceModel {
-        assert!(variants.len() > 0);
+    pub fn build_variant(&self, variants: Vec<ModelVariant>) -> Option<ResourceModel> {
+        if variants.len() == 0 {
+            return None;
+        }
         if variants.len() == 1 {
             match &variants[0] {
                 ModelVariant::SingleModel(variant_entry) => {
@@ -103,7 +113,7 @@ impl ModelManager {
                             variant_entry.rotation_y,
                         )
                     };
-                    return resource;
+                    resource
                 }
                 ModelVariant::ModelArray(items) => {
                     let variant = &items[0];
@@ -123,7 +133,7 @@ impl ModelManager {
                             variant.rotation_y,
                         )
                     };
-                    return resource;
+                    resource
                 }
             }
         } else {
@@ -153,11 +163,15 @@ impl ModelManager {
             let mut quads_lock = self.quads.write();
             let starting_quad_id = quads_lock.len() as QuadID;
             let len = quads.len() as u32;
+            if len == 0 {
+                return None;
+            }
             quads.into_iter().for_each(|quad| {
                 quads_lock.push(quad);
             });
+
             let resource = ResourceModel::Quad(QuadModel::new(starting_quad_id, len));
-            return resource;
+            return Some(resource);
         }
     }
 
@@ -175,15 +189,12 @@ impl ModelManager {
                     //dbg!(self.resource_loader.resolve_spur(var));
                     current_texture_var = &textures.iter().find(|tex_2| tex_2.0 == *var).unwrap().1;
                 }
-                let material = if self.seen_materials.contains_key(
-                    self.resource_loader
-                        .resolve_spur(&current_texture_var.get_inner()),
-                ) {
+                let material = if self
+                    .seen_materials
+                    .contains_key(&current_texture_var.get_inner())
+                {
                     self.seen_materials
-                        .get(
-                            self.resource_loader
-                                .resolve_spur(&current_texture_var.get_inner()),
-                        )
+                        .get(&current_texture_var.get_inner())
                         .unwrap()
                         .clone()
                 } else {
@@ -194,13 +205,9 @@ impl ModelManager {
                             .resolve_spur(&current_texture_var.get_inner()),
                     );
                     //dbg!(&tex_path);
-                    let texture_image = RTWImage::load(&tex_path).unwrap();
+                    let texture_image = Arc::new(RTWImage::load(&tex_path).unwrap());
                     let texture = Texture::Image(texture_image);
-                    let mut textures_lock = self.textures.write();
-                    let texture_id = textures_lock.len() as TextureID;
-                    textures_lock.push(texture);
-                    drop(textures_lock);
-                    let material = Material::new().albedo(texture_id).build();
+                    let material = Material::new().albedo(texture).build();
                     let mut materials_lock = self.materials.write();
                     let material_id = materials_lock.len() as MaterialID;
                     materials_lock.push(material);
@@ -265,7 +272,7 @@ impl ModelManager {
         model_type: ModelType,
         rotation_x: Option<BlockRotation>,
         rotation_y: Option<BlockRotation>,
-    ) -> ResourceModel {
+    ) -> Option<ResourceModel> {
         let model = match model_type {
             ModelType::SingleAABB => {
                 let materials = self.get_materials(block_model);
@@ -301,16 +308,20 @@ impl ModelManager {
                 let mut quads = self.make_quads(block_model, rotation_x, rotation_y);
 
                 let quad_len = quads.len() as u32;
+                if quad_len == 0 {
+                    return None;
+                }
                 let mut quads_lock = self.quads.write();
                 let first_quad_id = quads_lock.len() as QuadID;
                 quads.into_iter().for_each(|quad| {
                     quads_lock.push(quad);
                 });
+
                 let model = QuadModel::new(first_quad_id, quad_len);
                 ResourceModel::Quad(model)
             }
         };
-        model
+        Some(model)
     }
 }
 
@@ -381,9 +392,13 @@ pub enum ResourceModel {
     SingleBlock(SingleBlockModel),
     Quad(QuadModel),
 }
-impl Default for ResourceModel {
-    fn default() -> Self {
-        todo!()
+
+impl ResourceModel {
+    pub fn get_first_index(&self) -> u32 {
+        match self {
+            ResourceModel::SingleBlock(single_block_model) => single_block_model.first_quad_index,
+            ResourceModel::Quad(quad_model) => quad_model.starting_quad_id,
+        }
     }
 }
 pub enum ModelType {

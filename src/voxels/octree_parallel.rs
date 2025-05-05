@@ -13,7 +13,7 @@ impl Octree<ResourceModel> {
     ) -> Self {
         let size = 2f32.powi((depth - 1) as i32) as u32;
         let a = (0u8..8)
-            .into_iter()
+            .into_par_iter()
             .map(|i: u8| {
                 let child_pos = P::construct(
                     0 + size * ((i as u32) & 1),

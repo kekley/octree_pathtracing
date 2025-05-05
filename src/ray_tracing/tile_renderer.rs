@@ -130,7 +130,7 @@ enum RendererMessage {
     ChangeSpp(u32),
     Reset,
 }
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(usize)]
 pub enum RendererStatus {
     Running = 0,
@@ -253,7 +253,7 @@ impl TileRenderer {
         }
     }
 
-    pub fn edit_camera<F: Fn(&mut Camera)>(&mut self, f: F) {
+    pub fn edit_camera<F: FnMut(&mut Camera)>(&mut self, mut f: F) {
         self.reset_render();
         let mut write_lock = self.camera.lock().unwrap();
         f(&mut write_lock);
@@ -289,7 +289,17 @@ impl TileRenderer {
         self.stop();
         self.resolution = resolution;
     }
-
+    pub fn get_current_branch_count(current_spp: u32, scene_branch_count: u32) -> u32 {
+        if current_spp < scene_branch_count {
+            if current_spp <= (scene_branch_count as f32).sqrt() as u32 {
+                return 1;
+            } else {
+                return scene_branch_count - current_spp;
+            }
+        } else {
+            return scene_branch_count;
+        }
+    }
     pub fn get_branch_count(&mut self) -> u32 {
         self.branch_count
     }
@@ -505,7 +515,7 @@ impl TileRenderer {
         });
         'outer: loop {
             let current_spp = spp_arc.load(std::sync::atomic::Ordering::SeqCst);
-
+            let branch_count = TileRenderer::get_current_branch_count(current_spp, branch_count);
             loop {
                 let status =
                     RendererStatus::from_usize(status_arc.load(sync::atomic::Ordering::SeqCst));
@@ -571,7 +581,9 @@ impl TileRenderer {
                         branch_count,
                     );
                 });
-                spp_arc.fetch_add(branch_count, std::sync::atomic::Ordering::SeqCst);
+
+                let a = spp_arc.fetch_add(branch_count, std::sync::atomic::Ordering::SeqCst);
+                dbg!(a + branch_count);
             }
         }
         status_arc.store(
@@ -716,11 +728,11 @@ impl TileRenderer {
             let scene = scene_arc.read().unwrap();
             let camera = camera_arc.lock().unwrap().clone();
             let start = Instant::now();
-            tiles.iter_mut().for_each(|tile| {
+            tiles.par_iter_mut().for_each(|tile| {
                 TileRenderer::render_tile_replace(tile, &camera, &scene);
             });
             let end = Instant::now();
-            dbg!(end.duration_since(start));
+            println!("frame time: {:?}", end.duration_since(start));
         }
         status_arc.store(
             RendererStatus::Stopped as usize,

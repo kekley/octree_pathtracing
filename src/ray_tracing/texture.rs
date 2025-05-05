@@ -13,7 +13,7 @@ use super::tile_renderer::U8Color;
 #[derive(Debug, Clone)]
 pub enum Texture {
     Color(U8Color),
-    Image(RTWImage),
+    Image(Arc<RTWImage>),
 }
 lazy_static! {
     pub static ref LUT_TABLE_FLOAT: [f32; 256] = Texture::linear_lut();

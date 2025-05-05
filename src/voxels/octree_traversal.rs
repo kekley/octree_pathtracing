@@ -70,14 +70,14 @@ impl Octree<ResourceModel> {
         ray: &mut Ray,
         max_dst: f32,
         materials: &[Material],
-        textures: &[Texture],
         quads: &[Quad],
     ) -> bool {
-        let tree_root = if self.root.is_some() {
-            self.root.unwrap()
-        } else {
-            println!("no root");
-            return false;
+        let tree_root = match self.root {
+            Some(root) => root,
+            None => {
+                println!("no root");
+                return false;
+            }
         };
         let octree_scale = self.octree_scale;
         let mut stack: [(OctantId, f32); OCTREE_MAX_SCALE as usize + 1] =
@@ -92,42 +92,32 @@ impl Octree<ResourceModel> {
 
         let mut parent_octant_idx = tree_root;
 
-        let mut scale: i32 = (OCTREE_MAX_SCALE - 1) as i32;
+        let mut scale: u32 = (OCTREE_MAX_SCALE - 1) as u32;
         let mut scale_exp2: f32 = 0.5f32; //exp2(scale-MAX_SCALE)
 
         let sign_mask: u32 = 1 << 31;
         let epsilon_bits_without_sign: u32 = OCTREE_EPSILON.to_bits() & !sign_mask;
+        let rd_abs = rd.abs();
+        let b_vec = rd_abs.cmplt(Vec3A::splat(OCTREE_EPSILON));
 
-        if rd.x.abs() < OCTREE_EPSILON {
-            rd.x = f32::from_bits(epsilon_bits_without_sign | rd.x.to_bits() & sign_mask);
-        }
-        if rd.y.abs() < OCTREE_EPSILON {
-            rd.y = f32::from_bits(epsilon_bits_without_sign | rd.y.to_bits() & sign_mask);
-        }
-        if rd.z.abs() < OCTREE_EPSILON {
-            rd.z = f32::from_bits(epsilon_bits_without_sign | rd.z.to_bits() & sign_mask);
-        }
+        (0..3).for_each(|i| {
+            if b_vec.test(i) {
+                rd[i] = f32::from_bits(epsilon_bits_without_sign | rd[i].to_bits() & sign_mask)
+            }
+        });
 
-        let t_coef = 1.0 / -rd.abs();
+        let t_coef = 1.0 / -rd_abs;
+
         let mut t_bias = t_coef * ro;
 
-        let mut mirror_mask: u32 = 0;
+        let b_vec = rd.cmpgt(Vec3A::ZERO);
+        let mirror_mask = b_vec.bitmask();
 
-        if rd.x > 0.0 {
-            mirror_mask ^= 1;
-            t_bias.x = 3.0 * t_coef.x - t_bias.x;
-        }
-
-        if rd.y > 0.0 {
-            mirror_mask ^= 2;
-            t_bias.y = 3.0 * t_coef.y - t_bias.y;
-        }
-
-        if rd.z > 0.0 {
-            mirror_mask ^= 4;
-            t_bias.z = 3.0 * t_coef.z - t_bias.z;
-        }
-
+        (0..3).for_each(|i| {
+            if b_vec.test(i) {
+                t_bias[i] = 3.0 * t_coef[i] - t_bias[i];
+            }
+        });
         let mut t_min = (2.0 * t_coef - t_bias).max_element().max(0.0);
 
         let mut t_max = (t_coef - t_bias).min_element();
@@ -137,19 +127,15 @@ impl Octree<ResourceModel> {
         let mut idx: u32 = 0;
 
         let mut pos: Vec3A = Vec3A::splat(1.0);
-
-        if t_min < 1.5 * t_coef.x - t_bias.x {
-            idx ^= 1;
-            pos.x = 1.5
-        }
-        if t_min < 1.5 * t_coef.y - t_bias.y {
-            idx ^= 2;
-            pos.y = 1.5
-        }
-        if t_min < 1.5 * t_coef.z - t_bias.z {
-            idx ^= 4;
-            pos.z = 1.5
-        }
+        let value = 1.5 * t_coef - t_bias;
+        let b_vec = value.cmpgt(Vec3A::splat(t_min));
+        let bitmask = b_vec.bitmask();
+        idx ^= bitmask;
+        (0..3).for_each(|i: usize| {
+            if b_vec.test(i) {
+                pos[i] = 1.5;
+            }
+        });
 
         for _ in 0..OCTREE_MAX_STEPS {
             if max_dst >= 0.0 && t_min > max_dst {
@@ -169,60 +155,55 @@ impl Octree<ResourceModel> {
                 if child.is_leaf() && t_min >= 0.0 {
                     //println!("hit");
                     //println!("pos: {:?},t_min:{}, current_parent: {}, unmirrored_idx: {}, scale: {}, is_child:{}, is_leaf: {}",ray.origin+ray.direction*(t_min/octree_scale),t_min/octree_scale,parent_octant_idx,unmirrored_idx,scale,is_child,is_leaf);
-                    let leaf_value = self.octants[parent_octant_idx as usize].children
-                        [unmirrored_idx as usize]
-                        .get_leaf_value()
-                        .unwrap();
+                    let leaf_value = child.get_leaf_value().unwrap();
                     let model = *leaf_value;
 
                     let mut unmirrored_pos = pos;
+                    (0..3).for_each(|i: usize| {
+                        if mirror_mask & 1 << i != 0 {
+                            unmirrored_pos[i] = 3.0 - scale_exp2 - unmirrored_pos[i]
+                        }
+                    });
 
-                    if (mirror_mask & 1) != 0 {
-                        unmirrored_pos.x = 3.0 - scale_exp2 - unmirrored_pos.x;
+                    let t_corner = (pos + scale_exp2) * t_coef - t_bias;
+                    let tc_min = t_corner.max_element();
+
+                    let face_id;
+                    let mut uv;
+                    let b_vec = t_corner.cmpeq(Vec3A::splat(tc_min));
+                    let b_vec_rd = rd.cmplt(Vec3A::ZERO);
+                    if b_vec.test(0) {
+                        face_id = 1 << 0 | (rd[0].to_bits() >> 31) & 1;
+                        uv = Vec2::new(
+                            (ro[2] + rd[2] * t_corner[0]) - unmirrored_pos[2],
+                            (ro[1] + rd[1] * t_corner[0]) - unmirrored_pos[1],
+                        ) / scale_exp2;
+                        if b_vec_rd.test(0) {
+                            uv[0] = 1.0 - uv[0];
+                        }
+                    } else if b_vec.test(1) {
+                        face_id = 1 << 1 | ((rd[1].to_bits() >> 31) & 1);
+                        uv = Vec2::new(
+                            (ro[0] + rd[0] * t_corner[1]) - unmirrored_pos[0],
+                            (ro[2] + rd[2] * t_corner[1]) - unmirrored_pos[2],
+                        ) / scale_exp2;
+                        if b_vec_rd.test(1) {
+                            uv[1] = 1.0 - uv[1];
+                        }
+                    } else {
+                        face_id = 1 << 2 | ((rd[2].to_bits() >> 31) & 1);
+                        uv = Vec2::new(
+                            (ro[0] + rd[0] * t_corner[2]) - unmirrored_pos[0],
+                            (ro[1] + rd[1] * t_corner[2]) - unmirrored_pos[1],
+                        ) / scale_exp2;
+                        if b_vec_rd.test(2) {
+                            uv[0] = 1.0 - uv[0];
+                        }
                     }
-                    if (mirror_mask & 2) != 0 {
-                        unmirrored_pos.y = 3.0 - scale_exp2 - unmirrored_pos.y;
-                    }
-                    if (mirror_mask & 4) != 0 {
-                        unmirrored_pos.z = 3.0 - scale_exp2 - unmirrored_pos.z;
-                    }
+
                     match model {
                         ResourceModel::SingleBlock(single_block_model) => {
                             if !(t_min == 0.0) {
-                                let t_corner = (pos + scale_exp2) * t_coef - t_bias;
-                                let tc_min = t_corner.max_element();
-
-                                let face_id;
-                                let mut uv;
-                                if tc_min == t_corner.x {
-                                    face_id = (rd.x.to_bits() >> 31) & 1;
-                                    uv = Vec2::new(
-                                        (ro.z + rd.z * t_corner.x) - unmirrored_pos.z,
-                                        (ro.y + rd.y * t_corner.x) - unmirrored_pos.y,
-                                    ) / scale_exp2;
-                                    if rd.x > 0.0 {
-                                        uv.x = 1.0 - uv.x;
-                                    }
-                                } else if tc_min == t_corner.y {
-                                    face_id = 2 | ((rd.y.to_bits() >> 31) & 1);
-                                    uv = Vec2::new(
-                                        (ro.x + rd.x * t_corner.y) - unmirrored_pos.x,
-                                        (ro.z + rd.z * t_corner.y) - unmirrored_pos.z,
-                                    ) / scale_exp2;
-                                    if rd.y > 0.0 {
-                                        uv.y = 1.0 - uv.y;
-                                    }
-                                } else {
-                                    face_id = 4 | ((rd.z.to_bits() >> 31) & 1);
-                                    uv = Vec2::new(
-                                        (ro.x + rd.x * t_corner.z) - unmirrored_pos.x,
-                                        (ro.y + rd.y * t_corner.z) - unmirrored_pos.y,
-                                    ) / scale_exp2;
-                                    if rd.z < 0.0 {
-                                        uv.x = 1.0 - uv.x;
-                                    }
-                                }
-
                                 if single_block_model.intersect(
                                     ray,
                                     t_min / octree_scale,
@@ -230,7 +211,6 @@ impl Octree<ResourceModel> {
                                     &uv,
                                     quads,
                                     materials,
-                                    textures,
                                 ) {
                                     return true;
                                 }
@@ -239,14 +219,7 @@ impl Octree<ResourceModel> {
                         ResourceModel::Quad(quad_model) => {
                             unmirrored_pos -= 1.0;
                             unmirrored_pos /= octree_scale;
-                            if quad_model.intersect(
-                                ray,
-                                &unmirrored_pos,
-                                t_min,
-                                quads,
-                                materials,
-                                textures,
-                            ) {
+                            if quad_model.intersect(ray, &unmirrored_pos, t_min, quads, materials) {
                                 return true;
                             } else {
                             }
@@ -270,20 +243,13 @@ impl Octree<ResourceModel> {
                         scale_exp2 = half_scale;
 
                         idx = 0;
-
-                        if t_min < t_center.x {
-                            idx ^= 1;
-                            pos.x += scale_exp2;
-                        }
-                        if t_min < t_center.y {
-                            idx ^= 2;
-                            pos.y += scale_exp2;
-                        }
-                        if t_min < t_center.z {
-                            idx ^= 4;
-                            pos.z += scale_exp2;
-                        }
-
+                        let b_vec = t_center.cmpgt(Vec3A::splat(t_min));
+                        idx ^= b_vec.bitmask();
+                        (0..3).for_each(|i: usize| {
+                            if b_vec.test(i) {
+                                pos[i] += scale_exp2;
+                            }
+                        });
                         t_max = tv_max;
                         continue;
                     }
@@ -294,18 +260,13 @@ impl Octree<ResourceModel> {
 
             let mut step_mask = 0;
 
-            if tc_max >= t_corner.x {
-                step_mask ^= 1;
-                pos.x -= scale_exp2;
-            }
-            if tc_max >= t_corner.y {
-                step_mask ^= 2;
-                pos.y -= scale_exp2;
-            }
-            if tc_max >= t_corner.z {
-                step_mask ^= 4;
-                pos.z -= scale_exp2;
-            }
+            let b_vec = t_corner.cmple(Vec3A::splat(tc_max));
+            step_mask ^= b_vec.bitmask();
+            (0..3).for_each(|i: usize| {
+                if b_vec.test(i) {
+                    pos[i] -= scale_exp2;
+                }
+            });
 
             t_min = tc_max;
             idx ^= step_mask;
@@ -326,10 +287,10 @@ impl Octree<ResourceModel> {
                     differing_bits |= pos.z.to_bits() ^ (pos.z + scale_exp2).to_bits();
                 }
 
-                scale = util::find_msb(differing_bits as i32);
-                scale_exp2 = f32::exp2((scale - OCTREE_MAX_SCALE as i32) as f32);
+                scale = util::find_msb_u32(differing_bits);
+                scale_exp2 = f32::exp2((scale as i32 - OCTREE_MAX_SCALE as i32) as f32);
 
-                if scale >= OCTREE_MAX_SCALE as i32 {
+                if scale >= OCTREE_MAX_SCALE as u32 {
                     return false;
                 }
                 (parent_octant_idx, t_max) = *stack.get(scale as usize).expect("had invalid scale");
@@ -359,14 +320,14 @@ impl Octree<ResourceModel> {
         ray: &mut Ray,
         max_dst: f32,
         materials: &[Material],
-        textures: &[Texture],
         quads: &[Quad],
     ) -> bool {
-        let tree_root = if self.root.is_some() {
-            self.root.unwrap()
-        } else {
-            println!("no root");
-            return false;
+        let tree_root = match self.root {
+            Some(root) => root,
+            None => {
+                println!("no root");
+                return false;
+            }
         };
         let octree_scale = self.octree_scale;
 
@@ -382,41 +343,31 @@ impl Octree<ResourceModel> {
 
         let mut parent_octant_idx = tree_root;
 
-        let mut scale: i32 = (OCTREE_MAX_SCALE - 1) as i32;
+        let mut scale: u32 = (OCTREE_MAX_SCALE - 1) as u32;
         let mut scale_exp2: f32 = 0.5f32; //exp2(scale-MAX_SCALE)
 
         let sign_mask: u32 = 1 << 31;
         let epsilon_bits_without_sign: u32 = OCTREE_EPSILON.to_bits() & !sign_mask;
+        let rd_abs = rd.abs();
+        let b_vec = rd_abs.cmplt(Vec3A::splat(OCTREE_EPSILON));
 
-        if rd.x.abs() < OCTREE_EPSILON {
-            rd.x = f32::from_bits(epsilon_bits_without_sign | rd.x.to_bits() & sign_mask);
-        }
-        if rd.y.abs() < OCTREE_EPSILON {
-            rd.y = f32::from_bits(epsilon_bits_without_sign | rd.y.to_bits() & sign_mask);
-        }
-        if rd.z.abs() < OCTREE_EPSILON {
-            rd.z = f32::from_bits(epsilon_bits_without_sign | rd.z.to_bits() & sign_mask);
-        }
+        (0..3).for_each(|i| {
+            if b_vec.test(i) {
+                rd[i] = f32::from_bits(epsilon_bits_without_sign | rd[i].to_bits() & sign_mask)
+            }
+        });
 
-        let t_coef = 1.0 / -rd.abs();
+        let t_coef = 1.0 / -rd_abs;
         let mut t_bias = t_coef * ro;
 
-        let mut mirror_mask: u32 = 0;
+        let b_vec = rd.cmpgt(Vec3A::ZERO);
+        let mirror_mask = b_vec.bitmask();
 
-        if rd.x > 0.0 {
-            mirror_mask ^= 1;
-            t_bias.x = 3.0 * t_coef.x - t_bias.x;
-        }
-
-        if rd.y > 0.0 {
-            mirror_mask ^= 2;
-            t_bias.y = 3.0 * t_coef.y - t_bias.y;
-        }
-
-        if rd.z > 0.0 {
-            mirror_mask ^= 4;
-            t_bias.z = 3.0 * t_coef.z - t_bias.z;
-        }
+        (0..3).for_each(|i| {
+            if b_vec.test(i) {
+                t_bias[i] = 3.0 * t_coef[i] - t_bias[i];
+            }
+        });
 
         let mut t_min = (2.0 * t_coef - t_bias).max_element().max(0.0);
 
@@ -427,19 +378,15 @@ impl Octree<ResourceModel> {
         let mut idx: u32 = 0;
 
         let mut pos: Vec3A = Vec3A::splat(1.0);
-
-        if t_min < 1.5 * t_coef.x - t_bias.x {
-            idx ^= 1;
-            pos.x = 1.5
-        }
-        if t_min < 1.5 * t_coef.y - t_bias.y {
-            idx ^= 2;
-            pos.y = 1.5
-        }
-        if t_min < 1.5 * t_coef.z - t_bias.z {
-            idx ^= 4;
-            pos.z = 1.5
-        }
+        let value = 1.5 * t_coef - t_bias;
+        let b_vec = value.cmpgt(Vec3A::splat(t_min));
+        let bitmask = b_vec.bitmask();
+        idx ^= bitmask;
+        (0..3).for_each(|i: usize| {
+            if b_vec.test(i) {
+                pos[i] = 1.5;
+            }
+        });
 
         for _ in 0..OCTREE_MAX_STEPS {
             if max_dst >= 0.0 && t_min > max_dst {
@@ -459,123 +406,56 @@ impl Octree<ResourceModel> {
                 if child.is_leaf() && t_min > 0.0 {
                     //println!("hit");
                     //println!("pos: {:?},t_min:{}, current_parent: {}, unmirrored_idx: {}, scale: {}, is_child:{}, is_leaf: {}",ray.origin+ray.direction*(t_min/octree_scale),t_min/octree_scale,parent_octant_idx,unmirrored_idx,scale,is_child,is_leaf);
-                    let leaf_value = self.octants[parent_octant_idx as usize].children
-                        [unmirrored_idx as usize]
-                        .get_leaf_value()
-                        .unwrap();
+                    let leaf_value = child.get_leaf_value().unwrap();
                     let model = *leaf_value;
 
                     let mut unmirrored_pos = pos;
-
-                    if (mirror_mask & 1) != 0 {
-                        unmirrored_pos.x = 3.0 - scale_exp2 - unmirrored_pos.x;
-                    }
-                    if (mirror_mask & 2) != 0 {
-                        unmirrored_pos.y = 3.0 - scale_exp2 - unmirrored_pos.y;
-                    }
-                    if (mirror_mask & 4) != 0 {
-                        unmirrored_pos.z = 3.0 - scale_exp2 - unmirrored_pos.z;
-                    }
-                    match model {
-                        ResourceModel::SingleBlock(single_block_model) => {
-                            if !(t_min == 0.0) {
-                                let t_corner = (pos + scale_exp2) * t_coef - t_bias;
-                                let tc_min = t_corner.max_element();
-
-                                let face_id;
-                                let mut uv;
-                                if tc_min == t_corner.x {
-                                    face_id = (rd.x.to_bits() >> 31) & 1;
-                                    uv = Vec2::new(
-                                        (ro.z + rd.z * t_corner.x) - unmirrored_pos.z,
-                                        (ro.y + rd.y * t_corner.x) - unmirrored_pos.y,
-                                    ) / scale_exp2;
-                                    if rd.x > 0.0 {
-                                        uv.x = 1.0 - uv.x;
-                                    }
-                                } else if tc_min == t_corner.y {
-                                    face_id = 2 | ((rd.y.to_bits() >> 31) & 1);
-                                    uv = Vec2::new(
-                                        (ro.x + rd.x * t_corner.y) - unmirrored_pos.x,
-                                        (ro.z + rd.z * t_corner.y) - unmirrored_pos.z,
-                                    ) / scale_exp2;
-                                    if rd.y > 0.0 {
-                                        uv.y = 1.0 - uv.y;
-                                    }
-                                } else {
-                                    face_id = 4 | ((rd.z.to_bits() >> 31) & 1);
-                                    uv = Vec2::new(
-                                        (ro.x + rd.x * t_corner.z) - unmirrored_pos.x,
-                                        (ro.y + rd.y * t_corner.z) - unmirrored_pos.y,
-                                    ) / scale_exp2;
-                                    if rd.z < 0.0 {
-                                        uv.x = 1.0 - uv.x;
-                                    }
-                                }
-                                if single_block_model.intersect_preview(
-                                    ray,
-                                    t_min / octree_scale,
-                                    face_id.try_into().unwrap(),
-                                    &uv,
-                                    quads,
-                                    materials,
-                                    textures,
-                                ) {
-                                    return true;
-                                } else {
-                                    return false;
-                                }
-                            }
+                    (0..3).for_each(|i: usize| {
+                        if mirror_mask & 1 << i != 0 {
+                            unmirrored_pos[i] = 3.0 - scale_exp2 - unmirrored_pos[i]
                         }
-                        ResourceModel::Quad(quad_model) => {
-                            let t_corner = (pos + scale_exp2) * t_coef - t_bias;
-                            let tc_min = t_corner.max_element();
+                    });
+                    let t_corner = (pos + scale_exp2) * t_coef - t_bias;
+                    let tc_min = t_corner.max_element();
 
-                            let face_id;
-                            let mut uv;
-                            if tc_min == t_corner.x {
-                                face_id = (rd.x.to_bits() >> 31) & 1;
-                                uv = Vec2::new(
-                                    (ro.z + rd.z * t_corner.x) - unmirrored_pos.z,
-                                    (ro.y + rd.y * t_corner.x) - unmirrored_pos.y,
-                                ) / scale_exp2;
-                                if rd.x > 0.0 {
-                                    uv.x = 1.0 - uv.x;
-                                }
-                            } else if tc_min == t_corner.y {
-                                face_id = 2 | ((rd.y.to_bits() >> 31) & 1);
-                                uv = Vec2::new(
-                                    (ro.x + rd.x * t_corner.y) - unmirrored_pos.x,
-                                    (ro.z + rd.z * t_corner.y) - unmirrored_pos.z,
-                                ) / scale_exp2;
-                                if rd.y > 0.0 {
-                                    uv.y = 1.0 - uv.y;
-                                }
-                            } else {
-                                face_id = 4 | ((rd.z.to_bits() >> 31) & 1);
-                                uv = Vec2::new(
-                                    (ro.x + rd.x * t_corner.z) - unmirrored_pos.x,
-                                    (ro.y + rd.y * t_corner.z) - unmirrored_pos.y,
-                                ) / scale_exp2;
-                                if rd.z < 0.0 {
-                                    uv.x = 1.0 - uv.x;
-                                }
-                            }
-                            ray.hit.u = uv.x;
-                            ray.hit.v = uv.y;
-                            let texture = &textures[materials
-                                [quads[quad_model.starting_quad_id as usize].material_id as usize]
-                                .texture
-                                as usize];
-                            ray.hit.current_material =
-                                quads[quad_model.starting_quad_id as usize].material_id;
-                            if Cuboid::intersect_texture_not_transparent(ray, texture) {
-                                return true;
-                            } else {
-                                return false;
-                            }
+                    let face_id;
+                    let mut uv;
+                    let b_vec = t_corner.cmpeq(Vec3A::splat(tc_min));
+                    let b_vec_rd = rd.cmplt(Vec3A::ZERO);
+                    if b_vec.test(0) {
+                        face_id = 1 << 0 | (rd[0].to_bits() >> 31) & 1;
+                        uv = Vec2::new(
+                            (ro[2] + rd[2] * t_corner[0]) - unmirrored_pos[2],
+                            (ro[1] + rd[1] * t_corner[0]) - unmirrored_pos[1],
+                        ) / scale_exp2;
+                        if b_vec_rd.test(0) {
+                            uv[0] = 1.0 - uv[0];
+                        }
+                    } else if b_vec.test(1) {
+                        face_id = 1 << 1 | ((rd[1].to_bits() >> 31) & 1);
+                        uv = Vec2::new(
+                            (ro[0] + rd[0] * t_corner[1]) - unmirrored_pos[0],
+                            (ro[2] + rd[2] * t_corner[1]) - unmirrored_pos[2],
+                        ) / scale_exp2;
+                        if b_vec_rd.test(1) {
+                            uv[1] = 1.0 - uv[1];
+                        }
+                    } else {
+                        face_id = 1 << 2 | ((rd[2].to_bits() >> 31) & 1);
+                        uv = Vec2::new(
+                            (ro[0] + rd[0] * t_corner[2]) - unmirrored_pos[0],
+                            (ro[1] + rd[1] * t_corner[2]) - unmirrored_pos[1],
+                        ) / scale_exp2;
+                        if b_vec_rd.test(2) {
+                            uv[0] = 1.0 - uv[0];
                         }
                     }
+                    ray.hit.u = uv.x;
+                    ray.hit.v = uv.y;
+                    let index = model.get_first_index();
+                    let texture = &materials[quads[index as usize].material_id as usize].texture;
+                    ray.hit.current_material = quads[index as usize].material_id;
+                    return Cuboid::intersect_texture_not_transparent(ray, texture);
                 } else {
                     let half_scale = scale_exp2 * 0.5;
 
@@ -594,19 +474,13 @@ impl Octree<ResourceModel> {
                         scale_exp2 = half_scale;
 
                         idx = 0;
-
-                        if t_min < t_center.x {
-                            idx ^= 1;
-                            pos.x += scale_exp2;
-                        }
-                        if t_min < t_center.y {
-                            idx ^= 2;
-                            pos.y += scale_exp2;
-                        }
-                        if t_min < t_center.z {
-                            idx ^= 4;
-                            pos.z += scale_exp2;
-                        }
+                        let b_vec = t_center.cmpgt(Vec3A::splat(t_min));
+                        idx ^= b_vec.bitmask();
+                        (0..3).for_each(|i: usize| {
+                            if b_vec.test(i) {
+                                pos[i] += scale_exp2;
+                            }
+                        });
 
                         t_max = tv_max;
                         continue;
@@ -618,18 +492,13 @@ impl Octree<ResourceModel> {
 
             let mut step_mask = 0;
 
-            if tc_max >= t_corner.x {
-                step_mask ^= 1;
-                pos.x -= scale_exp2;
-            }
-            if tc_max >= t_corner.y {
-                step_mask ^= 2;
-                pos.y -= scale_exp2;
-            }
-            if tc_max >= t_corner.z {
-                step_mask ^= 4;
-                pos.z -= scale_exp2;
-            }
+            let b_vec = t_corner.cmple(Vec3A::splat(tc_max));
+            step_mask ^= b_vec.bitmask();
+            (0..3).for_each(|i: usize| {
+                if b_vec.test(i) {
+                    pos[i] -= scale_exp2;
+                }
+            });
 
             t_min = tc_max;
             idx ^= step_mask;
@@ -650,10 +519,10 @@ impl Octree<ResourceModel> {
                     differing_bits |= pos.z.to_bits() ^ (pos.z + scale_exp2).to_bits();
                 }
 
-                scale = util::find_msb(differing_bits as i32);
-                scale_exp2 = f32::exp2((scale - OCTREE_MAX_SCALE as i32) as f32);
+                scale = util::find_msb_u32(differing_bits);
+                scale_exp2 = f32::exp2((scale as i32 - OCTREE_MAX_SCALE as i32) as f32);
 
-                if scale >= OCTREE_MAX_SCALE as i32 {
+                if scale >= OCTREE_MAX_SCALE as u32 {
                     return false;
                 }
                 (parent_octant_idx, t_max) = *stack.get(scale as usize).expect("had invalid scale");

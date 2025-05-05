@@ -95,6 +95,7 @@ impl Cuboid {
         }
     }
 
+    #[inline]
     pub fn intersect_texture_not_transparent(ray: &mut Ray, texture: &Texture) -> bool {
         //dbg!(material);
         let color = texture.value(ray.hit.u.abs(), ray.hit.v.abs(), &ray.at(ray.hit.t));

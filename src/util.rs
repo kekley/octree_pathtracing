@@ -118,6 +118,19 @@ pub fn find_msb(mut x: i32) -> i32 {
     }
     res
 }
+pub fn find_msb_u32(x: u32) -> u32 {
+    // Decide what to do when x is zero.
+    // One common strategy is to define the msb of 0 as 0.
+    if x == 0 {
+        return -1i32 as u32;
+    }
+    // The bit-length of a u32 is 32 bits.
+    // The built-in function `leading_zeros()` returns the number of zeros from the most significant bit down to the first 1.
+    // For example, if x is 16 (0b0001_0000), then x.leading_zeros() returns 27.
+    // Since the highest index in a 32-bit number is 31, subtracting gives us:
+    //   31 - 27 = 4, which is indeed the index of the most significant bit (since 16 == 2^4).
+    31 - x.leading_zeros()
+}
 pub fn angle_distance(a1: f32, a2: f32) -> f32 {
     let diff = (a1 - a2).abs() % (2.0 * PI);
     if diff > PI {

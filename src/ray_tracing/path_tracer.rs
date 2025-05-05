@@ -409,7 +409,6 @@ pub fn do_transmission(
     rng: &mut StdRng,
     branch_count: u32,
 ) -> bool {
-    println!("transmission");
     let mut hit = false;
     *next = ray.clone();
     next.origin = next.at(Ray::OFFSET);

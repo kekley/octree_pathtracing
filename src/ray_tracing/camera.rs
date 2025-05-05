@@ -35,7 +35,7 @@ impl Default for Camera {
             eye: Vec3A::new(0.0, 0.0, 10.0),
             direction: Vec3A::new(0.0, 0.0, -1.0),
             up: Vec3A::new(0.0, 1.0, 0.0), // we live in a y-up world...
-            fov: std::f32::consts::FRAC_PI_6,
+            fov: 70.0f32.to_radians(),
             aperture: 0.0,
             focal_distance: 0.0,
             yaw: 0.0,
@@ -69,21 +69,22 @@ impl Camera {
     }
 
     /// Cast a ray, where (x, y) are normalized to the standard [-1, 1] box
+    #[inline]
     pub fn get_ray(&self, rng: &mut StdRng, x: f32, y: f32) -> Ray {
         // cot(f / 2) = depth / radius
         let d = (self.fov / 2.0).tan().recip();
-        let right = self.direction.cross(self.up).normalize();
+        let right = self.direction.cross(self.up);
         let mut origin = self.eye;
         let mut new_dir = d * self.direction + x * right + y * self.up;
         if self.aperture > 0.0 {
             // Depth of field
-            let focal_point = origin + new_dir.normalize() * self.focal_distance;
+            let focal_point = origin + new_dir * self.focal_distance;
             let [x, y]: [f32; 2] = rng.sample(UnitDisc);
             origin += (x * right + y * self.up) * self.aperture;
             new_dir = focal_point - origin;
         }
-
-        Ray::new(origin, new_dir.normalize())
+        let new_dir = new_dir.normalize();
+        Ray::new(origin, new_dir)
     }
     pub fn move_with_wasd(&mut self, ctx: &Context) {
         ctx.input(|input| {

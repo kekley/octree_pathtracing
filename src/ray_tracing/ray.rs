@@ -25,30 +25,19 @@ impl Ray {
     pub const EPSILON: f32 = 0.00000005;
     pub const OFFSET: f32 = 0.000001;
 
-    #[inline]
     pub fn at(&self, t: f32) -> Vec3A {
         self.origin + self.direction * t
     }
-    #[inline]
     pub fn new(point: Vec3A, direction: Vec3A) -> Self {
         const EPSILON: f32 = 1e-6;
-        let inv_dir = Vec3A::new(
-            if direction.x.abs() < EPSILON {
-                1.0 / EPSILON
-            } else {
-                1.0 / direction.x
-            },
-            if direction.y.abs() < EPSILON {
-                1.0 / EPSILON
-            } else {
-                1.0 / direction.y
-            },
-            if direction.z.abs() < EPSILON {
-                1.0 / EPSILON
-            } else {
-                1.0 / direction.z
-            },
-        );
+        let b_vec = direction.abs().cmplt(Vec3A::splat(EPSILON));
+        let mut inv_dir = Vec3A::splat(1.0 / EPSILON);
+        (0..3).for_each(|i: usize| {
+            if !b_vec.test(i) {
+                inv_dir[i] = 1.0 / direction[i];
+            }
+        });
+
         Self {
             origin: point,
             direction,
@@ -302,7 +291,8 @@ impl Ray {
                     let min_r = (sun_alt_relative + circle_radius).cos();
                     let max_r = ((sun_alt_relative - circle_radius).max(0.0)).cos();
 
-                    let sun_theta = sun_ty.atan2(sun_tx);
+                    let sun_theta = f32::atan2(sun_ty, sun_tx);
+
                     let segment_area_proportion =
                         ((max_r * max_r - min_r * min_r) * circle_radius) / PI;
                     sample_chance *= segment_area_proportion / (circle_radius * circle_radius);

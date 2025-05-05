@@ -29,7 +29,7 @@ pub struct MaterialBuilder {
     emittance: Option<f32>,
     roughness: Option<f32>,
     metalness: Option<f32>,
-    texture: Option<TextureID>,
+    texture: Option<Texture>,
 }
 
 impl MaterialBuilder {
@@ -43,7 +43,7 @@ impl MaterialBuilder {
             emittance: self.emittance.unwrap_or(0.0),
             roughness: self.roughness.unwrap_or(0.0),
             metalness: self.metalness.unwrap_or(0.0),
-            texture: self.texture.unwrap_or(0),
+            texture: self.texture.unwrap_or(Texture::DEFAULT_TEXTURE),
         }
     }
     pub fn index_of_refraction(self, ior: f32) -> Self {
@@ -76,7 +76,7 @@ impl MaterialBuilder {
             ..self
         }
     }
-    pub fn albedo(self, texture: TextureID) -> Self {
+    pub fn albedo(self, texture: Texture) -> Self {
         Self {
             texture: Some(texture),
             ..self
@@ -98,7 +98,7 @@ pub struct Material {
     pub emittance: f32,
     pub roughness: f32,
     pub metalness: f32,
-    pub texture: TextureID,
+    pub texture: Texture,
 }
 
 impl Material {
@@ -109,7 +109,7 @@ impl Material {
         emittance: 0.0,
         roughness: 0.0,
         metalness: 0.0,
-        texture: 0,
+        texture: Texture::DEFAULT_TEXTURE,
     };
     pub fn new() -> MaterialBuilder {
         MaterialBuilder {

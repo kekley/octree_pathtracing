@@ -157,7 +157,6 @@ pub struct Scene {
     pub f_sub_surface: f32,
     pub octree: Octree<ResourceModel>,
     pub quads: Box<[Quad]>,
-    pub textures: Box<[Texture]>,
     pub materials: Box<[Material]>,
 }
 
@@ -184,11 +183,6 @@ impl ModelManager {
         let materials_vec: Vec<Material> = std::mem::take(materials_vec_ref);
         let materials_box: Box<[Material]> = Box::from(materials_vec);
 
-        let mut write_lock = self.textures.write();
-        let textures_ref: &mut Vec<Texture> = write_lock.as_mut();
-        let textures_vec: Vec<Texture> = std::mem::take(textures_ref);
-        let textures_box: Box<[Texture]> = Box::from(textures_vec);
-
         Scene {
             sun: Sun::new(
                 PI / 2.5,
@@ -206,7 +200,6 @@ impl ModelManager {
             emmitter_intensity: 13.0,
             f_sub_surface: 0.3,
             quads: quad_box,
-            textures: textures_box,
             materials: materials_box,
             octree: octree,
         }
@@ -227,13 +220,9 @@ impl Scene {
 
         let max_dst = 1024.0;
 
-        let intersection = self.octree.intersect_octree_path_tracer(
-            ray,
-            max_dst,
-            &self.materials,
-            &self.textures,
-            &self.quads,
-        );
+        let intersection =
+            self.octree
+                .intersect_octree_path_tracer(ray, max_dst, &self.materials, &self.quads);
         intersection
     }
     pub fn hit_preview(&self, ray: &mut Ray) -> bool {
@@ -247,27 +236,12 @@ impl Scene {
 
         let max_dst = 1024.0;
 
-        let intersection = self.octree.intersect_octree_preview(
-            ray,
-            max_dst,
-            &self.materials,
-            &self.textures,
-            &self.quads,
-        );
+        let intersection =
+            self.octree
+                .intersect_octree_preview(ray, max_dst, &self.materials, &self.quads);
         intersection
     }
 
-    pub fn get_current_branch_count(scene_branch_count: u32, current_spp: u32) -> u32 {
-        if current_spp < scene_branch_count {
-            if current_spp <= (scene_branch_count as f32).sqrt() as u32 {
-                return 1;
-            } else {
-                return scene_branch_count - current_spp;
-            }
-        } else {
-            return scene_branch_count;
-        }
-    }
     pub fn get_preview_color(&self, mut ray: Ray, x: f32, y: f32, rng: &mut StdRng) -> Vec3 {
         let mut attenuation = Vec4::ZERO;
         preview_render(rng, &self, &mut ray, &mut attenuation);

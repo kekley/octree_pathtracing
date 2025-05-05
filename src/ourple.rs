@@ -42,7 +42,7 @@ fn jos_kleinian(mut z: Vec2, time: f32) -> f32 {
             >= a * 0.5
                 + f * (2. * a - 1.95) / 4.
                     * (z.x + b * 0.5).signum()
-                    * (1. - (-(7.2 - (1.95 - a) * 15.) * (z.x + b * 0.5).abs()).exp())
+                    * (1.0 - f32::exp(-(7.2 - (1.95 - a) * 15.) * (z.x + b * 0.5).abs()))
         {
             z = Vec2::new(-b, a) - z;
         }
