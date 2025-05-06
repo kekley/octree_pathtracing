@@ -1,4 +1,5 @@
 pub mod app;
+mod gpu_structs;
 pub mod voxels;
 
 pub mod ray_tracing;

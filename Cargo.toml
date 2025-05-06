@@ -26,6 +26,8 @@ egui_extras = { version = "0.31.1", features = ["default", "image"] }
 env_logger = "0.11.8"
 lasso = "0.7.3"
 wgpu = "25.0.0"
+bytemuck = "1.23.0"
+pollster = "0.4.0"
 
 [profile.release-with-debug]
 inherits = "release"

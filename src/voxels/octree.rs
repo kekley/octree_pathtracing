@@ -57,6 +57,7 @@ impl Position for UVec3 {
     }
 }
 
+#[repr(C)]
 #[derive(Debug, Default, Clone)]
 pub enum Child<T> {
     #[default]
