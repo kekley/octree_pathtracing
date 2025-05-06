@@ -39,10 +39,10 @@ pub struct Application {
     local_target_spp: u32,
     local_camera_position: Vec3,
 }
-pub fn mc() -> (ModelManager, Scene) {
+pub fn load_world() -> (ModelManager, Scene) {
     let model_manager = ModelManager::new();
     let minecraft_loader = &model_manager.resource_loader;
-    let world = minecraft_loader.open_world("./assets/worlds/server");
+    let world = minecraft_loader.open_world("./assets/test_worlds/world1");
     let air = minecraft_loader.rodeo.get_or_intern("minecraft:air");
     let cave_air = minecraft_loader.rodeo.get_or_intern("minecraft:cave_air");
     let grass = minecraft_loader.rodeo.get_or_intern("minecraft:grass");
@@ -55,14 +55,13 @@ pub fn mc() -> (ModelManager, Scene) {
     let bubble_column = minecraft_loader
         .rodeo
         .get_or_intern("minecraft:bubble_column");
-    dbg!(size_of::<Octant<ResourceModel>>());
     let f = |position: UVec3| -> Option<ResourceModel> {
         let UVec3 { x, y, z } = position;
         //println!("position: {}", position);
         let block = world.get_block(&WorldCoords {
-            x: (x as i64 + 739),
+            x: (x as i64),
             y: (y as i64 - 30),
-            z: (z as i64 + 148),
+            z: (z as i64),
         });
         if let Some(block) = block {
             if block.block_name == air
@@ -121,7 +120,7 @@ fn pixel_slice_to_u8_slice(slice: &[U8Color]) -> &[u8] {
 
 impl Application {
     pub fn build_scene(&mut self) {
-        let a = mc();
+        let a = load_world();
         self.model_manager = a.0;
         self.scene = Some(Arc::new(RwLock::new(a.1)));
     }

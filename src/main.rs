@@ -31,7 +31,7 @@ fn ui() -> eframe::Result {
         ..Default::default()
     };
     eframe::run_native(
-        "jorkin it",
+        "f",
         options,
         Box::new(|cc| {
             egui_extras::install_image_loaders(&cc.egui_ctx);

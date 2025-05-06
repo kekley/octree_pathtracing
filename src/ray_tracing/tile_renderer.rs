@@ -582,8 +582,8 @@ impl TileRenderer {
                     );
                 });
 
-                let a = spp_arc.fetch_add(branch_count, std::sync::atomic::Ordering::SeqCst);
-                dbg!(a + branch_count);
+                let spp = spp_arc.fetch_add(branch_count, std::sync::atomic::Ordering::SeqCst);
+                dbg!(spp + branch_count);
             }
         }
         status_arc.store(
