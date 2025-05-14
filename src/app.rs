@@ -14,8 +14,10 @@ use eframe::egui::{
 };
 use glam::{UVec3, Vec3};
 use spider_eye::{loaded_world::WorldCoords, MCResourceLoader};
+use wgpu::hal::auxil::db;
 
 use crate::{
+    gpu_test,
     ray_tracing::{
         camera::Camera,
         resource_manager::{ModelManager, ResourceModel},
@@ -42,13 +44,9 @@ pub struct Application {
 pub fn load_world() -> (ModelManager, Scene) {
     let model_manager = ModelManager::new();
     let minecraft_loader = &model_manager.resource_loader;
-    let world = minecraft_loader.open_world("./assets/test_worlds/world1");
+    let world = minecraft_loader.open_world("./assets/worlds/server");
     let air = minecraft_loader.rodeo.get_or_intern("minecraft:air");
     let cave_air = minecraft_loader.rodeo.get_or_intern("minecraft:cave_air");
-    let grass = minecraft_loader.rodeo.get_or_intern("minecraft:grass");
-    let water = minecraft_loader.rodeo.get_or_intern("minecraft:water");
-    let lava = minecraft_loader.rodeo.get_or_intern("minecraft:lava");
-    let chest = minecraft_loader.rodeo.get_or_intern("minecraft:chest");
     let birch_wall_sign = minecraft_loader
         .rodeo
         .get_or_intern("minecraft:birch_wall_sign");
@@ -64,30 +62,17 @@ pub fn load_world() -> (ModelManager, Scene) {
             z: (z as i64),
         });
         if let Some(block) = block {
-            if block.block_name == air
-                || block.block_name == cave_air
-                || block.block_name == grass
-                || block.block_name == water
-                || block.block_name == lava
-                || block.block_name == chest
-                || block.block_name == birch_wall_sign
-                || block.block_name == bubble_column
-            {
-                return None;
+            let model = model_manager.load_resource(&block);
+            if let Some(model) = model {
+                return Some(model);
             } else {
-                //println!("not air");
-                let model = model_manager.load_resource(&block);
-                if let Some(model) = model {
-                    return Some(model);
-                } else {
-                    return None;
-                }
+                return None;
             }
         } else {
             None
         }
     };
-    let tree: Octree<ResourceModel> = Octree::construct_parallel(11, &f);
+    let tree: Octree<ResourceModel> = Octree::construct_parallel(8, &f);
     dbg!(tree.octants.len());
     let scene = model_manager.build(tree);
     //println!("{:?}", tree);
@@ -131,14 +116,24 @@ impl eframe::App for Application {
             self.build_scene();
         }
         let texture: &mut egui::TextureHandle = self.render_texture.get_or_insert_with(|| {
-            ctx.load_texture(
+            let mut tex = ctx.load_texture(
                 "render_texture",
                 ImageData::Color(Arc::new(ColorImage {
                     size: self.window_size.into(),
                     pixels: vec![Color32::DARK_GRAY; self.window_size.0 * self.window_size.1],
                 })),
                 TextureOptions::default(),
-            )
+            );
+            dbg!("starting compute");
+            let lock = self.scene.as_ref().unwrap().read().unwrap();
+            let b = gpu_test::compute(&lock.octree);
+            dbg!("done?");
+            let color_image = Arc::new(ColorImage::from_rgba_premultiplied(
+                [1280, 720],
+                pixel_slice_to_u8_slice(&b),
+            ));
+            tex.set(color_image, TextureOptions::default());
+            tex
         });
 
         let latest_render_resolution = self.renderer.get_resolution();

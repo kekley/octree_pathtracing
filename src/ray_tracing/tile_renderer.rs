@@ -121,6 +121,20 @@ impl From<&F32Color> for U8Color {
         }
     }
 }
+impl From<F32Color> for U8Color {
+    fn from(value: F32Color) -> Self {
+        let res = (value.data * 255.0).min(Vec4::splat(255.0));
+        let r = LUT_TABLE_BYTE[res[0] as usize];
+        let g = LUT_TABLE_BYTE[res[1] as usize];
+        let b = LUT_TABLE_BYTE[res[2] as usize];
+        U8Color {
+            r,
+            g,
+            b,
+            a: res[3] as u8,
+        }
+    }
+}
 
 enum RendererMessage {
     GetImage(Vec<U8Color>),

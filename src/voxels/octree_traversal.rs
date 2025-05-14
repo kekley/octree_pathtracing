@@ -127,10 +127,11 @@ impl Octree<ResourceModel> {
         let mut idx: u32 = 0;
 
         let mut pos: Vec3A = Vec3A::splat(1.0);
-        let value = 1.5 * t_coef - t_bias;
-        let b_vec = value.cmpgt(Vec3A::splat(t_min));
+        let upper = 1.5 * t_coef - t_bias;
+        let b_vec = upper.cmpgt(Vec3A::splat(t_min));
         let bitmask = b_vec.bitmask();
         idx ^= bitmask;
+
         (0..3).for_each(|i: usize| {
             if b_vec.test(i) {
                 pos[i] = 1.5;

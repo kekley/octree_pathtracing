@@ -1,111 +1,102 @@
 use std::{fmt::Debug, hash::Hash, mem, u32};
 
-use crate::ray_tracing::resource_manager::ResourceModel;
+use crate::{
+    ray_tracing::resource_manager::ResourceModel,
+    voxels::octree::{Octant, Octree},
+};
 use bytemuck::{Pod, Zeroable};
-use glam::{UVec3, Vec4};
+use glam::{UVec3, Vec3, Vec4};
 use wgpu::{
     util::DeviceExt, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
     BindGroupLayoutEntry, BufferBindingType, BufferDescriptor, BufferUsages,
     CommandEncoderDescriptor, ComputePassDescriptor, ComputePipelineDescriptor, DownlevelFlags,
-    PipelineLayoutDescriptor, PollType, RequestAdapterOptions, ShaderStages, TextureDescriptor,
-    TextureFormat, TextureUsages,
+    PipelineLayoutDescriptor, PollType, RequestAdapterOptions, ShaderStages,
 };
-pub type OctantId = u32;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub struct LeafId {
-    pub parent: OctantId,
-    pub idx: u8,
-}
-
-pub trait Position: Copy + Clone + Debug + Sized {
-    fn construct(x: u32, y: u32, z: u32) -> Self;
-    fn idx(&self) -> u8;
-    fn required_depth(&self) -> u8;
-    fn x(&self) -> u32;
-    fn y(&self) -> u32;
-    fn z(&self) -> u32;
-    fn div(&self, rhs: u32) -> Self;
-    fn rem_assign(&mut self, rhs: u32);
-}
-
-impl Position for UVec3 {
-    fn idx(&self) -> u8 {
-        let val = (self.x + self.y * 2 + self.z * 4) as u8;
-        val
-    }
-    fn required_depth(&self) -> u8 {
-        let depth = self.max_element();
-        (depth as f32).log2().floor() as u8 + 1
-    }
-
-    fn construct(x: u32, y: u32, z: u32) -> Self {
-        Self::new(x, y, z)
-    }
-
-    fn x(&self) -> u32 {
-        self.x
-    }
-
-    fn y(&self) -> u32 {
-        self.y
-    }
-
-    fn z(&self) -> u32 {
-        self.z
-    }
-
-    fn div(&self, rhs: u32) -> Self {
-        *self / rhs
-    }
-
-    fn rem_assign(&mut self, rhs: u32) {
-        *self %= rhs;
-    }
+#[repr(C, align(16))]
+#[derive(Copy, Clone, Pod, Zeroable, Default, Debug)]
+pub struct TraversalContext {
+    pub octree_scale: f32,
+    pub root: u32,
+    pub scale: u32,
+    pub octant_stack: [u32; 23 + 1],
+    pub time_stack: [f32; 23 + 1],
+    pub padding: u32,
 }
 
 #[repr(C, align(16))]
-#[derive(Copy, Clone, Pod, Zeroable)]
-struct GPUOctreeHeader {
-    mask_1_0: u32, // [00000000 00000000]leaf mask,child_mask [00000000 00000000]leaf mask,child_mask
-    mask_3_2: u32,
-    mask_5_4: u32,
-    mask_7_6: u32,
-}
-
-#[repr(C, align(16))]
-#[derive(Copy, Clone, Pod, Zeroable)]
+#[derive(Debug, Copy, Clone, Pod, Zeroable)]
 pub struct GPUOctreeNode {
-    header: GPUOctreeHeader,
+    header: [u32; 4],
     indices: [u32; 8],
 }
 
-#[repr(C)]
-#[derive(Copy, Clone, Pod, Zeroable)]
-pub struct GPUModelIndices {
-    starting_index: u32,
-    len: u32,
+impl From<&Octant<ResourceModel>> for GPUOctreeNode {
+    fn from(value: &Octant<ResourceModel>) -> Self {
+        let Octant {
+            parent,
+            child_count,
+            children,
+        } = value;
+
+        let mut header = [0u32; 4];
+        let mut indices = [0u32; 8];
+        children
+            .iter()
+            .enumerate()
+            .for_each(|(i, child)| match child {
+                crate::voxels::octree::Child::None => {}
+                crate::voxels::octree::Child::Octant(ind) => {
+                    header[i / 2] |= if i & 1 != 0 {
+                        0b00000000111111110000000000000000
+                    } else {
+                        0b00000000000000000000000011111111
+                    };
+                    indices[i] = *ind;
+                }
+                crate::voxels::octree::Child::Leaf(val) => {
+                    header[i / 2] |= if i & 1 != 0 {
+                        0b11111111111111110000000000000000
+                    } else {
+                        0b00000000000000001111111111111111
+                    };
+                    indices[i] = val.get_first_index();
+                }
+            });
+
+        GPUOctreeNode { header, indices }
+    }
 }
 
 pub struct GPUOctree {
     pub octree_scale: f32,
     pub octants: Vec<GPUOctreeNode>,
-    pub free_list: Vec<OctantId>,
     pub depth: u8,
+}
+
+impl From<&Octree<ResourceModel>> for GPUOctree {
+    fn from(value: &Octree<ResourceModel>) -> Self {
+        let vec = value
+            .octants
+            .iter()
+            .map(|octant| GPUOctreeNode::from(octant))
+            .collect::<Vec<_>>();
+
+        GPUOctree {
+            octree_scale: value.octree_scale,
+            octants: vec,
+            depth: value.depth,
+        }
+    }
 }
 
 #[test]
 fn hello_compute() -> anyhow::Result<()> {
-    const DATA: GPUOctreeNode = GPUOctreeNode {
-        header: GPUOctreeHeader {
-            mask_1_0: u32::MAX,
-            mask_3_2: 0,
-            mask_5_4: u32::MAX,
-            mask_7_6: 0,
-        },
-        indices: [1u32; 8],
+    let data: GPUOctreeNode = GPUOctreeNode {
+        header: Default::default(),
+        indices: Default::default(),
     };
-    let a = [DATA; 64];
+    let a = [data; 64];
     env_logger::init();
 
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());

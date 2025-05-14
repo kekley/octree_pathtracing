@@ -177,7 +177,6 @@ impl ModelManager {
         let quad_vec: &mut Vec<Quad> = write_lock.as_mut();
         let quads: Vec<Quad> = std::mem::take(quad_vec);
         let quad_box: Box<[Quad]> = Box::from(quads);
-
         let mut write_lock = self.materials.write();
         let materials_vec_ref: &mut Vec<Material> = write_lock.as_mut();
         let materials_vec: Vec<Material> = std::mem::take(materials_vec_ref);

@@ -4,6 +4,7 @@ pub mod voxels;
 
 pub mod ray_tracing;
 
+mod gpu_test;
 mod mandelbrot;
 mod ourple;
 mod rtw_image;
