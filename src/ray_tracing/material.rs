@@ -1,9 +1,6 @@
 use crate::ray_tracing::texture::Texture;
 use bitflags::bitflags;
-use glam::Vec4;
-use smol_str::SmolStr;
 
-use super::{resource_manager::TextureID, tile_renderer::U8Color};
 
 bitflags! {
     #[derive(Clone, Copy,Debug)]

@@ -8,9 +8,8 @@ use glam::{Vec3A, Vec4, Vec4Swizzles};
 use crate::random_float;
 
 use super::{
-    material::{self, Material, MaterialFlags},
+    material::{Material, MaterialFlags},
     ray::Ray,
-    resource_manager::MaterialID,
     scene::{EmitterSamplingStrategy, Scene},
 };
 pub fn path_trace(

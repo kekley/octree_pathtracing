@@ -9,26 +9,26 @@ stb_image = "0.3.0"
 spider_eye = { path = "../spider_eye" }
 smol_str = "0.3.2"
 fast-math = "0.1.1"
-glam = "0.29.2"
-bitflags = "2.6.0"
+glam = "0.30.3"
+bitflags = "2.9.1"
 anyhow = "1.0.95"
 num-traits = "0.2.19"
 dashmap = "6.1.0"
 fxhash = "0.2.1"
 image = "0.25.5"
-rand = "0.8.5"
-rand_distr = "0.4.3"
+rand = "0.9.1"
 lazy_static = "1.5.0"
-hashbrown = "0.15.2"
+hashbrown = "0.15.3"
 aovec = "1.1.0"
-eframe = "0.31.1"
+eframe = { version = "0.31.1", features = ["default", "wgpu"] }
 egui_extras = { version = "0.31.1", features = ["default", "image"] }
 env_logger = "0.11.8"
 lasso = "0.7.3"
-wgpu = "25.0.0"
 bytemuck = "1.23.0"
 pollster = "0.4.0"
 log = "0.4.27"
+egui-wgpu = "0.31.1"
+rand_distr = "0.5.1"
 
 [profile.release-with-debug]
 inherits = "release"
@@ -36,4 +36,3 @@ inherits = "release"
 [profile.release]
 panic = "abort"
 debug = true
-

@@ -4,11 +4,9 @@ use crate::{
     ray_tracing::{
         cuboid::{Cuboid, Face},
         material::Material,
-        models::SingleBlockModel,
         quad::Quad,
         ray::Ray,
-        resource_manager::{ModelManager, ResourceModel},
-        texture::Texture,
+        resource_manager::ResourceModel,
     },
     util,
 };
@@ -90,7 +88,7 @@ impl Octree<ResourceModel> {
 
         ro += 1.0; // shift the coordinates to [1-2)
 
-        let mut parent_octant_idx = tree_root;
+        let mut octant_index = tree_root;
 
         let mut scale: u32 = (OCTREE_MAX_SCALE - 1) as u32;
         let mut scale_exp2: f32 = 0.5f32; //exp2(scale-MAX_SCALE)
@@ -124,13 +122,13 @@ impl Octree<ResourceModel> {
 
         let mut h: f32 = t_max;
 
-        let mut idx: u32 = 0;
+        let mut index: u32 = 0;
 
         let mut pos: Vec3A = Vec3A::splat(1.0);
         let upper = 1.5 * t_coef - t_bias;
         let b_vec = upper.cmpgt(Vec3A::splat(t_min));
         let bitmask = b_vec.bitmask();
-        idx ^= bitmask;
+        index ^= bitmask;
 
         (0..3).for_each(|i: usize| {
             if b_vec.test(i) {
@@ -147,10 +145,10 @@ impl Octree<ResourceModel> {
 
             let tc_max = t_corner.min_element();
 
-            let unmirrored_idx = idx ^ mirror_mask;
+            let unmirrored_child_index = index ^ mirror_mask;
 
             let child =
-                &self.octants[(parent_octant_idx) as usize].children[unmirrored_idx as usize];
+                &self.octants[octant_index as usize].children[unmirrored_child_index as usize];
 
             if !child.is_none() && t_min <= t_max {
                 if child.is_leaf() && t_min >= 0.0 {
@@ -235,17 +233,17 @@ impl Octree<ResourceModel> {
 
                     if t_min <= tv_max && child.is_octant() {
                         if tc_max < h {
-                            stack[scale as usize] = (parent_octant_idx, t_max);
+                            stack[scale as usize] = (octant_index, t_max);
                         }
                         h = tc_max;
 
-                        parent_octant_idx = child.get_octant_value().unwrap();
+                        octant_index = child.get_octant_value().unwrap();
                         scale -= 1;
                         scale_exp2 = half_scale;
 
-                        idx = 0;
+                        index = 0;
                         let b_vec = t_center.cmpgt(Vec3A::splat(t_min));
-                        idx ^= b_vec.bitmask();
+                        index ^= b_vec.bitmask();
                         (0..3).for_each(|i: usize| {
                             if b_vec.test(i) {
                                 pos[i] += scale_exp2;
@@ -270,9 +268,9 @@ impl Octree<ResourceModel> {
             });
 
             t_min = tc_max;
-            idx ^= step_mask;
+            index ^= step_mask;
 
-            if (idx & step_mask) != 0 {
+            if (index & step_mask) != 0 {
                 //println!("pop!");
                 let mut differing_bits: u32 = 0;
 
@@ -294,7 +292,7 @@ impl Octree<ResourceModel> {
                 if scale >= OCTREE_MAX_SCALE as u32 {
                     return false;
                 }
-                (parent_octant_idx, t_max) = *stack.get(scale as usize).expect("had invalid scale");
+                (octant_index, t_max) = *stack.get(scale as usize).expect("had invalid scale");
 
                 let (shx, shy, shz): (u32, u32, u32);
 
@@ -307,7 +305,7 @@ impl Octree<ResourceModel> {
                 shz = pos.z.to_bits() >> scale;
                 pos.z = f32::from_bits(shz << scale);
 
-                idx = (shx & 1) | ((shy & 1) << 1) | ((shz & 1) << 2);
+                index = (shx & 1) | ((shy & 1) << 1) | ((shz & 1) << 2);
                 h = 0.0;
             }
         }

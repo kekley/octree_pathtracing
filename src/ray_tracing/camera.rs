@@ -1,5 +1,5 @@
 use eframe::egui::{self, Context};
-use glam::{Affine3A, Vec3, Vec3A};
+use glam::Vec3A;
 use rand::{rngs::StdRng, Rng};
 use rand_distr::UnitDisc;
 

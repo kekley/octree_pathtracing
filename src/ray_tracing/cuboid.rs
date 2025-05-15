@@ -6,7 +6,7 @@ use crate::{ray_tracing::aabb::AABB, ray_tracing::ray::Ray};
 use anyhow::Ok;
 use glam::Vec3A;
 
-use super::{material::Material, texture::Texture};
+use super::texture::Texture;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum Face {

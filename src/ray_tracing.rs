@@ -18,5 +18,3 @@ mod translation;
 pub mod material;
 pub mod models;
 
-use camera::*;
-use scene::*;

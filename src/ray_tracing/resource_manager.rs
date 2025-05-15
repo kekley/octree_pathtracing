@@ -1,38 +1,30 @@
-use std::{array, env::var, num::NonZeroU32, sync::Arc};
+use std::{array, sync::Arc};
 
-use aovec::Aovec;
-use dashmap::{mapref::one::Ref, DashMap, RwLock};
+use dashmap::{DashMap, RwLock};
 use fxhash::FxBuildHasher;
 use glam::{Vec3, Vec3A, Vec4, Vec4Swizzles};
-use hashbrown::{HashMap, HashSet};
+use hashbrown::HashMap;
 use lasso::Spur;
-use smol_str::SmolStr;
 use spider_eye::{
     block::InternedBlock,
     block_face::FaceName,
     block_models::{BlockRotation, InternedBlockModel},
-    block_states::InternedBlockState,
     block_texture::{InternedTextureVariable, TexPath},
-    loaded_world::InternedBlockName,
-    resource::BlockStates,
     variant::ModelVariant,
     MCResourceLoader,
 };
-use wgpu::hal::auxil::db;
 
 use crate::{
     ray_tracing::{
         models::{QuadModel, SingleBlockModel},
         quad::Quad,
     },
-    voxels::octree_traversal::OctreeIntersectResult,
     RTWImage,
 };
 
 use super::{
     material::Material,
-    ray::Ray,
-    texture::{self, Texture},
+    texture::{Texture},
 };
 
 pub type TextureID = u32;
@@ -305,7 +297,7 @@ impl ModelManager {
                 ResourceModel::SingleBlock(block_model)
             }
             ModelType::Quads => {
-                let mut quads = self.make_quads(block_model, rotation_x, rotation_y);
+                let quads = self.make_quads(block_model, rotation_x, rotation_y);
 
                 let quad_len = quads.len() as u32;
                 if quad_len == 0 {

@@ -1,4 +1,4 @@
-use std::{fmt::Debug, rc::Rc, sync::Arc};
+use std::fmt::Debug;
 
 use stb_image::image::load;
 

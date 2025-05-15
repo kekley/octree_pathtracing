@@ -1,21 +1,21 @@
-use std::{
-    fs,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{fs, time::Instant};
 
+use eframe::wgpu::{
+    util::{BufferInitDescriptor, DeviceExt},
+    BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
+    BindingResource, BindingType, BufferBindingType, BufferDescriptor, BufferUsages,
+    CommandEncoderDescriptor, ComputePassDescriptor, ComputePipelineDescriptor, Device,
+    DeviceDescriptor, DownlevelFlags, Extent3d, Features, Instance, InstanceDescriptor, Limits,
+    MaintainBase, MemoryHints, Origin3d, PipelineLayoutDescriptor, Queue, RequestAdapterOptions,
+    ShaderModuleDescriptor, ShaderSource, ShaderStages, StorageTextureAccess, TexelCopyTextureInfo,
+    TexelCopyTextureInfoBase, Texture, TextureDescriptor, TextureDimension, TextureFormat,
+    TextureUsages, TextureViewDescriptor, TextureViewDimension,
+};
 use glam::Vec4;
 use log::info;
-use wgpu::{
-    hal::auxil::db, util::DeviceExt, BindGroupDescriptor, BindGroupEntry,
-    BindGroupLayoutDescriptor, BindGroupLayoutEntry, BufferBindingType, BufferDescriptor,
-    BufferUsages, CommandEncoderDescriptor, ComputePassDescriptor, ComputePipelineDescriptor,
-    DownlevelFlags, PipelineLayoutDescriptor, PollType, RequestAdapterOptions,
-    ShaderModuleDescriptor, ShaderStages,
-};
 
 use crate::{
-    gpu_structs::gpu_octree::{GPUOctree, GPUOctreeNode, TraversalContext},
+    gpu_structs::gpu_octree::{GPUOctree, TraversalContext},
     ray_tracing::{
         resource_manager::ResourceModel,
         tile_renderer::{F32Color, U8Color},
@@ -23,7 +23,12 @@ use crate::{
     voxels::octree::Octree,
 };
 
-pub fn compute(octree: &Octree<ResourceModel>) -> Vec<U8Color> {
+pub fn compute(
+    octree: &Octree<ResourceModel>,
+    device: &Device,
+    queue: &Queue,
+    target: &egui_wgpu::Texture,
+) {
     let context = vec![TraversalContext {
         octree_scale: octree.octree_scale,
         root: octree.root.unwrap(),
@@ -35,53 +40,39 @@ pub fn compute(octree: &Octree<ResourceModel>) -> Vec<U8Color> {
     let octree_ = GPUOctree::from(octree);
 
     let octant_data = octree_.octants;
-    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
 
-    let adapter =
-        pollster::block_on(instance.request_adapter(&RequestAdapterOptions::default())).unwrap();
-
-    print!("Adapter: {:?}", adapter);
-
-    let downlevel_capabilities = adapter.get_downlevel_capabilities();
-
-    if !downlevel_capabilities
-        .flags
-        .contains(DownlevelFlags::COMPUTE_SHADERS)
-    {
-        panic!("No compute shader support on gpu :(")
-    }
-
-    let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-        label: None,
-        required_features: wgpu::Features::empty(),
-        required_limits: wgpu::Limits::downlevel_defaults(),
-        memory_hints: wgpu::MemoryHints::MemoryUsage,
-        trace: wgpu::Trace::Off,
-    }))
-    .expect("Failed to create device");
-    let shader_code = fs::read_to_string("./assets/shaders/svo.wgsl").unwrap();
+    let shader_code =
+        fs::read_to_string("/mnt/860evo/Rust/ray_tracing/assets/shaders/svo.wgsl").unwrap();
     let module = device.create_shader_module(ShaderModuleDescriptor {
         label: None,
-        source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(&shader_code)),
+        source: ShaderSource::Wgsl(std::borrow::Cow::Borrowed(&shader_code)),
     });
 
-    let octree = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+    let octree = device.create_buffer_init(&BufferInitDescriptor {
         label: None,
         contents: bytemuck::cast_slice(&octant_data),
-        usage: wgpu::BufferUsages::STORAGE,
+        usage: BufferUsages::STORAGE,
     });
 
-    let context = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+    let context = device.create_buffer_init(&BufferInitDescriptor {
         label: None,
         contents: bytemuck::cast_slice(&context),
-        usage: wgpu::BufferUsages::STORAGE,
+        usage: BufferUsages::STORAGE,
     });
 
-    let output = device.create_buffer(&BufferDescriptor {
-        label: Some("output"),
-        size: (size_of::<Vec4>() * 1280 * 720) as u64,
-        usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
-        mapped_at_creation: false,
+    let output_texture = device.create_texture(&TextureDescriptor {
+        label: None,
+        size: Extent3d {
+            width: 1280,
+            height: 720,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: TextureDimension::D2,
+        format: TextureFormat::Rgba8Unorm,
+        usage: TextureUsages::STORAGE_BINDING | TextureUsages::COPY_SRC,
+        view_formats: &[TextureFormat::Rgba8Unorm],
     });
 
     let staging_buffer = device.create_buffer(&BufferDescriptor {
@@ -91,13 +82,25 @@ pub fn compute(octree: &Octree<ResourceModel>) -> Vec<U8Color> {
         mapped_at_creation: false,
     });
 
+    let texture_view = output_texture.create_view(&TextureViewDescriptor {
+        usage: Some(TextureUsages::STORAGE_BINDING | TextureUsages::COPY_SRC),
+        label: None,
+        format: Some(TextureFormat::Rgba8Unorm),
+        dimension: Some(TextureViewDimension::D2),
+        aspect: eframe::wgpu::TextureAspect::All,
+        base_mip_level: 0,
+        mip_level_count: Some(1),
+        base_array_layer: 0,
+        array_layer_count: Some(1),
+    });
+
     let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
         label: None,
         entries: &[
             BindGroupLayoutEntry {
                 binding: 0,
                 visibility: ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
+                ty: BindingType::Buffer {
                     ty: BufferBindingType::Storage { read_only: true },
                     has_dynamic_offset: false,
                     min_binding_size: None,
@@ -107,7 +110,7 @@ pub fn compute(octree: &Octree<ResourceModel>) -> Vec<U8Color> {
             BindGroupLayoutEntry {
                 binding: 1,
                 visibility: ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
+                ty: BindingType::Buffer {
                     ty: BufferBindingType::Storage { read_only: true },
                     has_dynamic_offset: false,
                     min_binding_size: None,
@@ -117,10 +120,10 @@ pub fn compute(octree: &Octree<ResourceModel>) -> Vec<U8Color> {
             BindGroupLayoutEntry {
                 binding: 2,
                 visibility: ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: BufferBindingType::Storage { read_only: false },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+                ty: BindingType::StorageTexture {
+                    access: StorageTextureAccess::WriteOnly,
+                    format: TextureFormat::Rgba8Unorm,
+                    view_dimension: TextureViewDimension::D2,
                 },
                 count: None,
             },
@@ -141,7 +144,7 @@ pub fn compute(octree: &Octree<ResourceModel>) -> Vec<U8Color> {
             },
             BindGroupEntry {
                 binding: 2,
-                resource: output.as_entire_binding(),
+                resource: BindingResource::TextureView(&texture_view),
             },
         ],
     });
@@ -174,35 +177,30 @@ pub fn compute(octree: &Octree<ResourceModel>) -> Vec<U8Color> {
         compute_pass.set_bind_group(0, &bind_group, &[]);
         compute_pass.dispatch_workgroups(1280, 720, 1);
     }
-
-    command_encoder.copy_buffer_to_buffer(&output, 0, &staging_buffer, 0, output.size());
-
+    {
+        command_encoder.copy_texture_to_texture(
+            TexelCopyTextureInfo {
+                texture: &output_texture,
+                mip_level: 0,
+                origin: Origin3d::ZERO,
+                aspect: eframe::wgpu::TextureAspect::All,
+            },
+            TexelCopyTextureInfo {
+                texture: &target.texture.as_ref().unwrap(),
+                mip_level: 0,
+                origin: Origin3d::ZERO,
+                aspect: eframe::wgpu::TextureAspect::All,
+            },
+            Extent3d {
+                width: 1280,
+                height: 720,
+                depth_or_array_layers: 1,
+            },
+        );
+    }
     queue.submit(Some(command_encoder.finish()));
     let start = Instant::now();
-    let a = staging_buffer.slice(..);
-    a.map_async(wgpu::MapMode::Read, move |r| r.unwrap());
-    device.poll(PollType::wait()).unwrap();
+    device.poll(MaintainBase::Wait);
     let time = Instant::now().duration_since(start);
     info!("Took {time:?} to render on GPU");
-    let mut local_buffer = vec![[0.0; 4]; 1280 * 720];
-    {
-        let view = a.get_mapped_range();
-        local_buffer.copy_from_slice(bytemuck::cast_slice(&view));
-    }
-
-    staging_buffer.unmap();
-    dbg!(&local_buffer[0]);
-    let vec = local_buffer
-        .iter()
-        .map(|f| {
-            let mut color = F32Color::BLACK;
-            *color.r_mut() = f[0];
-            *color.g_mut() = f[1];
-            *color.b_mut() = f[2];
-            *color.a_mut() = f[3];
-            color
-        })
-        .map(|color| U8Color::from(color))
-        .collect::<Vec<_>>();
-    vec
 }

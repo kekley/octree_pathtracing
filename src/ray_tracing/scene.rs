@@ -1,4 +1,4 @@
-use std::{f32::consts::PI, sync::Arc};
+use std::f32::consts::PI;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EmitterSamplingStrategy {
@@ -128,17 +128,11 @@ impl SunSamplingStrategy {
 
 use rand::rngs::StdRng;
 
-use glam::{UVec3, Vec3, Vec3A, Vec3Swizzles, Vec4, Vec4Swizzles};
-use spider_eye::{block, loaded_world::WorldCoords, MCResourceLoader};
+use glam::{Vec3, Vec3A, Vec3Swizzles, Vec4, Vec4Swizzles};
 
-use crate::{
-    random_float,
-    ray_tracing::axis::UP,
-    voxels::octree::{self, Octree},
-};
+use crate::{random_float, ray_tracing::axis::UP, voxels::octree::Octree};
 
 use super::{
-    camera::Camera,
     material::Material,
     path_tracer::{path_trace, preview_render},
     quad::Quad,
@@ -209,7 +203,7 @@ impl Scene {
     pub const SKY_COLOR: Vec4 = Vec4::new(0.5, 0.7, 1.0, 1.0);
 
     pub fn hit(&self, ray: &mut Ray) -> bool {
-        let mut hit = false;
+        let hit = false;
         let direction = ray.get_direction();
         if direction.x == 0.0 && direction.y == 0.0 && direction.z == 0.0 || direction.is_nan() {
             println!("invalid ray direction");
@@ -225,7 +219,7 @@ impl Scene {
         intersection
     }
     pub fn hit_preview(&self, ray: &mut Ray) -> bool {
-        let mut hit = false;
+        let hit = false;
         let direction = ray.get_direction();
         if direction.x == 0.0 && direction.y == 0.0 && direction.z == 0.0 || direction.is_nan() {
             println!("invalid ray direction");

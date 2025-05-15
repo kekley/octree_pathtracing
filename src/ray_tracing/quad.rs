@@ -1,12 +1,9 @@
-use super::{material::Material, ray::Ray, resource_manager::MaterialID};
-use crate::ray_tracing::cuboid::Face;
-use crate::voxels::octree_traversal::OctreeIntersectResult;
-use glam::{Affine3A, Mat3A, Mat4, Vec2, Vec3, Vec3A, Vec4};
+use super::{ray::Ray, resource_manager::MaterialID};
+use glam::{Affine3A, Vec2, Vec3, Vec3A, Vec4};
 use spider_eye::{
-    block_face::{FaceName, InternedFace},
+    block_face::FaceName,
     block_texture::Uv,
 };
-use std::cmp::PartialEq;
 
 #[derive(Debug, Clone, Default)]
 pub struct Quad {

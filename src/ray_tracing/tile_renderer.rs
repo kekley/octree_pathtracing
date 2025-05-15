@@ -1,30 +1,18 @@
-use core::error;
-use std::cell::{Cell, RefCell};
-use std::cmp::Ordering;
-use std::future::Future;
 use std::mem::transmute;
-use std::pin::{pin, Pin};
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize};
-use std::sync::mpsc::{channel, Receiver, RecvError, Sender};
-use std::sync::{self, Arc, Mutex, MutexGuard, RwLock, RwLockWriteGuard};
-use std::thread::{park, spawn, JoinHandle};
+use std::sync::atomic::{AtomicU32, AtomicUsize};
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::{self, Arc, Mutex, RwLock};
+use std::thread::{spawn, JoinHandle};
 use std::time::Instant;
 
-use glam::{Vec2, Vec3, Vec4};
+use glam::Vec4;
 use rand::rngs::StdRng;
 
-use image::{Pixel, RgbImage, Rgba32FImage, RgbaImage};
+use image::Pixel;
 use rand::{Rng, SeedableRng};
-use rayon::iter::{IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
-use rayon::result;
-
-use crate::mandelbrot::mandelbrot;
-use crate::ourple;
-use crate::ray_tracing::{camera, scene};
+use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 use super::camera::Camera;
-use super::material::Material;
-use super::resource_manager::ModelManager;
 use super::scene::Scene;
 use super::texture::LUT_TABLE_BYTE;
 
@@ -497,7 +485,7 @@ impl TileRenderer {
         output_image_sender: Sender<Vec<U8Color>>,
         resolution: (usize, usize),
         rayon_thread_count: usize,
-        mut branch_count: u32,
+        branch_count: u32,
         mut target_spp: u32,
     ) {
         status_arc.store(
@@ -762,7 +750,7 @@ impl TileRenderer {
     }
 
     pub fn render_tile_replace(tile: &mut Tile, camera: &Camera, scene: &Scene) {
-        let mut rng = StdRng::from_entropy();
+        let mut rng = StdRng::from_os_rng();
         for y in tile.y0..tile.y1 {
             for x in tile.x0..tile.x1 {
                 let x_normalized =
@@ -770,7 +758,7 @@ impl TileRenderer {
                 let y_normalized = ((2 * (tile.frame_buffer_resolution.1 - y) - 1) as f32
                     - tile.frame_buffer_resolution.1 as f32)
                     / tile.dim;
-                let mut ray = camera.get_ray(&mut rng, x_normalized, y_normalized);
+                let ray = camera.get_ray(&mut rng, x_normalized, y_normalized);
                 let color = scene.get_preview_color(ray, x_normalized, y_normalized, &mut rng);
                 //scene.get_color(x_normalized + dx, y_normalized + dy, &mut rng, current_spp);
                 let local_buffer_idx = Self::get_pixel_index(x - tile.x0, y - tile.y0, tile.stride);
@@ -805,8 +793,8 @@ impl TileRenderer {
         current_spp: u32,
         branch_count: u32,
     ) {
-        let time = (current_spp as f32 / 100.0);
-        let mut rng = StdRng::from_entropy();
+        let time = current_spp as f32 / 100.0;
+        let mut rng = StdRng::from_os_rng();
         for y in tile.y0..tile.y1 {
             for x in tile.x0..tile.x1 {
                 let x_normalized =
@@ -817,7 +805,7 @@ impl TileRenderer {
 
                 let dx = rng.gen_range((-1.0 / tile.dim)..(1.0 / tile.dim));
                 let dy = rng.gen_range((-1.0 / tile.dim)..(1.0 / tile.dim));
-                let mut ray = camera.get_ray(&mut rng, x_normalized + dx, y_normalized + dy);
+                let ray = camera.get_ray(&mut rng, x_normalized + dx, y_normalized + dy);
                 let color = scene.get_color(ray, &mut rng, current_spp);
                 //scene.get_color(x_normalized + dx, y_normalized + dy, &mut rng, current_spp);
                 let local_buffer_idx = Self::get_pixel_index(x - tile.x0, y - tile.y0, tile.stride);

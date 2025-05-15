@@ -1,6 +1,5 @@
 use std::{
     array::{self},
-    rc::Rc,
     sync::Arc,
 };
 

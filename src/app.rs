@@ -1,32 +1,31 @@
 use std::{
     fmt::format,
-    future::{poll_fn, Future, IntoFuture},
-    pin::Pin,
-    sync::{atomic::AtomicBool, Arc, Mutex, RwLock},
-    task::Poll,
-    thread::{self, JoinHandle},
+    sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
 
-use eframe::egui::{
-    self, include_image, load::SizedTexture, Color32, ColorImage, DragValue, Image, ImageData,
-    ImageOptions, ImageSource, Label, RadioButton, Slider, TextureHandle, TextureOptions,
+use eframe::{
+    egui::{
+        self, load::SizedTexture, Color32, ColorImage, DragValue, Image, ImageData, Label,
+        RadioButton, TextureFilter, TextureHandle, TextureOptions,
+    },
+    wgpu::{
+        self, core::device::queue, Extent3d, TextureAspect, TextureDescriptor, TextureFormat,
+        TextureUsages, TextureView, TextureViewDescriptor,
+    },
 };
-use env_logger::Logger;
 use glam::{UVec3, Vec3};
-use log::{debug, error, info};
-use spider_eye::{loaded_world::WorldCoords, MCResourceLoader};
-use wgpu::hal::auxil::db;
+use log::info;
+use spider_eye::loaded_world::WorldCoords;
 
 use crate::{
     gpu_test,
     ray_tracing::{
-        camera::Camera,
         resource_manager::{ModelManager, ResourceModel},
-        scene::{self, Scene},
+        scene::Scene,
         tile_renderer::{RendererMode, RendererStatus, TileRenderer, U8Color},
     },
-    voxels::octree::{Octant, Octree},
+    voxels::octree::Octree,
 };
 
 pub struct Application {
@@ -47,7 +46,7 @@ pub fn load_world() -> (ModelManager, Scene) {
     let model_manager = ModelManager::new();
     let minecraft_loader = &model_manager.resource_loader;
     let world = minecraft_loader
-        .open_world("./assets/worlds/test_world")
+        .open_world("/mnt/860evo/Rust/ray_tracing/assets/worlds/test_world")
         .unwrap();
     let air = minecraft_loader.rodeo.get_or_intern("minecraft:air");
     let cave_air = minecraft_loader.rodeo.get_or_intern("minecraft:cave_air");
@@ -123,25 +122,30 @@ impl eframe::App for Application {
             let end = Instant::now();
             let duration = end.duration_since(start);
             info!("Took {duration:?} to build scene");
-        }
-        let texture: &mut egui::TextureHandle = self.render_texture.get_or_insert_with(|| {
-            let mut tex = ctx.load_texture(
-                "render_texture",
-                ImageData::Color(Arc::new(ColorImage {
-                    size: self.window_size.into(),
-                    pixels: vec![Color32::DARK_GRAY; self.window_size.0 * self.window_size.1],
-                })),
-                TextureOptions::default(),
-            );
+        };
+        if self.render_texture.is_some() {
             let lock = self.scene.as_ref().unwrap().read().unwrap();
+            let render_state = frame.wgpu_render_state().unwrap();
+            let texture = self.render_texture.as_ref().unwrap();
+            let renderer = render_state.renderer.read();
+            let opt = renderer.texture(&texture.id());
+            if let Some(texture) = opt {
+                gpu_test::compute(
+                    &lock.octree,
+                    &render_state.device,
+                    &render_state.queue,
+                    texture,
+                );
+            };
+        }
+
+        let texture: &mut egui::TextureHandle = self.render_texture.get_or_insert_with(|| {
+            let image = ImageData::Color(ColorImage::new([1280, 720], Color32::GRAY).into());
+            let texture_handle =
+                ctx.load_texture("render target", image, TextureOptions::default());
             info!("Starting Compute...");
-            let b = gpu_test::compute(&lock.octree);
-            let color_image = Arc::new(ColorImage::from_rgba_premultiplied(
-                [1280, 720],
-                pixel_slice_to_u8_slice(&b),
-            ));
-            tex.set(color_image, TextureOptions::default());
-            tex
+
+            texture_handle
         });
 
         let latest_render_resolution = self.renderer.get_resolution();

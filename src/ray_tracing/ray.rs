@@ -8,7 +8,6 @@ use glam::{Mat3A, Vec3A, Vec4};
 
 use super::{
     hittable::HitRecord,
-    material::Material,
     scene::{Scene, Sun},
 };
 

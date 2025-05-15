@@ -2,16 +2,13 @@ use std::{f32::INFINITY, num::NonZeroU32, usize};
 
 use glam::{Vec2, Vec3A, Vec4};
 
-use crate::voxels::octree_traversal::OctreeIntersectResult;
 
 use super::{
-    aabb::AABB,
     cuboid::{Cuboid, Face},
     material::Material,
     quad::Quad,
     ray::Ray,
     resource_manager::QuadID,
-    texture::Texture,
 };
 
 #[derive(Debug, Clone, Copy, Default)]
