@@ -131,44 +131,20 @@ fn intersect_octree(global_id:vec3<u32>,ray_origin: vec3<f32>, ray_direction: ve
 
     let epsilon_bits_without_sign: u32 = bitcast<u32>(OCTREE_EPSILON) & (~sign_mask);
 
-    if abs(rd.x) < OCTREE_EPSILON{
-        rd.x = bitcast<f32>(epsilon_bits_without_sign | (bitcast<u32>(rd.x) & sign_mask));
-    }
-        if abs(rd.y) < OCTREE_EPSILON{
-        rd.y = bitcast<f32>(epsilon_bits_without_sign | (bitcast<u32>(rd.y) & sign_mask));
-    }
-        if abs(rd.z) < OCTREE_EPSILON{
-        rd.z = bitcast<f32>(epsilon_bits_without_sign | (bitcast<u32>(rd.z) & sign_mask));
-    }
 
-/*     let rd_abs:vec3<f32> = abs(rd);
+    let rd_abs:vec3<f32> = abs(rd);
 
     let dir_lt_epsilon: vec3<bool> = rd_abs < vec3(OCTREE_EPSILON);
 
     let signed_epsilon: vec3<f32> =  bitcast<vec3<f32>>(vec3(epsilon_bits_without_sign) | (bitcast<vec3<u32>>(rd) & vec3(sign_mask)));
 
-    rd = select(rd,signed_epsilon,dir_lt_epsilon); */
+    rd = select(rd,signed_epsilon,dir_lt_epsilon); 
 
     let t_coef:vec3<f32> = 1.0/-abs(rd);
 
     var t_bias:vec3<f32> = t_coef*ro;
 
-    var mirror_mask:u32 = 0;
-
-    if rd.x>0.0{
-        mirror_mask |= 1;
-        t_bias.x = 3.0*t_coef.x -t_bias.x;
-    }
-    if rd.y>0.0{
-        mirror_mask |= 2;
-        t_bias.y = 3.0*t_coef.y -t_bias.y;
-    }
-    if rd.z>0.0{
-        mirror_mask |= 4;
-        t_bias.z = 3.0*t_coef.z -t_bias.z;
-    }
-
-    /* 
+    
     let dir_gt_0: vec3<bool> = rd > vec3(0.0);
 
     let mirror_mask: u32 = vec_to_bitmask(dir_gt_0);
@@ -176,7 +152,6 @@ fn intersect_octree(global_id:vec3<u32>,ray_origin: vec3<f32>, ray_direction: ve
     let updated_t_bias_values: vec3<f32> = 3.0 * t_coef - t_bias;
 
     t_bias = select(t_bias, updated_t_bias_values, dir_gt_0);
-     */
     
     
     var t_min:f32 = max(max_vec3((2.0 *t_coef-t_bias)),0.0);
@@ -189,28 +164,14 @@ fn intersect_octree(global_id:vec3<u32>,ray_origin: vec3<f32>, ray_direction: ve
 
     var pos : vec3<f32> = vec3(1.0);
 
-    if t_min<(1.5*t_coef.x-t_bias.x){
-        idx |= 1;
-        pos.x=1.5;
-    }
-    
-    if t_min< (1.5*t_coef.y-t_bias.y){
-        idx |= 2;
-        pos.y=1.5;
-    }
-    
-    if t_min< (1.5*t_coef.z-t_bias.z){
-        idx |= 4;
-        pos.z=1.5;
-    }
 
-/*     let upper:vec3<f32> = 1.5*t_coef - t_bias;
+    let upper:vec3<f32> = 1.5*t_coef - t_bias;
 
     let lt_upper : vec3<bool> =  vec3(t_min) < upper;
 
     idx ^= vec_to_bitmask(lt_upper);
     pos = select(pos,vec3(1.5),lt_upper);
- */
+ 
 
     for(var i:u32=0;i<OCTREE_MAX_STEPS;i++){
         if max_dst>=0.0 && t_min>max_dst{
@@ -226,7 +187,7 @@ fn intersect_octree(global_id:vec3<u32>,ray_origin: vec3<f32>, ray_direction: ve
         let unmirrored_idx:u32 = idx^mirror_mask;
         let octant:Octant = octree[parent_octant_idx];
         
-        let nine = 9u;
+/*         let nine = 9u;
           switch nine{
             case 0u:{
                 output[global_id.x+global_id.y*1280] = vec4(0,0,0,1);//red
@@ -256,7 +217,7 @@ fn intersect_octree(global_id:vec3<u32>,ray_origin: vec3<f32>, ray_direction: ve
             default {
 
             }
-        } 
+        }  */
  
 
 

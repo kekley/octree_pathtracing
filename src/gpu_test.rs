@@ -1,6 +1,11 @@
-use std::{fs, sync::Arc};
+use std::{
+    fs,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use glam::Vec4;
+use log::info;
 use wgpu::{
     hal::auxil::db, util::DeviceExt, BindGroupDescriptor, BindGroupEntry,
     BindGroupLayoutDescriptor, BindGroupLayoutEntry, BufferBindingType, BufferDescriptor,
@@ -19,8 +24,6 @@ use crate::{
 };
 
 pub fn compute(octree: &Octree<ResourceModel>) -> Vec<U8Color> {
-    dbg!(&octree.octree_scale);
-    dbg!(&octree.octants[*octree.root.as_ref().unwrap() as usize]);
     let context = vec![TraversalContext {
         octree_scale: octree.octree_scale,
         root: octree.root.unwrap(),
@@ -32,8 +35,6 @@ pub fn compute(octree: &Octree<ResourceModel>) -> Vec<U8Color> {
     let octree_ = GPUOctree::from(octree);
 
     let octant_data = octree_.octants;
-    dbg!(&octant_data[octree.root.unwrap() as usize]);
-    dbg!(&context);
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
 
     let adapter =
@@ -177,10 +178,12 @@ pub fn compute(octree: &Octree<ResourceModel>) -> Vec<U8Color> {
     command_encoder.copy_buffer_to_buffer(&output, 0, &staging_buffer, 0, output.size());
 
     queue.submit(Some(command_encoder.finish()));
-
+    let start = Instant::now();
     let a = staging_buffer.slice(..);
     a.map_async(wgpu::MapMode::Read, move |r| r.unwrap());
     device.poll(PollType::wait()).unwrap();
+    let time = Instant::now().duration_since(start);
+    info!("Took {time:?} to render on GPU");
     let mut local_buffer = vec![[0.0; 4]; 1280 * 720];
     {
         let view = a.get_mapped_range();

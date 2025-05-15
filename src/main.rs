@@ -43,7 +43,7 @@ fn ui() -> eframe::Result {
 #[test]
 fn lichen() {
     let loader = MCResourceLoader::new();
-    let world = loader.open_world("./biggerworld");
+    let world = loader.open_world("./biggerworld").unwrap();
     let lichen = world
         .get_block(&WorldCoords {
             x: 16 + 8,

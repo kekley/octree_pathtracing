@@ -28,6 +28,7 @@ lasso = "0.7.3"
 wgpu = "25.0.0"
 bytemuck = "1.23.0"
 pollster = "0.4.0"
+log = "0.4.27"
 
 [profile.release-with-debug]
 inherits = "release"

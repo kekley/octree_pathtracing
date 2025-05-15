@@ -12,7 +12,9 @@ use eframe::egui::{
     self, include_image, load::SizedTexture, Color32, ColorImage, DragValue, Image, ImageData,
     ImageOptions, ImageSource, Label, RadioButton, Slider, TextureHandle, TextureOptions,
 };
+use env_logger::Logger;
 use glam::{UVec3, Vec3};
+use log::{debug, error, info};
 use spider_eye::{loaded_world::WorldCoords, MCResourceLoader};
 use wgpu::hal::auxil::db;
 
@@ -44,7 +46,9 @@ pub struct Application {
 pub fn load_world() -> (ModelManager, Scene) {
     let model_manager = ModelManager::new();
     let minecraft_loader = &model_manager.resource_loader;
-    let world = minecraft_loader.open_world("./assets/test_worlds/world1");
+    let world = minecraft_loader
+        .open_world("./assets/worlds/test_world")
+        .unwrap();
     let air = minecraft_loader.rodeo.get_or_intern("minecraft:air");
     let cave_air = minecraft_loader.rodeo.get_or_intern("minecraft:cave_air");
     let birch_wall_sign = minecraft_loader
@@ -113,7 +117,12 @@ impl Application {
 impl eframe::App for Application {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         if self.scene.is_none() {
+            let start = Instant::now();
+            info!("Building Scene...");
             self.build_scene();
+            let end = Instant::now();
+            let duration = end.duration_since(start);
+            info!("Took {duration:?} to build scene");
         }
         let texture: &mut egui::TextureHandle = self.render_texture.get_or_insert_with(|| {
             let mut tex = ctx.load_texture(
@@ -124,10 +133,9 @@ impl eframe::App for Application {
                 })),
                 TextureOptions::default(),
             );
-            dbg!("starting compute");
             let lock = self.scene.as_ref().unwrap().read().unwrap();
+            info!("Starting Compute...");
             let b = gpu_test::compute(&lock.octree);
-            dbg!("done?");
             let color_image = Arc::new(ColorImage::from_rgba_premultiplied(
                 [1280, 720],
                 pixel_slice_to_u8_slice(&b),
