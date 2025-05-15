@@ -15,79 +15,31 @@ struct Ray {
 fn convert_vec2u32_to_vec2f(v_u32: vec2<u32>) -> vec2<f32> {
     return vec2<f32>(f32(v_u32.x), f32(v_u32.y));
 }
-
-// Updated create_ray function for WGSL
-// Generates a ray in world space for a given pixel,
-// using the camera's position, look_at point, and up vector.
+const IMAGE_SIZE = vec2<u32>(1280,720);
+const pi = 3.14159265359;
 fn create_ray(
     camera: CameraParams,
     resolution: vec2<u32>, // viewport resolution in pixels
     pixel_id: vec2<u32>    // current pixel coordinates (e.g., from top-left)
 ) -> Ray {
-    // Convert u32 vectors to f32 vectors for calculations
-    let pixel_coord_f: vec2<f32> = convert_vec2u32_to_vec2f(pixel_id);
-    let resolution_f: vec2<f32> = convert_vec2u32_to_vec2f(resolution);
+    var uv = vec2<f32>(vec2<f32>(pixel_id)/vec2<f32>(IMAGE_SIZE));
+    uv = uv*2.0-1.0;
+    uv.x *= camera.aspect_ratio;
+    uv.y *=-1.0;
 
-    // 1. Normalized pixel coordinates (0 to 1 range)
-    // Add 0.5 to sample pixel centers, common in ray tracing.
-    let uv: vec2<f32> = vec2<f32>(
-        (pixel_coord_f.x + 0.5) / resolution_f.x,
-        (pixel_coord_f.y + 0.5) / resolution_f.y
-    );
+    let direction = normalize(camera.look_at-camera.position);
+    let up = normalize(camera.up-dot(camera.up,direction)*direction);
+    let radians = (camera.fov/180.0)*pi;
+    let d = 1.0/(tan(radians/2.0));
+    let right = cross(direction,up);
 
-    // 2. Normalized Device Coordinates (NDC)
-    // Range from -1 to 1. Y is flipped (1 at top to -1 at bottom for many APIs).
-    // (1.0 - uv.y) means uv.y=0 (top in normalized image coords) -> ndc.y=1 (top in NDC)
-    let ndc: vec2<f32> = vec2<f32>(
-        uv.x * 2.0 - 1.0,
-        (1.0 - uv.y) * 2.0 - 1.0 // Y flipped: uv.y=0 (top) -> ndc.y=1 (top)
-    );
+    let origin = camera.position;
 
-    // 3. Calculate view space coordinates on the image plane
-    // camera.fov is assumed to be the vertical field of view.
-    // tan(fov/2) gives half the height of the image plane at distance 1.
-    let fov_tan_half: f32 = tan(radians(camera.fov) * 0.5);
+    let new_dir = normalize(d*direction + uv.x * right+uv.y*up);
 
-    // The components of the direction in camera's local coordinate system
-    // (X right, Y up, looking along -Z)
-    // Aspect ratio is applied to the X component to correct for screen shape.
-    let local_ray_x: f32 = ndc.x * camera.aspect_ratio * fov_tan_half;
-    let local_ray_y: f32 = ndc.y * fov_tan_half;
-    let local_ray_z: f32 = -1.0; // Ray points along the camera's local -Z axis
+    return Ray(origin,new_dir);
 
-    // 4. Determine camera's coordinate system in world space
-    // This defines the camera's orientation.
 
-    // Forward vector: direction from camera position to look_at point
-    // WGSL subtraction of vec3 is component-wise.
-    let cam_forward_dir: vec3<f32> = normalize(camera.look_at - camera.position);
-
-    // Right vector: cross product of forward and world up vector.
-    // Ensure camera.up is not collinear with cam_forward_dir for robust behavior.
-    // (Robust handling for collinear cases is omitted for brevity here but important in practice)
-    let cam_right_dir: vec3<f32> = normalize(cross(cam_forward_dir, camera.up));
-    
-    // Actual Up vector for the camera: re-calculate by crossing right and forward.
-    // This ensures the up vector is orthogonal to both right and forward vectors.
-    let cam_up_actual_dir: vec3<f32> = normalize(cross(cam_right_dir, cam_forward_dir));
-
-    // 5. Transform the local ray direction to world space
-    // The local ray (local_ray_x, local_ray_y, local_ray_z) is in camera space.
-    // We transform it using the camera's basis vectors (cam_right_dir, cam_up_actual_dir, cam_forward_dir).
-    // local_ray_z is -1.0, meaning 1.0 unit along the cam_forward_dir direction (camera's -Z local is world forward).
-    // WGSL multiplication of vec3 by scalar is component-wise.
-    let world_direction_unnormalized: vec3<f32> =
-        cam_right_dir * local_ray_x +       // X component along camera's right
-        cam_up_actual_dir * local_ray_y +   // Y component along camera's up
-        cam_forward_dir * (-local_ray_z);   // Z component along camera's forward
-                                            // (-local_ray_z is +1.0, so it's 1.0 * cam_forward_dir)
-
-    let world_direction: vec3<f32> = normalize(world_direction_unnormalized);
-
-    // 6. The ray's origin is the camera's position
-    let ray_origin: vec3<f32> = camera.position;
-
-    return Ray(ray_origin, world_direction); // WGSL struct constructor syntax
 }
 
 struct Octant {
@@ -118,7 +70,7 @@ const OCTREE_MAX_SCALE:u32 =23;
 const OCTREE_MAX_STEPS:u32 = 1000;
 const OCTREE_EPSILON:f32 = 1.1920929e-7;
 
-const camera = CameraParams(vec3(4.0,130.0,1.0),vec3(7.0,130,7.0),vec3(0.0,1.0,0.0),70.0,16.0/9.0);
+const camera = CameraParams(vec3(4.0,130.0,1.0),vec3(7.0,130.0,7.0),vec3(0.0,1.0,0.0),70.0,16.0/9.0);
 
 @compute @workgroup_size(8,8)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
@@ -175,7 +127,7 @@ fn intersect_octree(global_id:vec3<u32>,ray_origin: vec3<f32>, ray_direction: ve
 
     var parent_octant_idx: u32 = root;
 
-    var sign_mask: u32 = u32(1) << 31;
+    var sign_mask: u32 = 1u << 31u;
 
     let epsilon_bits_without_sign: u32 = bitcast<u32>(OCTREE_EPSILON) & (~sign_mask);
 
@@ -188,7 +140,6 @@ fn intersect_octree(global_id:vec3<u32>,ray_origin: vec3<f32>, ray_direction: ve
         if abs(rd.z) < OCTREE_EPSILON{
         rd.z = bitcast<f32>(epsilon_bits_without_sign | (bitcast<u32>(rd.z) & sign_mask));
     }
-        output[global_id.x+global_id.y*1280] = vec4(rd,1);
 
 /*     let rd_abs:vec3<f32> = abs(rd);
 
@@ -203,16 +154,17 @@ fn intersect_octree(global_id:vec3<u32>,ray_origin: vec3<f32>, ray_direction: ve
     var t_bias:vec3<f32> = t_coef*ro;
 
     var mirror_mask:u32 = 0;
-    if rd.x>0{
-        mirror_mask ^= 1;
+
+    if rd.x>0.0{
+        mirror_mask |= 1;
         t_bias.x = 3.0*t_coef.x -t_bias.x;
     }
-    if rd.y>0{
-        mirror_mask ^= 2;
+    if rd.y>0.0{
+        mirror_mask |= 2;
         t_bias.y = 3.0*t_coef.y -t_bias.y;
     }
-    if rd.z>0{
-        mirror_mask ^= 4;
+    if rd.z>0.0{
+        mirror_mask |= 4;
         t_bias.z = 3.0*t_coef.z -t_bias.z;
     }
 
@@ -237,18 +189,18 @@ fn intersect_octree(global_id:vec3<u32>,ray_origin: vec3<f32>, ray_direction: ve
 
     var pos : vec3<f32> = vec3(1.0);
 
-    if t_min< (1.5*t_coef.x-t_bias.x){
-        idx ^= 1;
+    if t_min<(1.5*t_coef.x-t_bias.x){
+        idx |= 1;
         pos.x=1.5;
     }
     
     if t_min< (1.5*t_coef.y-t_bias.y){
-        idx ^= 2;
+        idx |= 2;
         pos.y=1.5;
     }
     
     if t_min< (1.5*t_coef.z-t_bias.z){
-        idx ^= 4;
+        idx |= 4;
         pos.z=1.5;
     }
 
@@ -273,31 +225,33 @@ fn intersect_octree(global_id:vec3<u32>,ray_origin: vec3<f32>, ray_direction: ve
 
         let unmirrored_idx:u32 = idx^mirror_mask;
         let octant:Octant = octree[parent_octant_idx];
-          switch unmirrored_idx{
+        
+        let nine = 9u;
+          switch nine{
             case 0u:{
-                output[global_id.x+global_id.y*1280] = vec4(1,0,0,1);//red
+                output[global_id.x+global_id.y*1280] = vec4(0,0,0,1);//red
             }
             case 1u:{
 
-                output[global_id.x+global_id.y*1280] = vec4(0,1,0,1);//green
-            }
-            case 2u:{
                 output[global_id.x+global_id.y*1280] = vec4(0,0,1,1);//blue
             }
+            case 2u:{
+                output[global_id.x+global_id.y*1280] = vec4(0,1,0,1);//green
+            }
             case 3u:{
-                output[global_id.x+global_id.y*1280] = vec4(1,1,0,1);//yellow
-            }
-            case 4u:{
-                output[global_id.x+global_id.y*1280] = vec4(1,0,1,1);//magenta
-            }
-            case 5u:{
                 output[global_id.x+global_id.y*1280] = vec4(0,1,1,1);//cyan
             }
+            case 4u:{
+                output[global_id.x+global_id.y*1280] = vec4(1,0,0,1);//red
+            }
+            case 5u:{
+                output[global_id.x+global_id.y*1280] = vec4(1,0,1,1);//magenta
+            }
             case 6u:{
-                output[global_id.x+global_id.y*1280] = vec4(1,1,1,1);//white
+                output[global_id.x+global_id.y*1280] = vec4(1,1,0,1);//yellow
             }
             case 7u:{
-                output[global_id.x+global_id.y*1280] = vec4(0,0,0,1);//black
+                output[global_id.x+global_id.y*1280] = vec4(1,1,1,1);//white
             }
             default {
 
@@ -307,18 +261,15 @@ fn intersect_octree(global_id:vec3<u32>,ray_origin: vec3<f32>, ray_direction: ve
 
 
         var header:u32 = octant.header[unmirrored_idx/2];
-        if header!=0{
-            output[global_id.x+global_id.y*1280] = vec4(.1,.1,.1,1);
-            return;
-        }
+
         if (unmirrored_idx&1)!=0u{
             header>>=16;
         }
 
         let is_child:bool = (header & 1)!=0;
         if(is_child){
-                            output[global_id.x+global_id.y*1280] = vec4(1,0,1,1);
-
+            output[global_id.x+global_id.y*1280] = vec4(1,0,1,1);
+            return;
         }
         let is_leaf:bool =(header & (1<<8))!=0;
 
@@ -425,7 +376,7 @@ fn intersect_octree(global_id:vec3<u32>,ray_origin: vec3<f32>, ray_direction: ve
         //advance step
 
         //calculate how to step child index
-        let t_corner_le_tc_max :vec3<bool> = t_corner < vec3(tc_max);
+        let t_corner_le_tc_max :vec3<bool> = t_corner <= vec3(tc_max);
         let step_mask:u32 = vec_to_bitmask(t_corner_le_tc_max);
         let next_pos_components = pos - scale_exp2;
         pos = select(pos,next_pos_components,t_corner_le_tc_max);

@@ -389,7 +389,7 @@ impl Octree<ResourceModel> {
             }
         });
 
-        for _ in 0..OCTREE_MAX_STEPS {
+        for i in 0..OCTREE_MAX_STEPS {
             if max_dst >= 0.0 && t_min > max_dst {
                 return false;
             }

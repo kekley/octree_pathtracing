@@ -44,7 +44,7 @@ pub struct Application {
 pub fn load_world() -> (ModelManager, Scene) {
     let model_manager = ModelManager::new();
     let minecraft_loader = &model_manager.resource_loader;
-    let world = minecraft_loader.open_world("./assets/worlds/server");
+    let world = minecraft_loader.open_world("./assets/test_worlds/world1");
     let air = minecraft_loader.rodeo.get_or_intern("minecraft:air");
     let cave_air = minecraft_loader.rodeo.get_or_intern("minecraft:cave_air");
     let birch_wall_sign = minecraft_loader
