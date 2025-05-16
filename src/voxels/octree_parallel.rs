@@ -114,13 +114,14 @@ impl Octree<ResourceModel> {
                 child.parent = Some(*parent_id);
                 return;
             }
+            dbg!(&child_pos);
             let region_coords: RegionCoords = WorldCoords {
                 x: child_pos.x() as i64 + offset.x,
                 y: child_pos.y() as i64 + offset.y,
                 z: child_pos.z() as i64 + offset.z,
             }
             .into();
-
+            dbg!(region_coords);
             if let Some(region) = world.load_region(region_coords) {
                 if let Some(value) =
                     self.construct_region_level(size, &region, model_manager, offset, child_pos)

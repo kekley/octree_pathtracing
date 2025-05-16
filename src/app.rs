@@ -76,7 +76,7 @@ pub fn load_world() -> (ModelManager, Scene) {
 }
 fn load_world_2() -> (ModelManager, Scene) {
     let origin = WorldCoords { x: 0, y: 0, z: 0 };
-    let depth = 10;
+    let depth = 12;
     let model_manager = ModelManager::new();
     let minecraft_loader = &model_manager.resource_loader;
     let world = minecraft_loader
@@ -123,11 +123,11 @@ impl eframe::App for Application {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         if self.scene.is_none() {
             let start = Instant::now();
-            info!("Building Scene...");
+            println!("Building Scene...");
             self.build_scene();
             let end = Instant::now();
             let duration = end.duration_since(start);
-            info!("Took {duration:?} to build scene");
+            println!("Took {duration:?} to build scene");
         };
         if self.render_texture.is_some() {
             let lock = self.scene.as_ref().unwrap().read().unwrap();
