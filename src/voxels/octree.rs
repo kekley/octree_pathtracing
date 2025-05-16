@@ -126,7 +126,7 @@ pub struct Octant<T> {
 }
 
 impl<T> Octant<T> {
-    fn set_child(&mut self, idx: u8, child: Child<T>) -> Child<T> {
+    pub fn set_child(&mut self, idx: u8, child: Child<T>) -> Child<T> {
         let idx = idx as usize;
         if self.children[idx].is_none() && !child.is_none() {
             self.child_count += 1;
@@ -402,7 +402,7 @@ impl<T> Octree<T> {
         self.depth += by
     }
 
-    fn new_octant(&mut self, parent: Option<OctantId>) -> OctantId {
+    pub(crate) fn new_octant(&mut self, parent: Option<OctantId>) -> OctantId {
         if let Some(free_id) = self.free_list.pop() {
             self.octants[free_id as usize].parent = parent;
             return free_id;

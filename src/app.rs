@@ -14,9 +14,9 @@ use eframe::{
         TextureUsages, TextureView, TextureViewDescriptor,
     },
 };
-use glam::{UVec3, Vec3};
+use glam::{I64Vec3, UVec3, Vec3};
 use log::info;
-use spider_eye::loaded_world::WorldCoords;
+use spider_eye::loaded_world::{World, WorldCoords};
 
 use crate::{
     gpu_test,
@@ -46,16 +46,9 @@ pub fn load_world() -> (ModelManager, Scene) {
     let model_manager = ModelManager::new();
     let minecraft_loader = &model_manager.resource_loader;
     let world = minecraft_loader
-        .open_world("/mnt/860evo/Rust/ray_tracing/assets/worlds/test_world")
+        .open_world("./assets/worlds/test_world")
         .unwrap();
-    let air = minecraft_loader.rodeo.get_or_intern("minecraft:air");
-    let cave_air = minecraft_loader.rodeo.get_or_intern("minecraft:cave_air");
-    let birch_wall_sign = minecraft_loader
-        .rodeo
-        .get_or_intern("minecraft:birch_wall_sign");
-    let bubble_column = minecraft_loader
-        .rodeo
-        .get_or_intern("minecraft:bubble_column");
+
     let f = |position: UVec3| -> Option<ResourceModel> {
         let UVec3 { x, y, z } = position;
         //println!("position: {}", position);
@@ -78,6 +71,19 @@ pub fn load_world() -> (ModelManager, Scene) {
     let tree: Octree<ResourceModel> = Octree::construct_parallel(8, &f);
     dbg!(tree.octants.len());
     let scene = model_manager.build(tree);
+    //println!("{:?}", tree);
+    (model_manager, scene)
+}
+fn load_world_2() -> (ModelManager, Scene) {
+    let origin = WorldCoords { x: 0, y: 0, z: 0 };
+    let depth = 10;
+    let model_manager = ModelManager::new();
+    let minecraft_loader = &model_manager.resource_loader;
+    let world = minecraft_loader
+        .open_world("./assets/worlds/test_world")
+        .unwrap();
+    let octree = Octree::load_mc_world::<UVec3>(origin, depth, world, &model_manager);
+    let scene = model_manager.build(octree);
     //println!("{:?}", tree);
     (model_manager, scene)
 }
@@ -108,7 +114,7 @@ fn pixel_slice_to_u8_slice(slice: &[U8Color]) -> &[u8] {
 
 impl Application {
     pub fn build_scene(&mut self) {
-        let a = load_world();
+        let a = load_world_2();
         self.model_manager = a.0;
         self.scene = Some(Arc::new(RwLock::new(a.1)));
     }
@@ -130,12 +136,12 @@ impl eframe::App for Application {
             let renderer = render_state.renderer.read();
             let opt = renderer.texture(&texture.id());
             if let Some(texture) = opt {
-                gpu_test::compute(
+                /*                 gpu_test::compute(
                     &lock.octree,
                     &render_state.device,
                     &render_state.queue,
                     texture,
-                );
+                ); */
             };
         }
 

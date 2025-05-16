@@ -41,8 +41,7 @@ pub fn compute(
 
     let octant_data = octree_.octants;
 
-    let shader_code =
-        fs::read_to_string("/mnt/860evo/Rust/ray_tracing/assets/shaders/svo.wgsl").unwrap();
+    let shader_code = fs::read_to_string("./assets/shaders/svo.wgsl").unwrap();
     let module = device.create_shader_module(ShaderModuleDescriptor {
         label: None,
         source: ShaderSource::Wgsl(std::borrow::Cow::Borrowed(&shader_code)),
