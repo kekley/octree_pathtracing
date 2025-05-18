@@ -22,10 +22,7 @@ use crate::{
     RTWImage,
 };
 
-use super::{
-    material::Material,
-    texture::{Texture},
-};
+use super::{material::Material, texture::Texture};
 
 pub type TextureID = u32;
 pub type QuadID = u32;
@@ -52,6 +49,12 @@ impl Default for ModelManager {
 }
 
 impl ModelManager {
+    pub fn seen_blocks(&self) -> usize {
+        self.seen_blocks.len()
+    }
+    pub fn seen_materials(&self) -> usize {
+        self.seen_materials.len()
+    }
     pub fn load_resource(&self, block: &InternedBlock) -> Option<ResourceModel> {
         if let Some(model) = self.seen_blocks.get(block) {
             return model.clone();
@@ -191,17 +194,19 @@ impl ModelManager {
                         .clone()
                 } else {
                     let a = self.resource_loader.resolve_spur(&texture.0);
-                    //dbg!(a);
+
                     let tex_path = self.resource_loader.get_texture_path(
                         self.resource_loader
                             .resolve_spur(&current_texture_var.get_inner()),
                     );
                     //dbg!(&tex_path);
                     let texture_image = Arc::new(RTWImage::load(&tex_path).unwrap());
-                    let texture = Texture::Image(texture_image);
-                    let material = Material::new().albedo(texture).build();
+                    let texture_obj = Texture::Image(texture_image);
+                    let material = Material::new().albedo(texture_obj).build();
+
                     let mut materials_lock = self.materials.write();
                     let material_id = materials_lock.len() as MaterialID;
+                    self.seen_materials.insert(texture.0, material_id);
                     materials_lock.push(material);
                     material_id
                 };

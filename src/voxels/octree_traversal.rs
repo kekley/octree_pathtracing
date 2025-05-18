@@ -52,16 +52,6 @@ impl Position for Vec3A {
     }
 }
 
-#[derive(Debug)]
-pub struct OctreeIntersectResult<'a, T> {
-    pub ty: &'a T,
-    pub voxel_position: Vec3A,
-    pub uv: Vec2,
-    pub face: Face,
-    pub t0: f32,
-    pub t1: f32,
-}
-
 impl Octree<ResourceModel> {
     pub fn intersect_octree_path_tracer(
         &self,
@@ -147,8 +137,9 @@ impl Octree<ResourceModel> {
 
             let unmirrored_child_index = index ^ mirror_mask;
 
-            let child =
-                &self.octants[octant_index as usize].children[unmirrored_child_index as usize];
+            let child = &self.octants[octant_index as usize].children
+                [unmirrored_child_index as usize]
+                .clone();
 
             if !child.is_none() && t_min <= t_max {
                 if child.is_leaf() && t_min >= 0.0 {

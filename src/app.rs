@@ -25,7 +25,7 @@ use crate::{
         scene::Scene,
         tile_renderer::{RendererMode, RendererStatus, TileRenderer, U8Color},
     },
-    voxels::octree::Octree,
+    voxels::{octree::Octree, octree_parallel::ParallelOctree},
 };
 
 pub struct Application {
@@ -42,7 +42,7 @@ pub struct Application {
     local_target_spp: u32,
     local_camera_position: Vec3,
 }
-pub fn load_world() -> (ModelManager, Scene) {
+/* pub fn load_world() -> (ModelManager, Scene) {
     let model_manager = ModelManager::new();
     let minecraft_loader = &model_manager.resource_loader;
     let world = minecraft_loader
@@ -73,17 +73,18 @@ pub fn load_world() -> (ModelManager, Scene) {
     let scene = model_manager.build(tree);
     //println!("{:?}", tree);
     (model_manager, scene)
-}
+} */
 fn load_world_2() -> (ModelManager, Scene) {
-    let origin = WorldCoords { x: 0, y: 0, z: 0 };
+    let origin = WorldCoords { x: 0, y: -64, z: 0 };
     let depth = 12;
     let model_manager = ModelManager::new();
     let minecraft_loader = &model_manager.resource_loader;
     let world = minecraft_loader
         .open_world("./assets/worlds/test_world")
         .unwrap();
-    let octree = Octree::load_mc_world::<UVec3>(origin, depth, world, &model_manager);
-    let scene = model_manager.build(octree);
+    let octree = ParallelOctree::load_mc_world::<UVec3>(origin, depth, world, &model_manager);
+    dbg!(model_manager.seen_blocks(), model_manager.seen_materials());
+    let scene = model_manager.build(octree.into());
     //println!("{:?}", tree);
     (model_manager, scene)
 }

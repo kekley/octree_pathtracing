@@ -1,4 +1,4 @@
-use std::{fmt::Debug, u32};
+use std::{fmt::Debug, u16, u32};
 
 use crate::{
     ray_tracing::resource_manager::ResourceModel,
@@ -21,7 +21,7 @@ pub struct TraversalContext {
 #[repr(C, align(16))]
 #[derive(Debug, Copy, Clone, Pod, Zeroable)]
 pub struct GPUOctreeNode {
-    data: [u32; 8],
+    data: [u32; 12],
 }
 
 impl From<&Octant<ResourceModel>> for GPUOctreeNode {
@@ -31,41 +31,37 @@ impl From<&Octant<ResourceModel>> for GPUOctreeNode {
             child_count,
             children,
         } = value;
-        let mut data = [0u32; 8];
+        let mut data = [0u32; 12];
         children
             .iter()
             .enumerate()
             .for_each(|(i, child)| match child {
                 crate::voxels::octree::Child::None => {}
                 crate::voxels::octree::Child::Octant(ind) => {
-                    let child_presence_flag: u32 = (1u32 << i) << 16;
-                    data[0] |= child_presence_flag;
-                    util::write_u30_to_u32_arr(16 + i * 30, *ind, &mut data);
+                    let child_mask: u32 = u8::MAX as u32;
+                    data[i / 2] |= child_mask << (16 * (i % 2));
+                    data[4 + i] = *ind;
                 }
                 crate::voxels::octree::Child::Leaf(val) => {
-                    let bits: u32 = ((1 << i) | (1 << (i + 8))) << 16;
-                    data[0] |= bits as u32;
-                    let index = val.get_first_index();
-                    util::write_u30_to_u32_arr(16 + i * 30, index, &mut data);
+                    let bits: u32 = u16::MAX as u32;
+                    data[i / 2] |= bits << (16 * (i % 2));
+                    data[4 + i] = val.get_first_index();
                 }
             });
         children.iter().enumerate().for_each(|(i, child)| {
-            let is_child = (data[0] >> 16) & (1 << i);
-            let is_leaf = (data[0] >> 16) & (1 << 8 + i);
+            let is_child = ((data[i / 2] >> (16 * (i % 2))) & 0x0000FFFF) & u8::MAX as u32 != 0;
+            let is_leaf = ((data[i / 2] >> (16 * (i % 2))) & 0x0000FFFF) ^ u16::MAX as u32 == 0;
 
-            assert!(!child.is_none() == (is_child != 0));
-            assert!(child.is_leaf() == (is_leaf != 0));
-            if is_child != 0 {
-                if is_leaf != 0 {
+            assert!(!child.is_none() == is_child);
+            assert!(child.is_leaf() == is_leaf);
+            if is_child {
+                if is_leaf {
                     assert_eq!(
                         child.get_leaf_value().unwrap().get_first_index(),
-                        util::extract_u30_from_u32_arr(&data, 16 + i * 30)
+                        data[4 + i]
                     );
                 } else {
-                    assert_eq!(
-                        child.get_octant_value().unwrap(),
-                        util::extract_u30_from_u32_arr(&data, 16 + i * 30)
-                    );
+                    assert_eq!(child.get_octant_value().unwrap(), data[4 + i]);
                 }
             }
         });

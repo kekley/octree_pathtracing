@@ -2,8 +2,8 @@ extern crate ray_tracing;
 
 use anyhow::Context;
 use eframe::wgpu::{
-    self, BackendOptions, Backends, DeviceDescriptor, Features, InstanceDescriptor, InstanceFlags,
-    Limits, RequestAdapterOptions,
+    self, hal::auxil::db, BackendOptions, Backends, DeviceDescriptor, Features, InstanceDescriptor,
+    InstanceFlags, Limits, RequestAdapterOptions,
 };
 use egui_wgpu::{WgpuSetupCreateNew, WgpuSetupExisting};
 use ray_tracing::Application;
@@ -33,10 +33,12 @@ fn ui() -> eframe::Result {
     });
 
     let adapter = pollster::block_on(future).unwrap();
+    let limits = adapter.limits();
+    dbg!(limits.max_buffer_size);
     let device_descriptor = DeviceDescriptor {
         label: None,
         required_features: Features::SHADER_INT64,
-        required_limits: Limits::default(),
+        required_limits: limits,
         memory_hints: wgpu::MemoryHints::Performance,
     };
 

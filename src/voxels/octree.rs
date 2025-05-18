@@ -1,16 +1,16 @@
-use std::{fmt::Debug, hash::Hash, mem};
+use std::{array, fmt::Debug, hash::Hash, mem};
 
-use glam::UVec3;
-use rayon::iter::ParallelIterator;
+use glam::{I64Vec3, UVec3};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use spider_eye::{
+    chunk::Chunk,
+    loaded_world::{ChunkCoords, RegionCoords, World, WorldCoords},
+    region::{LazyRegion, LoadedRegion},
+};
 
-pub type OctantId = u32;
+use crate::ray_tracing::resource_manager::{ModelManager, ResourceModel};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub struct LeafId {
-    pub parent: OctantId,
-    pub idx: u8,
-}
-
+use super::octree_parallel::ParallelOctree;
 pub trait Position: Copy + Clone + Debug + Sized {
     fn construct(x: u32, y: u32, z: u32) -> Self;
     fn idx(&self) -> u8;
@@ -57,8 +57,15 @@ impl Position for UVec3 {
     }
 }
 
-#[repr(C)]
-#[derive(Debug, Default, Clone)]
+pub type OctantId = u32;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
+pub struct LeafId {
+    pub parent: OctantId,
+    pub idx: u8,
+}
+
+#[derive(Debug, Default, Clone, Copy)]
 pub enum Child<T> {
     #[default]
     None,
@@ -118,14 +125,14 @@ impl<T: PartialEq> PartialEq for Child<T> {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Octant<T> {
     pub parent: Option<OctantId>,
     pub child_count: u8,
     pub children: [Child<T>; 8],
 }
 
-impl<T> Octant<T> {
+impl<T: Copy> Octant<T> {
     pub fn set_child(&mut self, idx: u8, child: Child<T>) -> Child<T> {
         let idx = idx as usize;
         if self.children[idx].is_none() && !child.is_none() {
@@ -142,7 +149,7 @@ impl<T> Octant<T> {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct Octree<T> {
+pub struct Octree<T: Copy> {
     pub octree_scale: f32,
     pub root: Option<OctantId>,
     pub octants: Vec<Octant<T>>,
@@ -150,7 +157,7 @@ pub struct Octree<T> {
     pub depth: u8,
 }
 
-impl<T> Octree<T> {
+impl<T: Copy> Octree<T> {
     pub fn new() -> Self {
         Self::new_in()
     }
@@ -160,7 +167,7 @@ impl<T> Octree<T> {
     }
 }
 
-impl<T: PartialEq> PartialEq for Octree<T> {
+impl<T: PartialEq + Copy> PartialEq for Octree<T> {
     fn eq(&self, other: &Self) -> bool {
         self.root.eq(&other.root)
             && self.octants.eq(&other.octants)
@@ -169,7 +176,7 @@ impl<T: PartialEq> PartialEq for Octree<T> {
     }
 }
 
-impl<T> Octree<T> {
+impl<T: Copy> Octree<T> {
     fn new_in() -> Self {
         Self::with_capacity_in(0)
     }
@@ -492,5 +499,371 @@ impl<T> Octree<T> {
 
     pub fn depth(&self) -> u8 {
         self.depth
+    }
+}
+impl Octree<ResourceModel> {
+    pub fn load_mc_world<P: Position>(
+        origin: WorldCoords,
+        depth: u8,
+        world: World,
+        model_manager: &ModelManager,
+    ) -> Self {
+        let size = 2u32.pow(depth as u32);
+        let mut octree = Octree::<ResourceModel>::new();
+        let offset = I64Vec3::new(origin.x, origin.y, origin.z);
+        let pos = P::construct(0, 0, 0);
+        let result = match size {
+            //single chunk
+            1..=2 => {
+                let region = world.load_region(origin.into());
+                if let Some(region) = region {
+                    let chunk_coords: ChunkCoords = origin.into();
+                    if let Some(chunk) = region.get_chunk(
+                        (chunk_coords.x.abs() % 32) as u32,
+                        (chunk_coords.z.abs() % 32) as u32,
+                    ) {
+                        octree.construct_block_level(chunk, model_manager, offset, pos)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+            3..=16 => {
+                let region = world.load_region(origin.into());
+                if let Some(region) = region {
+                    let chunk_coords: ChunkCoords = origin.into();
+                    if let Some(chunk) = region.get_chunk(
+                        (chunk_coords.x.abs() % 32) as u32,
+                        (chunk_coords.z.abs() % 32) as u32,
+                    ) {
+                        octree.construct_chunk_level(size, chunk, model_manager, offset, pos)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+            17..=1024 => {
+                let region = world.get_region_lazy(origin.into());
+                if let Some(region) = region {
+                    octree.construct_region_level(size, &region, model_manager, offset, pos)
+                } else {
+                    None
+                }
+            }
+            1025..=u32::MAX => {
+                octree.construct_world_level(size, &world, model_manager, offset, pos)
+            }
+            _ => {
+                unreachable!()
+            }
+        };
+        if let Some(result) = result {
+            octree.root = Some(result);
+            octree.depth = depth;
+            octree.octree_scale = f32::exp2(-(depth as f32));
+            return octree;
+        }
+        panic!()
+    }
+    //call when size is 2049-inf
+    #[inline(always)]
+
+    fn construct_world_level<P: Position>(
+        &mut self,
+        size: u32,
+        world: &World,
+        model_manager: &ModelManager,
+        offset: I64Vec3,
+        pos: P,
+    ) -> Option<OctantId> {
+        let size = size / 2;
+        let mut new_parent = None;
+
+        (0..8).for_each(|i| {
+            let child_pos = P::construct(
+                pos.x() + size * ((i as u32) & 1),
+                pos.y() + size * ((i as u32 >> 1) & 1),
+                pos.z() + size * ((i as u32 >> 2) & 1),
+            );
+
+            if size > 1024 {
+                let child_id =
+                    self.construct_world_level(size, world, model_manager, offset, child_pos);
+                let Some(child_id) = child_id else {
+                    return;
+                };
+
+                let parent_id = new_parent.get_or_insert_with(|| self.new_octant(None));
+                self.octants[*parent_id as usize].set_child(i, Child::Octant(child_id));
+                let child = &mut self.octants[child_id as usize];
+                child.parent = Some(*parent_id);
+                return;
+            }
+            dbg!(&child_pos);
+            let region_coords: RegionCoords = WorldCoords {
+                x: child_pos.x() as i64 + offset.x,
+                y: child_pos.y() as i64 + offset.y,
+                z: child_pos.z() as i64 + offset.z,
+            }
+            .into();
+            dbg!(region_coords);
+            if let Some(region) = world.get_region_lazy(region_coords) {
+                if let Some(value) =
+                    self.construct_region_level(size, &region, model_manager, offset, child_pos)
+                {
+                    let parent_id = new_parent.get_or_insert_with(|| self.new_octant(None));
+                    self.octants[*parent_id as usize].set_child(i, Child::Octant(value));
+                }
+            }
+        });
+        new_parent
+    }
+    //call when size is between 17-1024
+    #[inline(always)]
+
+    fn construct_region_level<P: Position>(
+        &mut self,
+        size: u32,
+        region: &LazyRegion,
+        model_manager: &ModelManager,
+        offset: I64Vec3,
+        pos: P,
+    ) -> Option<OctantId> {
+        let size = size / 2;
+        let mut new_parent = None;
+
+        (0..8).for_each(|i| {
+            let child_pos = P::construct(
+                pos.x() + size * ((i as u32) & 1),
+                pos.y() + size * ((i as u32 >> 1) & 1),
+                pos.z() + size * ((i as u32 >> 2) & 1),
+            );
+            if size > 16 {
+                let child_id =
+                    self.construct_region_level(size, region, model_manager, offset, child_pos);
+                let Some(child_id) = child_id else {
+                    return;
+                };
+
+                let parent_id = new_parent.get_or_insert_with(|| self.new_octant(None));
+                self.octants[*parent_id as usize].set_child(i, Child::Octant(child_id));
+                let child = &mut self.octants[child_id as usize];
+                child.parent = Some(*parent_id);
+                return;
+            }
+            let chunk_coords: ChunkCoords = WorldCoords {
+                x: child_pos.x() as i64 + offset.x,
+                y: child_pos.y() as i64 + offset.y,
+                z: child_pos.z() as i64 + offset.z,
+            }
+            .into();
+
+            if let Some(chunk) = region.get_chunk(chunk_coords) {
+                if let Some(value) =
+                    self.construct_chunk_level(size, &chunk, model_manager, offset, child_pos)
+                {
+                    let parent_id = new_parent.get_or_insert_with(|| self.new_octant(None));
+                    self.octants[*parent_id as usize].set_child(i, Child::Octant(value));
+                }
+            }
+        });
+        new_parent
+    }
+    //call this when size is between 3-16
+    #[inline(always)]
+
+    fn construct_chunk_level<P: Position>(
+        &mut self,
+        size: u32,
+        chunk: &Chunk,
+        model_manager: &ModelManager,
+        offset: I64Vec3,
+        pos: P,
+    ) -> Option<OctantId> {
+        let size = size / 2;
+        let mut new_parent = None;
+
+        (0..8).for_each(|i| {
+            let child_pos = P::construct(
+                pos.x() + size * ((i as u32) & 1),
+                pos.y() + size * ((i as u32 >> 1) & 1),
+                pos.z() + size * ((i as u32 >> 2) & 1),
+            );
+            if size > 2 {
+                let child_id =
+                    self.construct_chunk_level(size, chunk, model_manager, offset, child_pos);
+                let Some(child_id) = child_id else {
+                    return;
+                };
+
+                let parent_id = new_parent.get_or_insert_with(|| self.new_octant(None));
+                self.octants[*parent_id as usize].set_child(i, Child::Octant(child_id));
+                let child = &mut self.octants[child_id as usize];
+                child.parent = Some(*parent_id);
+                return;
+            }
+            if let Some(value) = self.construct_block_level(chunk, model_manager, offset, child_pos)
+            {
+                let parent_id = new_parent.get_or_insert_with(|| self.new_octant(None));
+                self.octants[*parent_id as usize].set_child(i, Child::Octant(value));
+            }
+        });
+        new_parent
+    }
+    //returns an octant right above the leaf level. call this when size is 2
+    #[inline(always)]
+
+    fn construct_block_level<P: Position>(
+        &mut self,
+        chunk: &Chunk,
+        model_manager: &ModelManager,
+        offset: I64Vec3,
+        pos: P,
+    ) -> Option<OctantId> {
+        let mut new_parent: Option<OctantId> = None;
+        (0..8).for_each(|child_idx| {
+            let child_pos = WorldCoords {
+                x: ((pos.x() + ((child_idx as u32) & 1)) as i64) + offset.x,
+                y: ((pos.y() + ((child_idx as u32 >> 1) & 1)) as i64) + offset.y,
+                z: ((pos.z() + ((child_idx as u32 >> 2) & 1)) as i64) + offset.z,
+            };
+            if let Some(block) = chunk.get_world_block(child_pos) {
+                if let Some(model) = model_manager.load_resource(block) {
+                    let parent_id = new_parent.get_or_insert_with(|| self.new_octant(None));
+                    self.octants[*parent_id as usize].set_child(child_idx, Child::Leaf(model));
+                }
+            }
+        });
+        new_parent
+    }
+}
+impl Octree<ResourceModel> {
+    pub fn construct_parallel<P: Position, F: Fn(P) -> Option<ResourceModel> + Sync>(
+        depth: u8,
+        f: F,
+    ) -> Self {
+        let size = 2f32.powi((depth - 1) as i32) as u32;
+        let a = (0u8..8)
+            .into_par_iter()
+            .map(|i: u8| {
+                let child_pos = P::construct(
+                    0 + size * ((i as u32) & 1),
+                    0 + size * ((i as u32 >> 1) & 1),
+                    0 + size * ((i as u32 >> 2) & 1),
+                );
+                let mut subtree: Octree<ResourceModel> = Octree::with_capacity(5000);
+                if let Some(result) = subtree.construct_octants_with_impl(size, child_pos, &f) {
+                    subtree.root = Some(result);
+                    subtree.depth = depth - 1;
+                }
+                subtree
+            })
+            .collect::<Vec<Octree<ResourceModel>>>();
+        let array: [Octree<ResourceModel>; 8] = a.try_into().unwrap();
+
+        Octree::consume_octrees_of_depth(array, depth - 1).unwrap()
+    }
+
+    pub fn consume_octrees_of_depth(
+        trees: [Octree<ResourceModel>; 8],
+        subtree_depth: u8,
+    ) -> Result<Octree<ResourceModel>, ()> {
+        let child_array: [Child<ResourceModel>; 8] = array::from_fn(|_| Default::default());
+        let root_octant = Octant {
+            parent: None,
+            child_count: 0,
+            children: child_array,
+        };
+        let mut roots: [Option<OctantId>; 8] = [None; 8];
+        let mut new_octant_vec: Vec<Octant<ResourceModel>> = Vec::new();
+        new_octant_vec.push(root_octant);
+        let mut new_free_list: Vec<u32> = Vec::new();
+        trees.into_iter().enumerate().for_each(|(i, tree)| {
+            let Octree::<ResourceModel> {
+                root,
+                mut octants,
+                mut free_list,
+                depth,
+                octree_scale,
+            } = tree;
+
+            if root.is_some() {
+                let root = root.unwrap();
+                if depth != subtree_depth {
+                    return;
+                }
+                octants.iter_mut().for_each(|octant| {
+                    if let Some(parent_value) = octant.parent {
+                        octant.parent = Some(parent_value + new_octant_vec.len() as u32);
+                    }
+                    octant.children.iter_mut().for_each(|child| match child {
+                        Child::Octant(id) => *id = *id + new_octant_vec.len() as u32,
+                        _ => {}
+                    });
+                });
+
+                free_list.iter_mut().for_each(|id| {
+                    *id += new_octant_vec.len() as u32;
+                });
+                //println!("{:?}", octants[root as usize]);
+                roots[i] = Some(root + new_octant_vec.len() as u32);
+                new_octant_vec.extend(octants);
+                new_free_list.extend(free_list);
+            }
+        });
+        let root_octant = new_octant_vec.get_mut(0).unwrap();
+        let mut child_count = 0;
+        root_octant
+            .children
+            .iter_mut()
+            .enumerate()
+            .for_each(|(i, child)| {
+                *child = {
+                    match roots[i] {
+                        Some(root) => {
+                            child_count += 1;
+                            Child::Octant(root)
+                        }
+                        None => Child::None,
+                    }
+                }
+            });
+        root_octant.child_count = child_count;
+        let mut new_octree: Octree<ResourceModel> = Octree {
+            root: Some(0),
+            octants: new_octant_vec,
+            free_list: new_free_list,
+            depth: subtree_depth + 1,
+            octree_scale: f32::exp2(-((subtree_depth + 1) as f32)),
+        };
+        new_octree.compact();
+        return Ok(new_octree);
+    }
+}
+
+impl<T: Copy> From<ParallelOctree<T>> for Octree<T> {
+    fn from(value: ParallelOctree<T>) -> Self {
+        let ParallelOctree {
+            octree_scale,
+            root,
+            octants,
+            free_list,
+            depth,
+        } = value;
+        let lock = free_list.lock().unwrap();
+        let octants_len = octants.len();
+        dbg!(octants_len);
+        let octants_vec: Vec<_> = (0..octants_len).map(|i| octants[i].get()).collect();
+        Self {
+            octree_scale: octree_scale,
+            root: root,
+            octants: octants_vec,
+            free_list: lock.clone(),
+            depth: depth,
+        }
     }
 }
