@@ -5,7 +5,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use spider_eye::{
     chunk::Chunk,
     loaded_world::{ChunkCoords, RegionCoords, World, WorldCoords},
-    region::{LazyRegion, LoadedRegion},
+    region::LazyRegion,
 };
 
 use crate::ray_tracing::resource_manager::{ModelManager, ResourceModel};

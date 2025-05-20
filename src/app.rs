@@ -4,28 +4,21 @@ use std::{
     time::{Duration, Instant},
 };
 
-use eframe::{
-    egui::{
+use eframe::egui::{
         self, load::SizedTexture, Color32, ColorImage, DragValue, Image, ImageData, Label,
-        RadioButton, TextureFilter, TextureHandle, TextureOptions,
-    },
-    wgpu::{
-        self, core::device::queue, Extent3d, TextureAspect, TextureDescriptor, TextureFormat,
-        TextureUsages, TextureView, TextureViewDescriptor,
-    },
-};
-use glam::{I64Vec3, UVec3, Vec3};
+        RadioButton, TextureHandle, TextureOptions,
+    };
+use glam::{UVec3, Vec3};
 use log::info;
-use spider_eye::loaded_world::{World, WorldCoords};
+use spider_eye::loaded_world::WorldCoords;
 
 use crate::{
-    gpu_test,
     ray_tracing::{
-        resource_manager::{ModelManager, ResourceModel},
+        resource_manager::ModelManager,
         scene::Scene,
         tile_renderer::{RendererMode, RendererStatus, TileRenderer, U8Color},
     },
-    voxels::{octree::Octree, octree_parallel::ParallelOctree},
+    voxels::octree_parallel::ParallelOctree,
 };
 
 pub struct Application {

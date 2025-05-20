@@ -1,5 +1,5 @@
 use super::{ray::Ray, resource_manager::MaterialID};
-use glam::{Affine3A, Vec2, Vec3, Vec3A, Vec4};
+use glam::{Affine3A, Vec2, Vec3A, Vec4};
 use spider_eye::{block_face::FaceName, block_texture::Uv};
 
 #[derive(Debug, Clone, Default)]

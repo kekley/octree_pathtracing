@@ -2,7 +2,6 @@ use std::{fmt::Debug, u16, u32};
 
 use crate::{
     ray_tracing::resource_manager::ResourceModel,
-    util,
     voxels::octree::{Octant, Octree},
 };
 use bytemuck::{Pod, Zeroable};

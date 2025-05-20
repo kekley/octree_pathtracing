@@ -4,11 +4,9 @@ use eframe::wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
     BindingResource, BindingType, BufferBindingType, BufferDescriptor, BufferUsages,
-    CommandEncoderDescriptor, ComputePassDescriptor, ComputePipelineDescriptor, Device,
-    DeviceDescriptor, DownlevelFlags, Extent3d, Features, Instance, InstanceDescriptor, Limits,
-    MaintainBase, MemoryHints, Origin3d, PipelineLayoutDescriptor, Queue, RequestAdapterOptions,
-    ShaderModuleDescriptor, ShaderSource, ShaderStages, StorageTextureAccess, TexelCopyTextureInfo,
-    TexelCopyTextureInfoBase, Texture, TextureDescriptor, TextureDimension, TextureFormat,
+    CommandEncoderDescriptor, ComputePassDescriptor, ComputePipelineDescriptor, Device, Extent3d,
+    MaintainBase, Origin3d, PipelineLayoutDescriptor, Queue,
+    ShaderModuleDescriptor, ShaderSource, ShaderStages, StorageTextureAccess, TexelCopyTextureInfo, TextureDescriptor, TextureDimension, TextureFormat,
     TextureUsages, TextureViewDescriptor, TextureViewDimension,
 };
 use glam::Vec4;
@@ -16,10 +14,7 @@ use log::info;
 
 use crate::{
     gpu_structs::gpu_octree::{GPUOctree, TraversalContext},
-    ray_tracing::{
-        resource_manager::ResourceModel,
-        tile_renderer::{F32Color, U8Color},
-    },
+    ray_tracing::resource_manager::ResourceModel,
     voxels::octree::Octree,
 };
 

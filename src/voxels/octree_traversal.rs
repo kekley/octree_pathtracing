@@ -2,7 +2,7 @@ use glam::{UVec3, Vec2, Vec3A};
 
 use crate::{
     ray_tracing::{
-        cuboid::{Cuboid, Face},
+        cuboid::Cuboid,
         material::Material,
         quad::Quad,
         ray::Ray,

@@ -133,7 +133,7 @@ use glam::{Vec3, Vec3A, Vec3Swizzles, Vec4, Vec4Swizzles};
 use crate::{
     random_float,
     ray_tracing::axis::UP,
-    voxels::{octree::Octree, octree_parallel::ParallelOctree},
+    voxels::octree::Octree,
 };
 
 use super::{

@@ -8,10 +8,10 @@ use lasso::Spur;
 use log::{debug, error};
 use spider_eye::{
     block::InternedBlock,
-    block_element::{ElementAxis, ElementRotation},
+    block_element::ElementRotation,
     block_face::FaceName,
     block_models::{BlockRotation, InternedBlockModel},
-    block_texture::{InternedTextureVariable, TexPath, Uv},
+    block_texture::{InternedTextureVariable, TexPath},
     variant::ModelVariant,
     MCResourceLoader,
 };

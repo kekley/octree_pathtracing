@@ -1,21 +1,18 @@
 use std::{
-    array,
     cell::Cell,
-    sync::{Arc, LazyLock, Mutex, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
     u32,
 };
 
 use aovec::Aovec;
-use dashmap::RwLock;
-use glam::{I64Vec3, IVec3};
-use lasso::ThreadedRodeo;
+use glam::I64Vec3;
 use rayon::iter::{
-    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator,
+    IndexedParallelIterator, ParallelIterator,
 };
 use spider_eye::{
-    chunk::{self, Chunk},
+    chunk::{Chunk},
     loaded_world::{ChunkCoords, RegionCoords, World, WorldCoords},
-    region::{self, LazyRegion, LoadedRegion},
+    region::{LazyRegion},
 };
 
 use crate::{
@@ -24,9 +21,8 @@ use crate::{
 };
 
 use super::octree::{Octant, OctantId, Position};
-use std::{fmt::Debug, hash::Hash, mem};
+use std::{fmt::Debug, hash::Hash};
 
-use glam::UVec3;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct LeafId {

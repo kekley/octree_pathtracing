@@ -1,11 +1,10 @@
 extern crate ray_tracing;
 
-use anyhow::Context;
 use eframe::wgpu::{
-    self, hal::auxil::db, BackendOptions, Backends, DeviceDescriptor, Features, InstanceDescriptor,
-    InstanceFlags, Limits, RequestAdapterOptions,
+    self, BackendOptions, Backends, DeviceDescriptor, Features, InstanceDescriptor,
+    InstanceFlags, RequestAdapterOptions,
 };
-use egui_wgpu::{WgpuSetupCreateNew, WgpuSetupExisting};
+use egui_wgpu::WgpuSetupExisting;
 use ray_tracing::Application;
 pub const ASPECT_RATIO: f32 = 1.5;
 
