@@ -1,9 +1,6 @@
 use super::{ray::Ray, resource_manager::MaterialID};
 use glam::{Affine3A, Vec2, Vec3, Vec3A, Vec4};
-use spider_eye::{
-    block_face::FaceName,
-    block_texture::Uv,
-};
+use spider_eye::{block_face::FaceName, block_texture::Uv};
 
 #[derive(Debug, Clone, Default)]
 pub struct Quad {
@@ -22,13 +19,13 @@ impl Quad {
     pub fn from_face_name(
         face: &FaceName,
         uv: &Option<Uv>,
-        from: &Vec3,
-        to: &Vec3,
+        from: &[f32; 3],
+        to: &[f32; 3],
         material_id: MaterialID,
     ) -> Self {
-        let from = from / 16.0;
+        let from = Vec3A::from_slice(from) / 16.0;
 
-        let to = to / 16.0;
+        let to = Vec3A::from_slice(to) / 16.0;
         let (origin, u, v) = match face {
             FaceName::Down => {
                 let origin = Vec3A::new(from.x, from.y, from.z);

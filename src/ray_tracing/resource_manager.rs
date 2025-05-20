@@ -2,14 +2,16 @@ use std::{array, sync::Arc};
 
 use dashmap::{DashMap, RwLock};
 use fxhash::FxBuildHasher;
-use glam::{Vec3, Vec3A, Vec4, Vec4Swizzles};
+use glam::{Affine3A, Quat, Vec3, Vec3A, Vec4, Vec4Swizzles};
 use hashbrown::HashMap;
 use lasso::Spur;
+use log::{debug, error};
 use spider_eye::{
     block::InternedBlock,
+    block_element::{ElementAxis, ElementRotation},
     block_face::FaceName,
     block_models::{BlockRotation, InternedBlockModel},
-    block_texture::{InternedTextureVariable, TexPath},
+    block_texture::{InternedTextureVariable, TexPath, Uv},
     variant::ModelVariant,
     MCResourceLoader,
 };
@@ -59,13 +61,21 @@ impl ModelManager {
         if let Some(model) = self.seen_blocks.get(block) {
             return model.clone();
         } else {
+            let resolve = block.resolve(&self.resource_loader);
+            debug!("Uncached Block: {}", resolve.block_name);
             let block_states = self
                 .resource_loader
                 .load_block_states_interned(block.block_name);
             if let Some(states) = block_states {
+                debug!(
+                    "Loaded block states for {} successfully",
+                    resolve.block_name
+                );
                 let model_variants = self.resource_loader.load_variants_for(block, states);
+                debug!("building model for {}", resolve.block_name);
                 let resource = self.build_variant(model_variants);
                 if let Some(resource) = resource {
+                    debug!("Loaded block model for {} successfully", resolve.block_name);
                     self.seen_blocks.insert(block.clone(), Some(resource));
                     return Some(resource);
                 }
@@ -86,6 +96,7 @@ impl ModelManager {
 
     pub fn build_variant(&self, variants: Vec<ModelVariant>) -> Option<ResourceModel> {
         if variants.len() == 0 {
+            error!("variant len was 0 when building variant");
             return None;
         }
         if variants.len() == 1 {
@@ -226,14 +237,24 @@ impl ModelManager {
             .iter()
             .flat_map(|element| {
                 element.faces.iter().filter_map(|face| {
-                    let element_rotation = element.rotation.as_ref().map(|f| f.to_matrix());
+                    let element_rotation =
+                        element.rotation.as_ref().map(|f| matrix_from_rotation(f));
                     let face = face.as_ref()?;
-                    let (v0, v1, v2) = get_quad_vectors(&element.from, &element.to, face.name);
+                    let (v0, v1, v2) = get_quad_vectors(
+                        &Vec3::from(element.from),
+                        &Vec3::from(element.to),
+                        face.name,
+                    );
 
                     let uv = if let Some(uv) = &face.uv {
-                        uv.to_vec4() / 16.0
+                        Vec4::new(uv.x1, uv.y1, uv.x2, uv.y2) / 16.0
                     } else {
-                        Vec4::new(element.from.x, element.from.y, element.to.x, element.to.y) / 16.0
+                        Vec4::new(
+                            element.from[0],
+                            element.from[1],
+                            element.to[0],
+                            element.to[1],
+                        ) / 16.0
                     };
                     let x_uv = uv.xz();
                     let y_uv = uv.yw();
@@ -250,19 +271,20 @@ impl ModelManager {
             })
             .collect::<Vec<_>>();
         if let Some(rotation_x) = rotation_x {
-            let matrix = rotation_x.to_matrix_x();
+            let matrix = matrix_from_block_rotation_x(&rotation_x);
             quads
                 .iter_mut()
                 .for_each(|quad| quad.transform_about_pivot(&matrix, Vec3A::splat(0.5)));
         }
         if let Some(rotation_y) = rotation_y {
-            let matrix = rotation_y.to_matrix_y();
+            let matrix = matrix_from_block_rotation_y(&rotation_y);
             quads
                 .iter_mut()
                 .for_each(|quad| quad.transform_about_pivot(&matrix, Vec3A::splat(0.5)));
         };
         quads
     }
+
     fn build_model(
         &self,
         block_model: &InternedBlockModel,
@@ -306,6 +328,7 @@ impl ModelManager {
 
                 let quad_len = quads.len() as u32;
                 if quad_len == 0 {
+                    error!("No quads");
                     return None;
                 }
                 let mut quads_lock = self.quads.write();
@@ -381,6 +404,33 @@ fn get_quad_vectors(from: &Vec3, to: &Vec3, face: FaceName) -> (Vec3A, Vec3A, Ve
             let v = Vec3A::new(0.0, to.y - from.y, 0.0);
             (origin, u, v)
         }
+    }
+}
+fn matrix_from_rotation(rotation: &ElementRotation) -> Affine3A {
+    let axis = match rotation.axis {
+        spider_eye::block_element::ElementAxis::X => Vec3::X,
+        spider_eye::block_element::ElementAxis::Y => Vec3::Y,
+        spider_eye::block_element::ElementAxis::Z => Vec3::Z,
+    };
+    let angle: f32 = rotation.angle.into();
+    let quat = Quat::from_axis_angle(axis, angle.to_radians());
+    Affine3A::from_rotation_translation(quat, Vec3::from_slice(&rotation.origin))
+}
+
+fn matrix_from_block_rotation_x(rotation: &BlockRotation) -> Affine3A {
+    match rotation {
+        BlockRotation::Zero => Affine3A::IDENTITY,
+        BlockRotation::Ninety => Affine3A::from_axis_angle(Vec3::X, 90.0f32.to_radians()),
+        BlockRotation::OneEighty => Affine3A::from_axis_angle(Vec3::X, 180.0f32.to_radians()),
+        BlockRotation::TwoSeventy => Affine3A::from_axis_angle(Vec3::X, 270.0f32.to_radians()),
+    }
+}
+fn matrix_from_block_rotation_y(rotation: &BlockRotation) -> Affine3A {
+    match rotation {
+        BlockRotation::Zero => Affine3A::IDENTITY,
+        BlockRotation::Ninety => Affine3A::from_axis_angle(Vec3::Y, 90.0f32.to_radians()),
+        BlockRotation::OneEighty => Affine3A::from_axis_angle(Vec3::Y, 180.0f32.to_radians()),
+        BlockRotation::TwoSeventy => Affine3A::from_axis_angle(Vec3::Y, 270.0f32.to_radians()),
     }
 }
 

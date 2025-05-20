@@ -517,7 +517,7 @@ impl ParallelOctree<ResourceModel> {
         let new_parent: OnceLock<u32> = OnceLock::new();
 
         if size > 1024 {
-            (0..8).into_par_iter().for_each(|i| {
+            (0..8).into_iter().for_each(|i| {
                 let child_pos = P::construct(
                     pos.x() + size * ((i as u32) & 1),
                     pos.y() + size * ((i as u32 >> 1) & 1),
@@ -555,7 +555,7 @@ impl ParallelOctree<ResourceModel> {
                 };
                 *region = world.get_region_lazy(region_coords);
             });
-            (0..8).into_par_iter().for_each(|i| {
+            (0..8).into_iter().for_each(|i| {
                 let x = i as usize & 1;
                 let z = (i as usize >> 2) & 1;
                 let child_pos = P::construct(
@@ -595,7 +595,7 @@ impl ParallelOctree<ResourceModel> {
         let size = size / 2;
         let new_parent: OnceLock<u32> = OnceLock::new();
 
-        (0..8).into_par_iter().for_each(|i| {
+        (0..8).into_iter().for_each(|i| {
             let child_pos = P::construct(
                 pos.x() + size * ((i as u32) & 1),
                 pos.y() + size * ((i as u32 >> 1) & 1),
@@ -651,7 +651,7 @@ impl ParallelOctree<ResourceModel> {
         let size = size / 2;
         let new_parent: OnceLock<u32> = OnceLock::new();
 
-        (0..8).into_par_iter().for_each(|i| {
+        (0..8).into_iter().for_each(|i| {
             let child_pos = P::construct(
                 pos.x() + size * ((i as u32) & 1),
                 pos.y() + size * ((i as u32 >> 1) & 1),

@@ -76,7 +76,7 @@ pub struct Application {
 } */
 fn load_world_2() -> (ModelManager, Scene) {
     let origin = WorldCoords { x: 0, y: -64, z: 0 };
-    let depth = 12;
+    let depth = 8;
     let model_manager = ModelManager::new();
     let minecraft_loader = &model_manager.resource_loader;
     let world = minecraft_loader
