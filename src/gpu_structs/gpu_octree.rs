@@ -1,8 +1,8 @@
 use std::{fmt::Debug, u16, u32};
 
 use crate::{
-    ray_tracing::resource_manager::ResourceModel,
-    voxels::octree::{Octant, Octree},
+    octree::octree::{Child, Octant, Octree},
+    scene::resource_manager::ResourceModel,
 };
 use bytemuck::{Pod, Zeroable};
 
@@ -12,8 +12,6 @@ pub struct TraversalContext {
     pub octree_scale: f32,
     pub root: u32,
     pub scale: u32,
-    pub octant_stack: [u32; 23 + 1],
-    pub time_stack: [f32; 23 + 1],
     pub padding: u32,
 }
 
@@ -35,13 +33,13 @@ impl From<&Octant<ResourceModel>> for GPUOctreeNode {
             .iter()
             .enumerate()
             .for_each(|(i, child)| match child {
-                crate::voxels::octree::Child::None => {}
-                crate::voxels::octree::Child::Octant(ind) => {
+                Child::None => {}
+                Child::Octant(ind) => {
                     let child_mask: u32 = u8::MAX as u32;
                     data[i / 2] |= child_mask << (16 * (i % 2));
                     data[4 + i] = *ind;
                 }
-                crate::voxels::octree::Child::Leaf(val) => {
+                Child::Leaf(val) => {
                     let bits: u32 = u16::MAX as u32;
                     data[i / 2] |= bits << (16 * (i % 2));
                     data[4 + i] = val.get_first_index();

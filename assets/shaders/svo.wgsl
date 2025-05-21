@@ -1,4 +1,32 @@
 
+
+struct GPUQuad {
+    origin: vec3<f32>,
+    material_id:u32,
+    u: vec3<f32>,
+    tex_u_range:u32,
+    v: vec3<f32>,
+    tex_v_range:u32,
+    normal: vec3<f32>,
+    plane_d: f32
+};
+
+struct BlockModel{
+    ind:u32,
+    len:u32,
+}
+
+struct GPUMaterial{
+    ior: f32,
+    specular: f32,
+    emittance: f32,
+    roughness: f32,
+    metalness: f32,
+    texture_index: u32,
+    tint_index: u32,
+    flags: u32,
+}
+
 struct Octant {
     data: array<u32,12>
 }
@@ -7,48 +35,128 @@ struct TraversalContext {
     octree_scale: f32,
     root: u32,
     scale: u32,
-    octant_stack: array<u32,24>,
-    time_stack: array<f32,24>,
     padding:u32,
 }
 
+//creates a bitmask using the three least significant bits of a u32 from a vec3<bool>
+fn vec_to_bitmask(v:vec3<bool>)->u32{
+    let value:u32 =    select(0u, 1u << 0u, v.x) |
+                       select(0u, 1u << 1u, v.y) |
+                       select(0u, 1u << 2u, v.z);
+    return value;
+}
+
+//creates a vec3 of bools based on the three least significant bits of "bits"
+fn bitmask_to_vec(bits:u32)->vec3<bool>{
+    
+    let condition_x: bool = (bits & 1u) != 0u; // Bit 0 for pos.x
+    let condition_y: bool = (bits & 2u) != 0u; // Bit 1 for pos.y
+    let condition_z: bool = (bits & 4u) != 0u; // Bit 2 for pos.z
+    return vec3<bool>(condition_x, condition_y,condition_z);
+}
+
+
+
 @group(0) @binding(0)
-var<storage,read> octree: array<u32>;
-@group(0) @binding(1)
-var<storage,read> context : TraversalContext;
-
-
-
-@group(0) @binding(2)
-var output: texture_storage_2d<rgba8unorm,write>;
+var<uniform> context : TraversalContext;
 
 
 @group(1) @binding(0)
-var texture_array: binding_array<texture_2d<f32>>;
+var<storage,read> octree: array<u32>;
 @group(1) @binding(1)
-var sampler_array: binding_array<sampler>;
+var<storage,read> models: array<BlockModel>;
 @group(1) @binding(2)
-var<storage,read> quads: array<Quad>;
+var<storage,read> quads: array<GPUQuad>;
 @group(1) @binding(3)
-var<storage,read> materials: array<Material>;
+var<storage,read> materials: array<GPUMaterial>;
+@group(1) @binding(4)
+var textures : binding_array<texture_2d<u32>>;
+@group(1) @binding(5)
+var nearest_sampler: sampler;
+@group(1) @binding(6)
+var output: texture_storage_2d<rgba8unorm,write>;
+
 
 const OCTREE_MAX_SCALE:u32 =23;
 const OCTREE_MAX_STEPS:u32 = 1000;
 const OCTREE_EPSILON:f32 = 1.1920929e-7;
+const RAY_EPSILON:f32 = 5e-8;
 
 const camera = CameraParams(vec3(1.0,200.0,20.0),vec3(100.0,130,100.0),vec3(0.0,1.0,0.0),70.0,16.0/9.0);
 
-@compute @workgroup_size(8,8,1)
-fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+const WORKGROUP_SIZE_X = 8u;
+const WORKGROUP_SIZE_Y = 8u;
+const WORKGROUP_SIZE_TOTAL = WORKGROUP_SIZE_X*WORKGROUP_SIZE_Y;
+
+@compute @workgroup_size(WORKGROUP_SIZE_X,WORKGROUP_SIZE_Y,1)
+fn main(@builtin(local_invocation_index) local_idx: u32,@builtin(global_invocation_id) global_id: vec3<u32>) {
     let octree_length = arrayLength(&octree);
     if global_id.x >= 1280 || global_id.y >= 720 {
         return;
     }
     
     let ray = create_ray_optimized(camera,global_id.xy);
-    intersect_octree(global_id,ray.origin,ray.direction,1024.0,context);
+    rays[local_idx] = ray;
+    intersect_octree(global_id,local_idx,1024.0);
 }
 
+const MAX_BOUNCES:u32 = 5;
+const FIRST_RAY_REUSE_COUNT:u32 =20;
+
+fn trace_ray()->vec3<f32>{
+    var accumulated_color = vec3<f32>(0.0);
+    var outer_attenuation = vec3<f32>(1.0);
+    let hit:bool=false;
+    //test if hit
+
+    //if hit then we use this same ray multiple times
+
+    if hit{
+        
+        // accumulated_color += outer_attenuation * get_emission(first_hit_data);
+        
+        //update attenuation here
+
+        for(var branch_count:u32=0u; branch_count < FIRST_RAY_REUSE_COUNT; branch_count+=1u){
+            //do reflection calculation based on material data and randomness
+            //new ray created here, outer attenuation updated
+            var branch_ray:Ray;
+            var branch_attenuation:vec3<f32> = outer_attenuation; // *bsdf/pdf
+            var bounce_count:u32 = 0u;
+            var branch_color:vec3<f32> = vec3<f32>(0.0);
+            //cast branch ray, test for hit
+            //let branch_hit_data = inner_trace_ray(branch_ray);
+            // if branch_hit_data.hit;
+                //path taken by a branch
+                while bounce_count<MAX_BOUNCES{
+                    //cast branch ray
+                    if true{ // if we hit
+                    //Update branch_attenuation based on material interaction:
+                    //let bsdf_factor_and_pdf = evaluate_material_and_sample_direction(branch_hit_data);
+                    //branch_attenuation *= bsdf_factor_and_pdf.value / bsdf_factor_and_pdf.pdf;
+                    //branch_ray = reflected ray
+                    
+                    //check for absorption? (russian roulette or attenuation is too low)
+                    //if absorption{break;}
+
+                    bounce_count++;
+                    }else{
+                        //branch ray missed
+                        //branch_color += branch_attenuation * sky_color
+                        break;
+                    }
+                }
+
+            //accumulated_color+=branch_color;
+        }
+    
+    }else{
+            //first ray missed, do sky calculation
+            //sky_color = sky(ray);
+            //accumulated_color+=current_attenuation*sky_color
+    }
+    return accumulated_color;
+}
 
 fn max_vec3(v: vec3<f32> )->f32{
     return max(v.x,max(v.y,v.z));
@@ -60,56 +168,87 @@ fn min_vec3(v: vec3<f32> )->f32{
 
 
 
-var<private> time_stack: array<f32,24>;
-var<private> octant_stack: array<u32,24>;
+var<workgroup> time_stacks: array<array<f32,24>,WORKGROUP_SIZE_TOTAL>;
+var<workgroup> octant_stacks: array<array<u32,24>,WORKGROUP_SIZE_TOTAL>;
+var<workgroup> rays: array<Ray,WORKGROUP_SIZE_TOTAL>;
 
-fn intersect_octree(global_id:vec3<u32>,ray_origin: vec3<f32>, ray_direction: vec3<f32>, max_dst: f32, context: TraversalContext) {
+fn intersect_quad(ray:ptr<function,Ray>,quad:ptr<function,GPUQuad>,voxel_position:vec3<f32>,t_next:f32)->bool{
+    let translated_ray_origin = (*ray).origin-voxel_position;
+    let denominator = dot((*ray).direction,(*quad).normal);
+
+    if denominator>=-RAY_EPSILON{
+        return false;
+    }
+
+    let t = ((*quad).plane_d- dot((*quad).normal,translated_ray_origin))/denominator;
+    
+    if t<=0.0 || t> t_next{
+        return false;
+    }
+
+    let intersection = translated_ray_origin + (*ray).direction *t;
+
+    let planar_hit_point = intersection- (*quad).origin;
+
+    let n = cross((*quad).u,(*quad).v);
+
+    let w = n / dot(n,n);
+
+    let alpha = dot(w, cross(planar_hit_point,(*quad).v));
+
+    let beta = dot(w,cross((*quad).u,planar_hit_point));
+
+
+    if alpha < 0.0 || alpha > 1.0 || beta < 0.0 || beta > 1.0 {
+            return false;
+    }
+    
+    
+    return true;
+}
+
+struct OctreeIntersectResult{
+    material_id:u32,
+
+}
+
+fn intersect_octree(global_id:vec3<u32>,local_idx:u32, max_dst: f32) {
     let octree_scale: f32 = context.octree_scale;
     var root: u32 = context.root;
     var scale: u32 = context.scale;
-    octant_stack = context.octant_stack;
-     time_stack=  context.time_stack;
-    var ro: vec3<f32> = ray_origin * octree_scale;
+    let octant_stack :ptr<workgroup,array<u32,24>> = &octant_stacks[local_idx];
+    let time_stack : ptr<workgroup,array<f32,24>> = &time_stacks[local_idx];
+    var ro: vec3<f32> =rays[local_idx].origin;
+    ro*=octree_scale;
     ro += 1.0;
-    var rd: vec3<f32> = ray_direction;
-    var max_dst_scaled: f32 = max_dst * f32(octree_scale);
+    var rd: vec3<f32> = rays[local_idx].direction;
     var scale_exp2: f32 = exp2(f32(i32(scale) - i32(OCTREE_MAX_SCALE)));
     var parent_octant_idx: u32 = root;
 
     var sign_mask: u32 = 1u << 31u;
 
     let epsilon_bits_without_sign: u32 = bitcast<u32>(OCTREE_EPSILON) & (~sign_mask);
+    
 
-    if abs(rd.x) < OCTREE_EPSILON{
-        rd.x = bitcast<f32>(epsilon_bits_without_sign | (bitcast<u32>(rd.x) & sign_mask));
-    }
-    
-    if abs(rd.y) < OCTREE_EPSILON{
-        rd.y = bitcast<f32>(epsilon_bits_without_sign | (bitcast<u32>(rd.y) & sign_mask));
-    }
-    
-    if abs(rd.z) < OCTREE_EPSILON{
-        rd.z = bitcast<f32>(epsilon_bits_without_sign | (bitcast<u32>(rd.z) & sign_mask));
-    }
+
+    let dir_lt_epsilon: vec3<bool> = abs(rd) < vec3(OCTREE_EPSILON);
+
+    let signed_epsilon: vec3<f32> =  bitcast<vec3<f32>>(vec3(epsilon_bits_without_sign) | (bitcast<vec3<u32>>(rd) & vec3(sign_mask)));
+
+    rd = select(rd,signed_epsilon,dir_lt_epsilon); 
+
 
     let t_coef:vec3<f32> = 1.0/-abs(rd);
 
     var t_bias:vec3<f32> = t_coef*ro;
 
-    var mirror_mask:u32 = 0u;
-    if rd.x >0.0{
-        mirror_mask^=1u;
-        t_bias.x = 3.0*t_coef.x-t_bias.x;    
-    }
-    if rd.y >0.0{
-        mirror_mask^=2u;
-        t_bias.y = 3.0*t_coef.y-t_bias.y;    
-    }
-    if rd.z >0.0{
-        mirror_mask^=4u;
-        t_bias.z = 3.0*t_coef.z-t_bias.z;    
-    }
-    
+  let dir_gt_0: vec3<bool> = rd > vec3(0.0);
+
+    let mirror_mask: u32 = vec_to_bitmask(dir_gt_0);
+
+    let updated_t_bias_values: vec3<f32> = 3.0 * t_coef - t_bias;
+
+    t_bias = select(t_bias, updated_t_bias_values, dir_gt_0);
     
     var t_min:f32 = max(max_vec3((2.0 *t_coef-t_bias)),0.0);
 
@@ -120,27 +259,16 @@ fn intersect_octree(global_id:vec3<u32>,ray_origin: vec3<f32>, ray_direction: ve
     var idx:u32 = 0u;
 
     var pos : vec3<f32> = vec3(1.0);
+    let upper:vec3<f32> = 1.5*t_coef - t_bias;
 
-    if t_min<1.5*t_coef.x-t_bias.x{
-        idx^=1;
-        pos.x = 1.5;
-    }
-    
-    if t_min<1.5*t_coef.y-t_bias.y{
-        idx^=2;
-        pos.y = 1.5;
-    }
-    
-    if t_min<1.5*t_coef.z-t_bias.z{
-        idx^=4;
-        pos.z = 1.5;
-    } 
+    let lt_upper : vec3<bool> =  vec3(t_min) < upper;
 
-    for(var i:u32=0;i<1000;i++){
+    idx ^= vec_to_bitmask(lt_upper);
+    pos = select(pos,vec3(1.5),lt_upper);
+
+    for(var i:u32=0;i<1024;i++){
         if max_dst>=0.0 && t_min>max_dst{
             //miss
-            textureStore(output,global_id.xy,vec4(0.0,0.0,0.0,1.0));
-            return;
         }
 
 
@@ -151,13 +279,13 @@ fn intersect_octree(global_id:vec3<u32>,ray_origin: vec3<f32>, ray_direction: ve
         let unmirrored_idx:u32 = idx^mirror_mask;
         
 
-let current_node_base_ptr = 12u * parent_octant_idx;
-let header_word_containing_child_header = octree[current_node_base_ptr + (unmirrored_idx / 2u)];
-let shift_for_child_header = 16u * (unmirrored_idx % 2u);
-let header_16bit: u32 = (header_word_containing_child_header >> shift_for_child_header) & 0xFFFFu; // Isolate the 16 bits
+        let current_node_base_ptr = 12u * parent_octant_idx;
+        let header_word_containing_child_header = octree[current_node_base_ptr + (unmirrored_idx / 2u)];
+        let shift_for_child_header = 16u * (unmirrored_idx % 2u);
+        let header_16bit: u32 = (header_word_containing_child_header >> shift_for_child_header) & 0xFFFFu; // Isolate the 16 bits
 
-let is_child:bool = (header_16bit & 255u) != 0u; // Now checks lower 8 bits of the 16-bit header
-let is_leaf:bool = (header_16bit == 0xFFFFu);   // Now correctly checks if the 16-bit header is 0xFFFF
+        let is_child:bool = (header_16bit & 255u) != 0u; // Now checks lower 8 bits of the 16-bit header
+        let is_leaf:bool = (header_16bit == 0xFFFFu);   // Now correctly checks if the 16-bit header is 0xFFFF
 
         if is_child && t_min<=t_max{
 
@@ -165,24 +293,75 @@ let is_leaf:bool = (header_16bit == 0xFFFFu);   // Now correctly checks if the 1
                 //hit
                 let leaf_value:u32 = octree[12*parent_octant_idx+4+unmirrored_idx];
 
+                let unmirrored_components:vec3<f32> = 3.0-scale_exp2-pos;
+                
+                let unmirror_bools :vec3<bool> = bitmask_to_vec(mirror_mask);
+                
+                let unmirrored_pos = select(pos,unmirrored_components,unmirror_bools);
+
+
                 let t_corner:vec3<f32> = (pos+scale_exp2)*t_coef-t_bias;
 
                 let tc_min = max_vec3(t_corner);
-                
-                if( mirror_mask&1u)!=0{
-                    pos.x=3.0-scale_exp2-pos.x;
-                }
-                
-                if (mirror_mask&2u)!=0{
-                    pos.y=3.0-scale_exp2-pos.y;
-                }
-                
-                if (mirror_mask&4u)!=0{
-                    pos.z=3.0-scale_exp2-pos.z;
-                }
 
+                
+                let t_corner_eq_tc_min:vec3<bool> = t_corner==vec3(tc_min);
+
+                let rd_lt_0 : vec3<bool> = rd<vec3(0.0);
+                let cond0_active: bool = t_corner_eq_tc_min.x;
+                let cond1_active: bool = t_corner_eq_tc_min.y && !cond0_active;
+                let cond2_active: bool = !(cond0_active || cond1_active);
+
+                let sign_rd_0: u32 = bitcast<u32>(rd.x) >> 31u;
+                let sign_rd_1: u32 = bitcast<u32>(rd.y) >> 31u;
+                let sign_rd_2: u32 = bitcast<u32>(rd.z) >> 31u;
+
+                let face_id_case0: u32 = (1u << 0u) | sign_rd_0;
+                let face_id_case1: u32 = (1u << 1u) | sign_rd_1;
+                let face_id_case2: u32 = (1u << 2u) | sign_rd_2;
+
+                var face_id: u32 = face_id_case2; 
+                face_id = select(face_id, face_id_case1, cond1_active);
+                face_id = select(face_id, face_id_case0, cond0_active);
+
+                let uv_raw_case0 = vec2<f32>(
+                    (ro.z + rd.z * t_corner.x) - unmirrored_pos.z,
+                    (ro.y + rd.y * t_corner.x) - unmirrored_pos.y
+                );
+                let uv_raw_case1 = vec2<f32>(
+                    (ro.x + rd.x * t_corner.y) - unmirrored_pos.x,
+                    (ro.z + rd.z * t_corner.y) - unmirrored_pos.z
+                );
+                let uv_raw_case2 = vec2<f32>(
+                    (ro.x + rd.x * t_corner.z) - unmirrored_pos.x,
+                    (ro.y + rd.y * t_corner.z) - unmirrored_pos.y
+                );
+
+                var uv_selected_raw = uv_raw_case2;
+                uv_selected_raw = select(uv_selected_raw, uv_raw_case1, cond1_active);
+                uv_selected_raw = select(uv_selected_raw, uv_raw_case0, cond0_active);
+
+                var uv: vec2<f32> = uv_selected_raw / scale_exp2; // Renamed from uv_simd
+
+                let flip_ux_cond: bool = (cond0_active && rd_lt_0.x) || (cond2_active && rd_lt_0.z);
+                uv.x = select(uv.x, 1.0 - uv.x, flip_ux_cond);
+
+                let flip_uy_cond: bool = cond1_active && rd_lt_0.y;
+                uv.y = select(uv.y, 1.0 - uv.y, flip_uy_cond); 
                 //hit
-                textureStore(output,global_id.xy,vec4(1.0,0.0,1.0,1.0));
+
+                let quad = quads[leaf_value];
+                let material = materials[quad.material_id];
+                let texture_id = material.texture_index;
+                
+                let texture = textures[texture_id];
+                let uv_2 :vec2<u32> = vec2<u32>(uv*16);
+
+                let color:vec4<u32> = textureLoad(texture,uv_2,0i);
+
+                let float_color = vec4<f32>(f32(color.x),f32(color.y),f32(color.z),f32(color.w)) / 255.0;
+
+                textureStore(output,global_id.xy,float_color);
                 return;
                 // if quad_len >0 
 
@@ -197,8 +376,8 @@ let is_leaf:bool = (header_16bit == 0xFFFFu);   // Now correctly checks if the 1
                 if t_min<=tv_max && is_child{
                     //we must descend further into the octree
                     if tc_max<h{
-                        octant_stack[scale] = parent_octant_idx;
-                        time_stack[scale] = t_max;
+                        (*octant_stack)[scale] = parent_octant_idx;
+                        (*time_stack)[scale] = t_max;
                     }
 
                     h = tc_max;
@@ -206,20 +385,20 @@ let is_leaf:bool = (header_16bit == 0xFFFFu);   // Now correctly checks if the 1
                     parent_octant_idx = octree[12*parent_octant_idx+4+unmirrored_idx];
 
 
-                    scale-=1;
+                    scale-=1u;
                     scale_exp2 = half_scale;
 
-                    idx=0;
+                    idx=0u;
                     if t_min<t_center.x{
-                        idx^=1;
+                        idx^=1u;
                         pos.x +=scale_exp2;
                     }
                     if t_min<t_center.y{
-                        idx^=2;
+                        idx^=2u;
                         pos.y +=scale_exp2;
                     }
                     if t_min<t_center.z{
-                        idx^=4;
+                        idx^=4u;
                         pos.z +=scale_exp2;
                     }
 
@@ -274,12 +453,11 @@ let is_leaf:bool = (header_16bit == 0xFFFFu);   // Now correctly checks if the 1
             scale_exp2 = exp2(f32(i32(scale)-i32(OCTREE_MAX_SCALE)));
 
             if scale>=OCTREE_MAX_SCALE{
-                textureStore(output,global_id.xy,vec4(0.0,1.0,0.0,1.0));
                 return; //miss
             }
 
-            parent_octant_idx = octant_stack[scale];
-            t_max = time_stack[scale];
+            parent_octant_idx = (*octant_stack)[scale];
+            t_max = (*time_stack)[scale];
 
             let shifted_pos = bitcast<u32>(pos) >> vec3(scale);
             pos = bitcast<f32>(shifted_pos<<vec3(scale));
@@ -288,27 +466,12 @@ let is_leaf:bool = (header_16bit == 0xFFFFu);   // Now correctly checks if the 1
             h=0.0;
         }
     }
-    textureStore(output,global_id.xy,vec4(1.0,0.0,0.0,1.0));
     return; //miss
 }
 
 
-struct Material{
-    ior: f32,
-    specular: f32,
-    emittance: f32,
-    roughness: f32,
-    metalness: f32,
-    texture_index: u32,
-    padding: u64,
-}
 
-struct Quad{
-    origin: vec4<f32>,
-    u:  vec4<f32>,
-    v:  vec4<f32>,
-    u_v_range:  vec4<f32>,
-}
+
 // Original CameraParams structure (unchanged)
 struct CameraParams {
     position: vec3<f32>,     // Camera's position in world space

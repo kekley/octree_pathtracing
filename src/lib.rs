@@ -1,12 +1,13 @@
 pub mod app;
+pub mod colors;
+pub mod geometry;
 mod gpu_structs;
-pub mod voxels;
-
-pub mod ray_tracing;
-
-mod gpu_test;
-mod mandelbrot;
-mod ourple;
-mod rtw_image;
+pub mod hittable;
+pub mod octree;
+pub mod ported_shaders;
+pub mod ray;
+pub mod renderer;
+pub mod scene;
+pub mod textures;
 mod util;
-pub use {app::*, rtw_image::*, util::*};
+pub use {app::*, util::*};

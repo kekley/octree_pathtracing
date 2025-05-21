@@ -1,0 +1,72 @@
+use std::f32::consts::PI;
+use std::f32::INFINITY;
+
+use glam::Vec3A;
+
+use crate::ray::ray::Ray;
+
+use super::aabb::AABB;
+
+#[derive(Debug, Clone)]
+pub struct Sphere {
+    center: Vec3A,
+    radius: f32,
+    material_idx: u16,
+}
+
+impl Sphere {
+    pub fn new(center: Vec3A, radius: f32, material_idx: u16) -> Self {
+        Self {
+            center: center,
+            radius: radius,
+            material_idx,
+        }
+    }
+
+    pub fn bbox(&self) -> AABB {
+        let radius_vec: Vec3A = Vec3A::splat(self.radius);
+
+        let bbox = AABB::from_points(self.center - radius_vec, self.center + radius_vec);
+        bbox
+    }
+    #[inline]
+    pub fn hit(&self, ray: &mut Ray) -> bool {
+        todo!("Implement Sphere::hit");
+        let origin_to_center = self.center - ray.origin;
+        let a = ray.get_direction().length_squared();
+        let h = ray.get_direction().dot(origin_to_center);
+        let c = origin_to_center.length_squared() - self.radius * self.radius;
+
+        let discriminant = h * h - a * c;
+
+        if discriminant < 0.0 {
+            ray.hit.t = INFINITY;
+            return false;
+        }
+
+        let sqrt_discriminant = discriminant.sqrt();
+
+        let mut root = (h - sqrt_discriminant) / a;
+
+        let point = ray.at(root);
+        let t = root;
+        let outward_normal = (point - self.center) / self.radius;
+        let (u, v) = Self::get_uv(outward_normal);
+        ray.hit.t = t;
+        ray.hit.u = u;
+        ray.hit.v = v;
+        ray.hit.normal = outward_normal;
+        ray.hit.current_material = 0;
+    }
+
+    pub fn get_uv(point: Vec3A) -> (f32, f32) {
+        let theta = (-point.y).acos();
+
+        let phi = (-point.z).atan2(point.x) + PI;
+
+        let u = phi / (2.0 * PI);
+
+        let v = theta / PI;
+        (u, v)
+    }
+}

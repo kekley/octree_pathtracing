@@ -1,0 +1,439 @@
+use std::{array, sync::Arc};
+
+use dashmap::DashMap;
+use fxhash::FxBuildHasher;
+use glam::{Affine3A, Quat, Vec3, Vec3A, Vec4, Vec4Swizzles};
+use hashbrown::HashMap;
+use lasso::Spur;
+use log::{debug, error};
+use palette::ConcurrentPalette;
+use spider_eye::{
+    block::InternedBlock,
+    block_element::ElementRotation,
+    block_face::FaceName,
+    block_models::{BlockRotation, InternedBlockModel},
+    block_texture::{InternedTextureVariable, TexPath},
+    variant::ModelVariant,
+    MCResourceLoader,
+};
+
+use crate::{
+    geometry::quad::Quad,
+    textures::{material::Material, rtw_image::RTWImage, texture::Texture},
+};
+
+use super::resource_model::{QuadModel, SingleBlockModel};
+
+pub type TextureID = u32;
+pub type QuadID = u32;
+pub type MaterialID = u32;
+pub type ModelID = u32;
+
+pub struct ModelManager {
+    pub resource_loader: MCResourceLoader,
+    pub(crate) materials: ConcurrentPalette<TexPath, Material>,
+    pub(crate) quads: Arc<parking_lot::RwLock<Vec<Quad>>>,
+    pub(crate) models: ConcurrentPalette<InternedBlock, Option<ResourceModel>>,
+}
+
+impl Default for ModelManager {
+    fn default() -> Self {
+        Self {
+            resource_loader: MCResourceLoader::new(),
+            materials: Default::default(),
+            quads: Default::default(),
+            models: ConcurrentPalette::new(),
+        }
+    }
+}
+
+impl ModelManager {
+    pub fn seen_blocks(&self) -> usize {
+        self.models.len()
+    }
+    pub fn seen_materials(&self) -> usize {
+        self.materials.len()
+    }
+    pub fn load_resource(&self, block: &InternedBlock) -> Option<ResourceModel> {
+        let index = self.models.get_index_or_insert(block.clone(), |f| {
+            let resolve = block.resolve(&self.resource_loader);
+            debug!("Uncached Block: {}", resolve.block_name);
+            let block_states = self
+                .resource_loader
+                .load_block_states_interned(block.block_name);
+            if let Some(states) = block_states {
+                debug!(
+                    "Loaded block states for {} successfully",
+                    resolve.block_name
+                );
+                let model_variants = self.resource_loader.load_variants_for(block, &states);
+                debug!("building model for {}", resolve.block_name);
+                let resource = self.build_variant(model_variants);
+                if let Some(resource) = resource {
+                    debug!("Loaded block model for {} successfully", resolve.block_name);
+                    return Some(resource);
+                }
+            }
+
+            return None;
+        });
+        self.models.get_object_by_index(index).unwrap()
+    }
+    pub fn new() -> Self {
+        let tmp = Self {
+            resource_loader: MCResourceLoader::new(),
+            ..Default::default()
+        };
+        let air = tmp.resource_loader.rodeo.get_or_intern("air");
+        tmp.materials.get_index_or_insert(air, |_| Material::AIR);
+        tmp
+    }
+
+    pub fn build_variant(&self, variants: Vec<ModelVariant>) -> Option<ResourceModel> {
+        if variants.len() == 0 {
+            error!("variant len was 0 when building variant");
+            return None;
+        }
+        if variants.len() == 1 {
+            match &variants[0] {
+                ModelVariant::SingleModel(variant_entry) => {
+                    let model = &variant_entry.model;
+
+                    let resource = if model.is_cube() {
+                        self.build_model(
+                            &model,
+                            ModelType::SingleAABB,
+                            variant_entry.rotation_x,
+                            variant_entry.rotation_y,
+                        )
+                    } else {
+                        self.build_model(
+                            &model,
+                            ModelType::Quads,
+                            variant_entry.rotation_x,
+                            variant_entry.rotation_y,
+                        )
+                    };
+                    resource
+                }
+                ModelVariant::ModelArray(items) => {
+                    let variant = &items[0];
+                    let model = &variant.model;
+                    let resource = if model.is_cube() {
+                        self.build_model(
+                            &model,
+                            ModelType::SingleAABB,
+                            variant.rotation_x,
+                            variant.rotation_y,
+                        )
+                    } else {
+                        self.build_model(
+                            &model,
+                            ModelType::Quads,
+                            variant.rotation_x,
+                            variant.rotation_y,
+                        )
+                    };
+                    resource
+                }
+            }
+        } else {
+            let quads = variants
+                .iter()
+                .flat_map(|variant| match variant {
+                    ModelVariant::SingleModel(variant_entry) => {
+                        let model = &variant_entry.model;
+
+                        let quads = self.make_quads(
+                            model,
+                            variant_entry.rotation_x,
+                            variant_entry.rotation_y,
+                        );
+                        quads
+                    }
+                    ModelVariant::ModelArray(items) => {
+                        //FIXME: randomly choose model
+                        let variant = &items[0];
+                        let model = &variant.model;
+
+                        let quads = self.make_quads(model, variant.rotation_x, variant.rotation_y);
+                        quads
+                    }
+                })
+                .collect::<Vec<_>>();
+            let mut quads_lock = self.quads.write();
+            let starting_quad_id = quads_lock.len() as QuadID;
+            let len = quads.len() as u32;
+            if len == 0 {
+                return None;
+            }
+            quads.into_iter().for_each(|quad| {
+                quads_lock.push(quad);
+            });
+
+            let resource = ResourceModel::Quad(QuadModel::new(starting_quad_id, len));
+            return Some(resource);
+        }
+    }
+
+    fn get_materials(
+        &self,
+        block_model: &InternedBlockModel,
+    ) -> hashbrown::HashMap<Spur, MaterialID> {
+        let textures = block_model.get_textures();
+
+        textures
+            .iter()
+            .map(|texture| {
+                let mut current_texture_var = &texture.1;
+                while let InternedTextureVariable::Variable(var) = current_texture_var {
+                    //dbg!(self.resource_loader.resolve_spur(var));
+                    current_texture_var = &textures.iter().find(|tex_2| tex_2.0 == *var).unwrap().1;
+                }
+                let material_id =
+                    self.materials
+                        .get_index_or_insert(current_texture_var.get_inner(), |f| {
+                            let a = self.resource_loader.resolve_spur(&texture.0);
+
+                            let tex_path = self.resource_loader.get_texture_path(
+                                self.resource_loader
+                                    .resolve_spur(&current_texture_var.get_inner()),
+                            );
+                            //dbg!(&tex_path);
+                            let texture_image = Arc::new(RTWImage::load(&tex_path).unwrap());
+                            let texture_obj = Texture::Image(texture_image);
+                            let material = Material::new().albedo(texture_obj).build();
+                            material
+                        });
+
+                (texture.0.clone(), material_id as u32)
+            })
+            .collect::<HashMap<_, _>>()
+    }
+    fn make_quads(
+        &self,
+        block_model: &InternedBlockModel,
+        rotation_x: Option<BlockRotation>,
+        rotation_y: Option<BlockRotation>,
+    ) -> Vec<Quad> {
+        let materials = self.get_materials(block_model);
+        let mut quads = block_model
+            .elements
+            .iter()
+            .flat_map(|element| {
+                element.faces.iter().filter_map(|face| {
+                    let element_rotation =
+                        element.rotation.as_ref().map(|f| matrix_from_rotation(f));
+                    let face = face.as_ref()?;
+                    let (v0, v1, v2) = get_quad_vectors(
+                        &Vec3::from(element.from),
+                        &Vec3::from(element.to),
+                        face.name,
+                    );
+
+                    let uv = if let Some(uv) = &face.uv {
+                        Vec4::new(uv.x1, uv.y1, uv.x2, uv.y2) / 16.0
+                    } else {
+                        Vec4::new(
+                            element.from[0],
+                            element.from[1],
+                            element.to[0],
+                            element.to[1],
+                        ) / 16.0
+                    };
+                    let x_uv = uv.xz();
+                    let y_uv = uv.yw();
+                    let material = materials
+                        .get(&face.texture.get_inner())
+                        .expect("texture variable was not in materials hashmap");
+                    let mut quad = Quad::new(v0, v1, v2, x_uv, y_uv, material.clone());
+                    //dbg!("{:?}", &quad);
+                    if let Some(matrix) = element_rotation {
+                        quad.transform(&matrix);
+                    }
+                    Some(quad)
+                })
+            })
+            .collect::<Vec<_>>();
+        if let Some(rotation_x) = rotation_x {
+            let matrix = matrix_from_block_rotation_x(&rotation_x);
+            quads
+                .iter_mut()
+                .for_each(|quad| quad.transform_about_pivot(&matrix, Vec3A::splat(0.5)));
+        }
+        if let Some(rotation_y) = rotation_y {
+            let matrix = matrix_from_block_rotation_y(&rotation_y);
+            quads
+                .iter_mut()
+                .for_each(|quad| quad.transform_about_pivot(&matrix, Vec3A::splat(0.5)));
+        };
+        quads
+    }
+
+    fn build_model(
+        &self,
+        block_model: &InternedBlockModel,
+        model_type: ModelType,
+        rotation_x: Option<BlockRotation>,
+        rotation_y: Option<BlockRotation>,
+    ) -> Option<ResourceModel> {
+        let model = match model_type {
+            ModelType::SingleAABB => {
+                let materials = self.get_materials(block_model);
+                let block_element = &block_model.elements[0];
+                let mut block_quads: [Quad; 6] = array::from_fn(|_| Quad::default());
+                block_element.faces.iter().for_each(|face| {
+                    let face = face.as_ref().expect("single block model was missing face");
+                    let ind: u32 = face.name as u32;
+                    let a = self.resource_loader.resolve_spur(&face.texture.get_inner());
+                    //dbg!(a);
+                    let material = materials
+                        .get(&face.texture.get_inner())
+                        .expect("texture variable was not in material hashmap");
+                    block_quads[ind as usize] = Quad::from_face_name(
+                        &face.name,
+                        &face.uv,
+                        &block_element.from,
+                        &block_element.to,
+                        *material,
+                    );
+                });
+                let mut quads_lock = self.quads.write();
+                let first_quad_id = quads_lock.len() as QuadID;
+                block_quads.into_iter().for_each(|quad| {
+                    quads_lock.push(quad);
+                });
+                let block_model = SingleBlockModel {
+                    first_quad_index: first_quad_id,
+                };
+                ResourceModel::SingleBlock(block_model)
+            }
+            ModelType::Quads => {
+                let quads = self.make_quads(block_model, rotation_x, rotation_y);
+
+                let quad_len = quads.len() as u32;
+                if quad_len == 0 {
+                    error!("No quads");
+                    return None;
+                }
+                let mut quads_lock = self.quads.write();
+                let first_quad_id = quads_lock.len() as QuadID;
+                quads.into_iter().for_each(|quad| {
+                    quads_lock.push(quad);
+                });
+
+                let model = QuadModel::new(first_quad_id, quad_len);
+                ResourceModel::Quad(model)
+            }
+        };
+        Some(model)
+    }
+}
+
+fn get_quad_vectors(from: &Vec3, to: &Vec3, face: FaceName) -> (Vec3A, Vec3A, Vec3A) {
+    // Convert from block space (0–16) into unit cube space (0–1).
+    let from = *from / 16.0;
+    let to = *to / 16.0;
+
+    match face {
+        FaceName::Down => {
+            let origin = Vec3A::new(from.x, from.y, from.z);
+            let u = Vec3A::new(to.x - from.x, 0.0, 0.0);
+            let v = Vec3A::new(0.0, 0.0, to.z - from.z);
+            (origin, u, v)
+        }
+
+        FaceName::Up => {
+            let origin = Vec3A::new(to.x, to.y, from.z);
+            let u = Vec3A::new(from.x - to.x, 0.0, 0.0);
+            let v = Vec3A::new(0.0, 0.0, to.z - from.z);
+            (origin, u, v)
+        }
+
+        // North face: normal = (0,0,-1), so the face is on plane z = from.z.
+        // We set the origin at (to.x, from.y, from.z)
+        // with u running west (negative X) and v running up along Y.
+        FaceName::North => {
+            let origin = Vec3A::new(to.x, from.y, from.z);
+            let u = Vec3A::new(from.x - to.x, 0.0, 0.0); // note: negative delta in X
+            let v = Vec3A::new(0.0, to.y - from.y, 0.0);
+            (origin, u, v)
+        }
+
+        // South face: normal = (0,0,+1), so the face is on plane z = to.z.
+        // We choose the origin at (from.x, from.y, to.z)
+        // and let u run east (positive X) and v run up (positive Y).
+        FaceName::South => {
+            let origin = Vec3A::new(from.x, from.y, to.z);
+            let u = Vec3A::new(to.x - from.x, 0.0, 0.0);
+            let v = Vec3A::new(0.0, to.y - from.y, 0.0);
+            (origin, u, v)
+        }
+
+        // West face: normal = (-1,0,0), so the face is on plane x = from.x.
+        // We use origin = (from.x, from.y, to.z);
+        // let u run up (along Y) and v run “backward” (from high z to low z).
+        FaceName::West => {
+            let origin = Vec3A::new(from.x, from.y, from.z);
+            let u = Vec3A::new(0.0, 0.0, to.z - from.z);
+            let v = Vec3A::new(0.0, to.y - from.y, 0.0);
+            (origin, u, v)
+        }
+
+        // East face: normal = (+1,0,0), so it lies on plane x = to.x.
+        // We choose origin = (to.x, from.y, from.z)
+        // with u going up along Y and v going forward (positive Z).
+        FaceName::East => {
+            let origin = Vec3A::new(to.x, from.y, to.z);
+            let u = Vec3A::new(0.0, 0.0, from.z - to.z);
+            let v = Vec3A::new(0.0, to.y - from.y, 0.0);
+            (origin, u, v)
+        }
+    }
+}
+fn matrix_from_rotation(rotation: &ElementRotation) -> Affine3A {
+    let axis = match rotation.axis {
+        spider_eye::block_element::ElementAxis::X => Vec3::X,
+        spider_eye::block_element::ElementAxis::Y => Vec3::Y,
+        spider_eye::block_element::ElementAxis::Z => Vec3::Z,
+    };
+    let angle: f32 = rotation.angle.into();
+    let quat = Quat::from_axis_angle(axis, angle.to_radians());
+    Affine3A::from_rotation_translation(quat, Vec3::from_slice(&rotation.origin))
+}
+
+fn matrix_from_block_rotation_x(rotation: &BlockRotation) -> Affine3A {
+    match rotation {
+        BlockRotation::Zero => Affine3A::IDENTITY,
+        BlockRotation::Ninety => Affine3A::from_axis_angle(Vec3::X, 90.0f32.to_radians()),
+        BlockRotation::OneEighty => Affine3A::from_axis_angle(Vec3::X, 180.0f32.to_radians()),
+        BlockRotation::TwoSeventy => Affine3A::from_axis_angle(Vec3::X, 270.0f32.to_radians()),
+    }
+}
+fn matrix_from_block_rotation_y(rotation: &BlockRotation) -> Affine3A {
+    match rotation {
+        BlockRotation::Zero => Affine3A::IDENTITY,
+        BlockRotation::Ninety => Affine3A::from_axis_angle(Vec3::Y, 90.0f32.to_radians()),
+        BlockRotation::OneEighty => Affine3A::from_axis_angle(Vec3::Y, 180.0f32.to_radians()),
+        BlockRotation::TwoSeventy => Affine3A::from_axis_angle(Vec3::Y, 270.0f32.to_radians()),
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ResourceModel {
+    SingleBlock(SingleBlockModel),
+    Quad(QuadModel),
+}
+
+impl ResourceModel {
+    pub fn get_first_index(&self) -> u32 {
+        match self {
+            ResourceModel::SingleBlock(single_block_model) => single_block_model.first_quad_index,
+            ResourceModel::Quad(quad_model) => quad_model.starting_quad_id,
+        }
+    }
+}
+pub enum ModelType {
+    SingleAABB,
+    Quads,
+}

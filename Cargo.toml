@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+palette = { path = "../palette" }
 rayon = "1.10.0"
 stb_image = "0.3.0"
 spider_eye = { path = "../spider_eye" }
@@ -29,10 +30,11 @@ pollster = "0.4.0"
 log = "0.4.27"
 egui-wgpu = "0.31.1"
 rand_distr = "0.5.1"
+parking_lot = "0.12.3"
+
 
 [profile.release-with-debug]
 inherits = "release"
 
 [profile.release]
-panic = "abort"
 debug = true

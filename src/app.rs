@@ -4,36 +4,37 @@ use std::{
     time::{Duration, Instant},
 };
 
-use eframe::egui::{
+use eframe::{
+    egui::{
         self, load::SizedTexture, Color32, ColorImage, DragValue, Image, ImageData, Label,
         RadioButton, TextureHandle, TextureOptions,
-    };
+    },
+    wgpu::Texture,
+};
 use glam::{UVec3, Vec3};
 use log::info;
 use spider_eye::loaded_world::WorldCoords;
 
 use crate::{
-    ray_tracing::{
-        resource_manager::ModelManager,
-        scene::Scene,
-        tile_renderer::{RendererMode, RendererStatus, TileRenderer, U8Color},
+    colors::colors::U8Color,
+    geometry::quad::Quad,
+    gpu_structs::gpu_octree::TraversalContext,
+    gpu_test::{self, SVOPipeline},
+    octree::octree_parallel::ParallelOctree,
+    renderer::{
+        gpu_renderer::GPURenderer,
+        renderer_trait::RenderingBackend,
+        tile_renderer::{RendererMode, RendererStatus, TileRenderer},
     },
-    voxels::octree_parallel::ParallelOctree,
+    scene::{self, resource_manager::ModelManager, scene::Scene},
+    textures::material::Material,
 };
 
 pub struct Application {
-    refresh_time: Instant,
     window_title: String,
     window_size: (usize, usize),
-    model_manager: ModelManager,
-    renderer: TileRenderer,
+    renderer: Box<dyn RenderingBackend>,
     render_texture: Option<TextureHandle>,
-    scene: Option<Arc<RwLock<Scene>>>,
-    local_renderer_mode: RendererMode,
-    local_renderer_resolution: (usize, usize),
-    local_current_spp: u32,
-    local_target_spp: u32,
-    local_camera_position: Vec3,
 }
 /* pub fn load_world() -> (ModelManager, Scene) {
     let model_manager = ModelManager::new();
@@ -67,16 +68,25 @@ pub struct Application {
     //println!("{:?}", tree);
     (model_manager, scene)
 } */
-fn load_world_2() -> (ModelManager, Scene) {
+pub fn load_world_2() -> (ModelManager, Scene) {
     let origin = WorldCoords { x: 0, y: -64, z: 0 };
-    let depth = 8;
+    let depth = 9;
     let model_manager = ModelManager::new();
     let minecraft_loader = &model_manager.resource_loader;
     let world = minecraft_loader
         .open_world("./assets/worlds/test_world")
         .unwrap();
     let octree = ParallelOctree::load_mc_world::<UVec3>(origin, depth, world, &model_manager);
-    dbg!(model_manager.seen_blocks(), model_manager.seen_materials());
+    let octree_memory =
+        (octree.octants.len() * size_of_val(&octree.octants[0].get())) as f32 / 1000000.0;
+    let material_memory =
+        (model_manager.materials.len() * size_of::<Material>()) as f32 / 1000000.0;
+    let texture_memory = (model_manager.materials.len() * 16 * 16 * 4) as f32 / 1000000.0;
+    let quad_memory = (model_manager.quads.read().len() * size_of::<Quad>()) as f32 / 1000000.0;
+    info!(
+        "Octree memory: {}MB, Materials memory: {}MB, Texture memory est.:{}MB, Quad memory: {}MB",
+        octree_memory, material_memory, texture_memory, quad_memory
+    );
     let scene = model_manager.build(octree.into());
     //println!("{:?}", tree);
     (model_manager, scene)
@@ -87,15 +97,7 @@ impl Default for Application {
             window_size: (1280, 720),
             window_title: "hi there".to_string(),
             render_texture: None,
-            local_current_spp: 0,
-            model_manager: ModelManager::new(),
-            renderer: TileRenderer::new((1280, 720), 100, 10, 16),
-            local_renderer_resolution: (1280, 720),
-            refresh_time: Instant::now(),
-            local_target_spp: 100,
-            local_renderer_mode: RendererMode::Preview,
-            local_camera_position: Vec3::ZERO,
-            scene: None,
+            renderer: Box::new(),
         }
     }
 }
@@ -110,88 +112,20 @@ impl Application {
     pub fn build_scene(&mut self) {
         let a = load_world_2();
         self.model_manager = a.0;
-        self.scene = Some(Arc::new(RwLock::new(a.1)));
     }
-}
-impl eframe::App for Application {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        if self.scene.is_none() {
-            let start = Instant::now();
-            println!("Building Scene...");
-            self.build_scene();
-            let end = Instant::now();
-            let duration = end.duration_since(start);
-            println!("Took {duration:?} to build scene");
-        };
-        if self.render_texture.is_some() {
-            let lock = self.scene.as_ref().unwrap().read().unwrap();
-            let render_state = frame.wgpu_render_state().unwrap();
-            let texture = self.render_texture.as_ref().unwrap();
-            let renderer = render_state.renderer.read();
-            let opt = renderer.texture(&texture.id());
-            if let Some(texture) = opt {
-                /*                 gpu_test::compute(
-                    &lock.octree,
-                    &render_state.device,
-                    &render_state.queue,
-                    texture,
-                ); */
-            };
-        }
-
-        let texture: &mut egui::TextureHandle = self.render_texture.get_or_insert_with(|| {
-            let image = ImageData::Color(ColorImage::new([1280, 720], Color32::GRAY).into());
-            let texture_handle =
-                ctx.load_texture("render target", image, TextureOptions::default());
-            info!("Starting Compute...");
-
-            texture_handle
-        });
-
-        let latest_render_resolution = self.renderer.get_resolution();
-
-        if self.renderer.get_mode() == RendererMode::Preview
-            && self.renderer.get_renderer_status() == RendererStatus::Running
-        {
-            self.renderer.edit_camera(|camera| {
-                camera.eye = self.local_camera_position.into();
-                camera.move_with_wasd(ctx);
-                camera.rotate(ctx);
-                self.local_camera_position = camera.eye.into();
-            });
-        }
-        let latest_spp = self.renderer.get_current_spp();
-        if ((latest_spp != self.local_current_spp)
-            || (self.local_renderer_mode == RendererMode::Preview))
-            && (Instant::now().duration_since(self.refresh_time) > Duration::from_millis(5))
-        {
-            let image = self.renderer.get_image();
-            if image.is_some()
-                && latest_render_resolution.0 * latest_render_resolution.1
-                    == image.as_ref().unwrap().len()
-            {
-                let u8_buffer = pixel_slice_to_u8_slice(image.unwrap());
-
-                let color_image: Arc<ColorImage> = Arc::new(ColorImage::from_rgba_premultiplied(
-                    latest_render_resolution.into(),
-                    u8_buffer,
-                ));
-
-                texture.set(color_image, TextureOptions::default());
-
-                self.local_current_spp = latest_spp;
-                self.refresh_time = Instant::now();
-            }
-        }
+    pub fn draw_preview_ui(
+        &mut self,
+        ctx: &egui::Context,
+        frame: &mut eframe::Frame,
+        texture: &TextureHandle,
+    ) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if ui.button("Start Rendering").clicked() {
                     match self.renderer.get_renderer_status() {
-                        crate::ray_tracing::tile_renderer::RendererStatus::Running => {}
-                        crate::ray_tracing::tile_renderer::RendererStatus::Paused => {
-                            self.renderer.resume()
-                        }
-                        crate::ray_tracing::tile_renderer::RendererStatus::Stopped => self
+                        RendererStatus::Running => {}
+                        RendererStatus::Paused => self.renderer.resume(),
+                        RendererStatus::Stopped => self
                             .renderer
                             .render_scene(self.scene.as_ref().unwrap().clone()),
                     }
@@ -291,6 +225,162 @@ impl eframe::App for Application {
 
             ui.add(Image::new(SizedTexture::from_handle(texture)).shrink_to_fit())
         });
+    }
+    pub fn draw_path_tracer_ui(
+        &mut self,
+        ctx: &egui::Context,
+        frame: &mut eframe::Frame,
+        texture: &TextureHandle,
+    ) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                if ui.button("Start Rendering").clicked() {
+                    match self.renderer.get_renderer_status() {
+                        RendererStatus::Running => {}
+                        RendererStatus::Paused => self.renderer.resume(),
+                        RendererStatus::Stopped => self
+                            .renderer
+                            .render_scene(self.scene.as_ref().unwrap().clone()),
+                    }
+                }
+                if ui.button("Pause").clicked() {
+                    self.renderer.pause();
+                }
+                if ui.button("Stop").clicked() {
+                    self.renderer.stop();
+                }
+                ui.add(Label::new(format(format_args!(
+                    "Renderer Status: {}",
+                    self.renderer.get_renderer_status().to_str()
+                ))));
+                ui.separator();
+                ui.add(Label::new("Rendering Mode: "));
+                if ui
+                    .add(RadioButton::new(
+                        self.local_renderer_mode == RendererMode::Preview,
+                        "Preview",
+                    ))
+                    .clicked()
+                {
+                    self.local_renderer_mode = RendererMode::Preview;
+                    self.renderer.set_mode(RendererMode::Preview);
+                }
+                if ui
+                    .add(RadioButton::new(
+                        self.local_renderer_mode == RendererMode::PathTraced,
+                        "Path Traced",
+                    ))
+                    .clicked()
+                {
+                    self.local_renderer_mode = RendererMode::PathTraced;
+                    self.renderer.set_mode(RendererMode::PathTraced);
+                }
+            });
+            ui.separator();
+
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    ui.add(Label::new(format(format_args!(
+                        "Current Rendered Samples: {}",
+                        self.local_current_spp
+                    ))));
+                    ui.horizontal(|ui| {
+                        ui.add(Label::new("Target Samples Per Pixel: "));
+                        ui.add(
+                            DragValue::new(&mut self.local_target_spp)
+                                .speed(self.renderer.get_branch_count())
+                                .update_while_editing(false),
+                        );
+                        if ui.button("Apply").clicked() {
+                            self.renderer.set_target_spp(self.local_target_spp);
+                        }
+                    });
+                });
+                ui.separator();
+                ui.vertical(|ui| {
+                    ui.add(Label::new("X Resolution: "));
+                    ui.add(DragValue::new(&mut self.local_renderer_resolution.0).range(100..=5000));
+                });
+                ui.vertical(|ui| {
+                    ui.add(Label::new("Y Resolution: "));
+                    ui.add(DragValue::new(&mut self.local_renderer_resolution.1).range(100..=5000))
+                });
+                if ui.button("Apply").clicked() {
+                    if self.local_renderer_resolution != self.renderer.get_resolution() {
+                        self.renderer.set_resolution(self.local_renderer_resolution);
+                    }
+                }
+                ui.separator();
+                ui.vertical(|ui| {
+                    ui.add(Label::new("Camera Position: "));
+                    ui.horizontal(|ui| {
+                        ui.add(Label::new("X: "));
+                        ui.add_enabled(false, DragValue::new(&mut self.local_camera_position.x));
+
+                        ui.add(Label::new("Y: "));
+                        ui.add_enabled(false, DragValue::new(&mut self.local_camera_position.y));
+
+                        ui.add(Label::new("Z: "));
+                        ui.add_enabled(false, DragValue::new(&mut self.local_camera_position.z));
+                    })
+                });
+
+                ui.separator()
+            });
+            ui.separator();
+
+            ui.add(Image::new(SizedTexture::from_handle(texture)).shrink_to_fit())
+        });
+    }
+}
+impl eframe::App for Application {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        if self.scene.is_none() {
+            let start = Instant::now();
+            println!("Building Scene...");
+            self.build_scene();
+            let end = Instant::now();
+            let duration = end.duration_since(start);
+            println!("Took {duration:?} to build scene");
+        };
+
+        let texture: &egui::TextureHandle = self.render_texture.get_or_insert_with(|| {
+            let image = ImageData::Color(ColorImage::new([1280, 720], Color32::GRAY).into());
+            let texture_handle =
+                ctx.load_texture("render target", image, TextureOptions::default());
+
+            texture_handle
+        });
+        let gpu_objects: &SVOPipeline = self.gpu_objects.get_or_insert_with(|| {
+            let lock = self.scene.as_ref().unwrap().read().unwrap();
+            let render_state = frame.wgpu_render_state().unwrap();
+            gpu_test::create_pipeline(&render_state.device, &render_state.queue, &lock)
+        });
+        let render_state = frame.wgpu_render_state().unwrap();
+
+        match self.local_renderer_mode {
+            RendererMode::Preview => self.draw_preview_ui(ctx, frame, texture),
+            RendererMode::PathTraced => self.draw_path_tracer_ui(ctx, frame, texture),
+        }
         ctx.request_repaint();
+    }
+
+    fn save(&mut self, _storage: &mut dyn eframe::Storage) {}
+
+    fn auto_save_interval(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(30)
+    }
+
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        // NOTE: a bright gray makes the shadows of the windows look weird.
+        // We use a bit of transparency so that if the user switches on the
+        // `transparent()` option they get immediate results.
+        egui::Color32::from_rgba_unmultiplied(12, 12, 12, 180).to_normalized_gamma_f32()
+
+        // _visuals.window_fill() would also be a natural choice
+    }
+
+    fn persist_egui_memory(&self) -> bool {
+        true
     }
 }

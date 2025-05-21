@@ -1,8 +1,8 @@
 extern crate ray_tracing;
 
 use eframe::wgpu::{
-    self, BackendOptions, Backends, DeviceDescriptor, Features, InstanceDescriptor,
-    InstanceFlags, RequestAdapterOptions,
+    self, BackendOptions, Backends, DeviceDescriptor, Features, InstanceDescriptor, InstanceFlags,
+    RequestAdapterOptions,
 };
 use egui_wgpu::WgpuSetupExisting;
 use ray_tracing::Application;
@@ -36,7 +36,11 @@ fn ui() -> eframe::Result {
     dbg!(limits.max_buffer_size);
     let device_descriptor = DeviceDescriptor {
         label: None,
-        required_features: Features::SHADER_INT64,
+        required_features: Features::SHADER_INT64
+            | Features::TEXTURE_BINDING_ARRAY
+            | Features::STORAGE_RESOURCE_BINDING_ARRAY
+            | Features::BUFFER_BINDING_ARRAY
+            | Features::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING,
         required_limits: limits,
         memory_hints: wgpu::MemoryHints::Performance,
     };
