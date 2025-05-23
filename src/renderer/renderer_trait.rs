@@ -1,12 +1,21 @@
 use std::{future::Future, marker::PhantomData, sync::Arc, thread::JoinHandle};
 
 use eframe::{
-    egui::{mutex::Mutex, TextureHandle},
+    egui::{mutex::Mutex, Context, TextureHandle},
     wgpu::{self, Device, Queue, SubmissionIndex},
 };
 use parking_lot::{lock_api::MutexGuard, RawMutex, RwLock};
 
-use crate::{gpu_structs::gpu_octree::TraversalContext, scene::scene::Scene};
+use crate::{
+    scene::scene::Scene,
+    settings::{RenderSettingsWindow, RendererBackendSetting},
+};
+
+use super::{
+    camera::{self, Camera},
+    dummy_renderer::DummyRenderer,
+    tile_renderer::{RendererMode, RendererStatus},
+};
 
 pub trait ColorScalar {}
 
@@ -15,21 +24,36 @@ impl ColorScalar for f32 {}
 impl ColorScalar for u8 {}
 
 pub trait RenderingBackend {
+    fn get_camera(&self) -> &Camera;
+    fn set_camera(&mut self, camera: Camera);
+    fn which_backend(&self) -> RendererBackendSetting;
+    fn set_resolution(&mut self, resolution: (u32, u32));
+    fn get_status(&self) -> RendererStatus;
+    fn get_resolution(&self) -> (u32, u32);
+    fn set_mode(&mut self, mode: RendererMode);
+    fn get_mode(&self) -> RendererMode;
+    fn update_scene(&mut self, ctx: &Context);
+    fn set_scene(&mut self, scene: &Arc<parking_lot::RwLock<Scene>>);
     fn render_frame(
         &self,
-        texture: egui_wgpu::Texture,
-    ) -> Result<Box<dyn super::renderer_trait::FrameInFlight>, egui_wgpu::Texture>;
+        egui_frame: &eframe::Frame,
+        texture: TextureHandle,
+    ) -> Result<Box<dyn FrameInFlight>, TextureHandle>;
 }
 
-pub enum FrameInFlightPoll<'a, T: FrameInFlight<'a>> {
-    Ready(egui_wgpu::Texture),
-    NotReady(&'a T),
+pub enum FrameInFlightPoll {
+    Ready(TextureHandle),
+    NotReady(Box<dyn FrameInFlight>),
     Cancelled,
 }
-pub trait FrameInFlight<'a> {
-    fn poll(self) -> FrameInFlightPoll<'a, Self>
-    where
-        Self: Sized;
+pub trait FrameInFlight {
+    fn poll(self: Box<Self>) -> FrameInFlightPoll;
 
-    fn wait_for(self) -> Result<egui_wgpu::Texture, egui_wgpu::Texture>;
+    fn wait_for(self: Box<Self>) -> Result<TextureHandle, TextureHandle>;
+}
+
+impl Default for Box<dyn RenderingBackend> {
+    fn default() -> Self {
+        Box::new(DummyRenderer {})
+    }
 }

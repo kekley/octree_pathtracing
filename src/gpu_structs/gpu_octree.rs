@@ -7,15 +7,6 @@ use crate::{
 use bytemuck::{Pod, Zeroable};
 
 #[repr(C, align(16))]
-#[derive(Copy, Clone, Pod, Zeroable, Default, Debug)]
-pub struct TraversalContext {
-    pub octree_scale: f32,
-    pub root: u32,
-    pub scale: u32,
-    pub padding: u32,
-}
-
-#[repr(C, align(16))]
 #[derive(Debug, Copy, Clone, Pod, Zeroable)]
 pub struct GPUOctreeNode {
     data: [u32; 12],
@@ -66,24 +57,22 @@ impl From<&Octant<ResourceModel>> for GPUOctreeNode {
     }
 }
 
-pub struct GPUOctree {
+#[repr(C, align(16))]
+#[derive(Debug, Copy, Clone, Pod, Zeroable)]
+pub struct GPUOctreeUniform {
     pub octree_scale: f32,
-    pub octants: Vec<GPUOctreeNode>,
-    pub depth: u8,
+    pub depth: u32,
+    pub root: u32,
+    pub padding: u32,
 }
 
-impl From<&Octree<ResourceModel>> for GPUOctree {
+impl From<&Octree<ResourceModel>> for GPUOctreeUniform {
     fn from(value: &Octree<ResourceModel>) -> Self {
-        let vec = value
-            .octants
-            .iter()
-            .map(|octant| GPUOctreeNode::from(octant))
-            .collect::<Vec<_>>();
-
-        GPUOctree {
+        GPUOctreeUniform {
             octree_scale: value.octree_scale,
-            octants: vec,
-            depth: value.depth,
+            depth: value.depth as u32,
+            root: value.root.unwrap(),
+            padding: 0,
         }
     }
 }

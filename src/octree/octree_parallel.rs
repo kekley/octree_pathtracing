@@ -473,7 +473,7 @@ impl ParallelOctree<ResourceModel> {
                     None
                 }
             }
-            17..=1024 => {
+            17..=512 => {
                 let region = world.get_region_lazy(origin.into());
                 if let Some(region) = region {
                     octree.construct_region_level(size, &region, model_manager, offset, pos)
@@ -481,7 +481,7 @@ impl ParallelOctree<ResourceModel> {
                     None
                 }
             }
-            1025..=u32::MAX => {
+            513..=u32::MAX => {
                 octree.construct_world_level(size, &world, model_manager, offset, pos)
             }
             _ => {
@@ -509,7 +509,7 @@ impl ParallelOctree<ResourceModel> {
         let size = size / 2;
         let new_parent: OnceLock<u32> = OnceLock::new();
 
-        if size > 1024 {
+        if size > 512 {
             (0..8).into_iter().for_each(|i| {
                 let child_pos = P::construct(
                     pos.x() + size * ((i as u32) & 1),
@@ -544,7 +544,7 @@ impl ParallelOctree<ResourceModel> {
             regions.iter_mut().enumerate().for_each(|(i, region)| {
                 let region_coords = RegionCoords {
                     x: region_coords.x + (i & 1) as i64,
-                    z: region_coords.z + (i & 2) as i64,
+                    z: region_coords.z + ((i >> 1) & 1) as i64,
                 };
                 *region = world.get_region_lazy(region_coords);
             });
@@ -557,24 +557,32 @@ impl ParallelOctree<ResourceModel> {
                     pos.z() + size * ((i as u32 >> 2) & 1),
                 );
 
-                dbg!(&child_pos);
-
                 if let Some(region) = &regions[x + z * 2] {
                     if let Some(value) =
-                        self.construct_region_level(size, &region, model_manager, offset, child_pos)
+                        // value is the child_octant_id from construct_region_level
+                        self.construct_region_level(
+                            size,
+                            region,
+                            model_manager,
+                            offset,
+                            child_pos,
+                        )
                     {
                         let parent_id = new_parent.get_or_init(|| self.new_octant(None));
-                        let mut parent = self.octants[*parent_id as usize].get();
+                        let mut parent_octant_data = self.octants[*parent_id as usize].get();
+                        parent_octant_data.set_child(i, Child::Octant(value));
+                        self.octants[*parent_id as usize].set(parent_octant_data);
 
-                        parent.set_child(i, Child::Octant(value));
-                        self.octants[*parent_id as usize].set(parent);
+                        let mut child_octant_data = self.octants[value as usize].get();
+                        child_octant_data.parent = Some(*parent_id);
+                        self.octants[value as usize].set(child_octant_data);
                     }
                 }
             });
         }
         new_parent.into_inner()
     }
-    //call when size is between 17-1024
+    //call when size is between 17-512
 
     fn construct_region_level<P: Position + Sync>(
         &self,
@@ -586,14 +594,13 @@ impl ParallelOctree<ResourceModel> {
     ) -> Option<OctantId> {
         let size = size / 2;
         let new_parent: OnceLock<u32> = OnceLock::new();
-
-        (0..8).into_par_iter().for_each(|i| {
-            let child_pos = P::construct(
-                pos.x() + size * ((i as u32) & 1),
-                pos.y() + size * ((i as u32 >> 1) & 1),
-                pos.z() + size * ((i as u32 >> 2) & 1),
-            );
-            if size > 16 {
+        if size > 16 {
+            (0..8).into_iter().for_each(|i| {
+                let child_pos = P::construct(
+                    pos.x() + size * ((i as u32) & 1),
+                    pos.y() + size * ((i as u32 >> 1) & 1),
+                    pos.z() + size * ((i as u32 >> 2) & 1),
+                );
                 let child_id =
                     self.construct_region_level(size, region, model_manager, offset, child_pos);
                 let Some(child_id) = child_id else {
@@ -608,25 +615,46 @@ impl ParallelOctree<ResourceModel> {
                 child.parent = Some(*parent_id);
                 self.octants[child_id as usize].set(child);
                 return;
-            }
-            let chunk_coords: ChunkCoords = WorldCoords {
-                x: child_pos.x() as i64 + offset.x,
-                y: child_pos.y() as i64 + offset.y,
-                z: child_pos.z() as i64 + offset.z,
-            }
-            .into();
-
-            if let Some(chunk) = region.get_chunk(chunk_coords) {
-                if let Some(value) =
-                    self.construct_chunk_level(size, &chunk, model_manager, offset, child_pos)
-                {
-                    let parent_id = new_parent.get_or_init(|| self.new_octant(None));
-                    let mut parent = self.octants[*parent_id as usize].get();
-                    parent.set_child(i, Child::Octant(value));
-                    self.octants[*parent_id as usize].set(parent);
+            });
+        } else {
+            (0..8).into_par_iter().for_each(|i| {
+                let child_pos = P::construct(
+                    pos.x() + size * ((i as u32) & 1),
+                    pos.y() + size * ((i as u32 >> 1) & 1),
+                    pos.z() + size * ((i as u32 >> 2) & 1),
+                );
+                let chunk_coords: ChunkCoords = WorldCoords {
+                    x: child_pos.x() as i64 + offset.x,
+                    y: child_pos.y() as i64 + offset.y,
+                    z: child_pos.z() as i64 + offset.z,
                 }
-            }
-        });
+                .into();
+
+                if let Some(chunk) = region.get_chunk(chunk_coords) {
+                    if let Some(value) =
+                        // value is the child_octant_id from construct_chunk_level
+                        self.construct_chunk_level(
+                            size,
+                            &chunk,
+                            model_manager,
+                            offset,
+                            child_pos,
+                        )
+                    {
+                        let parent_id = new_parent.get_or_init(|| self.new_octant(None));
+                        let mut parent_octant_data = self.octants[*parent_id as usize].get();
+                        parent_octant_data.set_child(i, Child::Octant(value));
+                        self.octants[*parent_id as usize].set(parent_octant_data);
+
+                        // ---- Add this section ----
+                        let mut child_octant_data = self.octants[value as usize].get();
+                        child_octant_data.parent = Some(*parent_id);
+                        self.octants[value as usize].set(child_octant_data);
+                        // ---- End of added section ----
+                    }
+                }
+            });
+        }
         new_parent.into_inner()
     }
     //call this when size is between 3-16
@@ -670,6 +698,9 @@ impl ParallelOctree<ResourceModel> {
                 let mut parent = self.octants[*parent_id as usize].get();
                 parent.set_child(i, Child::Octant(value));
                 self.octants[*parent_id as usize].set(parent);
+                let mut child_octant_data = self.octants[value as usize].get();
+                child_octant_data.parent = Some(*parent_id);
+                self.octants[value as usize].set(child_octant_data);
             }
         });
         new_parent.into_inner()

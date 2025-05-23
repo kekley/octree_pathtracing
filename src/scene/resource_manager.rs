@@ -272,6 +272,7 @@ impl ModelManager {
 
     fn build_model(
         &self,
+
         block_model: &InternedBlockModel,
         model_type: ModelType,
         rotation_x: Option<BlockRotation>,
@@ -313,7 +314,10 @@ impl ModelManager {
 
                 let quad_len = quads.len() as u32;
                 if quad_len == 0 {
-                    error!("No quads");
+                    error!(
+                        "No quads on model {}",
+                        self.resource_loader.rodeo.resolve(&block_model.name)
+                    );
                     return None;
                 }
                 let mut quads_lock = self.quads.write();

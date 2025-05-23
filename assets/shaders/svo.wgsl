@@ -11,10 +11,7 @@ struct GPUQuad {
     plane_d: f32
 };
 
-struct BlockModel{
-    ind:u32,
-    len:u32,
-}
+
 
 struct GPUMaterial{
     ior: f32,
@@ -27,16 +24,29 @@ struct GPUMaterial{
     flags: u32,
 }
 
+struct OctreeUniform{
+    octree_scale:f32,
+    depth:u32,
+    root:u32,
+    padding:u32,
+}
+
 struct Octant {
     data: array<u32,12>
 }
  
-struct TraversalContext {
-    octree_scale: f32,
-    root: u32,
-    scale: u32,
-    padding:u32,
+struct UniformData{
+    camera_scaled_view_dir: vec3<f32>,
+    traversal_start_idx: u32,
+    camera_scaled_view_right: vec3<f32>,
+    scale:u32,    
+    camera_view_up_ortho:vec3<f32>,
+    inv_image_size_x:f32,
+    camera_world_position:vec3<f32>,
+    inv_image_size_y:f32,
 }
+
+
 
 //creates a bitmask using the three least significant bits of a u32 from a vec3<bool>
 fn vec_to_bitmask(v:vec3<bool>)->u32{
@@ -58,13 +68,17 @@ fn bitmask_to_vec(bits:u32)->vec3<bool>{
 
 
 @group(0) @binding(0)
-var<uniform> context : TraversalContext;
+var<uniform> uniform_data: UniformData;
+@group(0) @binding(1)
+var<storage,read> index_stack_uniform: array<u32,24>;
+@group(0) @binding(2)
+var<storage,read> time_stack_uniform: array<f32,24>;
 
 
 @group(1) @binding(0)
-var<storage,read> octree: array<u32>;
+var<uniform> octree_uniform: OctreeUniform;
 @group(1) @binding(1)
-var<storage,read> models: array<BlockModel>;
+var<storage,read> octree: array<u32>;
 @group(1) @binding(2)
 var<storage,read> quads: array<GPUQuad>;
 @group(1) @binding(3)
@@ -82,7 +96,6 @@ const OCTREE_MAX_STEPS:u32 = 1000;
 const OCTREE_EPSILON:f32 = 1.1920929e-7;
 const RAY_EPSILON:f32 = 5e-8;
 
-const camera = CameraParams(vec3(1.0,200.0,20.0),vec3(100.0,130,100.0),vec3(0.0,1.0,0.0),70.0,16.0/9.0);
 
 const WORKGROUP_SIZE_X = 8u;
 const WORKGROUP_SIZE_Y = 8u;
@@ -94,10 +107,11 @@ fn main(@builtin(local_invocation_index) local_idx: u32,@builtin(global_invocati
     if global_id.x >= 1280 || global_id.y >= 720 {
         return;
     }
+    let camera = PrecomputedCameraData(uniform_data.camera_world_position,uniform_data.camera_scaled_view_dir,uniform_data.camera_scaled_view_right,uniform_data.camera_view_up_ortho,vec2<f32>(uniform_data.inv_image_size_x,uniform_data.inv_image_size_y));
+    let ray = create_ray_from_precomputed(camera,global_id.xy);
+    //textureStore(output,global_id.xy,vec4<f32>(ray.origin,1.0));
     
-    let ray = create_ray_optimized(camera,global_id.xy);
-    rays[local_idx] = ray;
-    intersect_octree(global_id,local_idx,1024.0);
+    intersect_octree(global_id,ray,local_idx,1024.0);
 }
 
 const MAX_BOUNCES:u32 = 5;
@@ -170,7 +184,6 @@ fn min_vec3(v: vec3<f32> )->f32{
 
 var<workgroup> time_stacks: array<array<f32,24>,WORKGROUP_SIZE_TOTAL>;
 var<workgroup> octant_stacks: array<array<u32,24>,WORKGROUP_SIZE_TOTAL>;
-var<workgroup> rays: array<Ray,WORKGROUP_SIZE_TOTAL>;
 
 fn intersect_quad(ray:ptr<function,Ray>,quad:ptr<function,GPUQuad>,voxel_position:vec3<f32>,t_next:f32)->bool{
     let translated_ray_origin = (*ray).origin-voxel_position;
@@ -203,25 +216,23 @@ fn intersect_quad(ray:ptr<function,Ray>,quad:ptr<function,GPUQuad>,voxel_positio
             return false;
     }
     
-    
     return true;
 }
 
 struct OctreeIntersectResult{
     material_id:u32,
-
 }
 
-fn intersect_octree(global_id:vec3<u32>,local_idx:u32, max_dst: f32) {
-    let octree_scale: f32 = context.octree_scale;
-    var root: u32 = context.root;
-    var scale: u32 = context.scale;
+fn intersect_octree(global_id:vec3<u32>,ray: Ray,local_idx:u32, max_dst: f32) {
+    let octree_scale: f32 = octree_uniform.octree_scale;
+    var root: u32 = octree_uniform.root;
+    var scale: u32 = 23u-1u;
     let octant_stack :ptr<workgroup,array<u32,24>> = &octant_stacks[local_idx];
     let time_stack : ptr<workgroup,array<f32,24>> = &time_stacks[local_idx];
-    var ro: vec3<f32> =rays[local_idx].origin;
+    var ro: vec3<f32> =ray.origin;
     ro*=octree_scale;
     ro += 1.0;
-    var rd: vec3<f32> = rays[local_idx].direction;
+    var rd: vec3<f32> = ray.direction;
     var scale_exp2: f32 = exp2(f32(i32(scale) - i32(OCTREE_MAX_SCALE)));
     var parent_octant_idx: u32 = root;
 
@@ -453,6 +464,8 @@ fn intersect_octree(global_id:vec3<u32>,local_idx:u32, max_dst: f32) {
             scale_exp2 = exp2(f32(i32(scale)-i32(OCTREE_MAX_SCALE)));
 
             if scale>=OCTREE_MAX_SCALE{
+            textureStore(output,global_id.xy,vec4<f32>(ray.direction,1.0));
+
                 return; //miss
             }
 
@@ -466,6 +479,8 @@ fn intersect_octree(global_id:vec3<u32>,local_idx:u32, max_dst: f32) {
             h=0.0;
         }
     }
+                textureStore(output,global_id.xy,vec4<f32>(ray.direction,1.0));
+
     return; //miss
 }
 
@@ -618,11 +633,10 @@ fn create_ray_from_precomputed(
     // If aspect_ratio is applied here (assuming precomp_cam.scaled_view_right is just view_right):
     // (This also assumes precomp_cam.scaled_view_direction is d_factor * view_direction)
     // And assuming precomp_cam.aspect_ratio_val holds camera.aspect_ratio
-    let temp_aspect_ratio = precomp_cam.inv_image_size.y / precomp_cam.inv_image_size.x * (f32(IMAGE_SIZE.x) / f32(IMAGE_SIZE.y)); // Example, if aspect was not in CameraParams but derived. Better to use camera.aspect_ratio
 
     let ray_direction_world = normalize(
         precomp_cam.scaled_view_direction + // This is d_factor * view_direction
-        (screen_coords.x * temp_aspect_ratio) * precomp_cam.scaled_view_right + // This is view_right
+        (screen_coords.x ) * precomp_cam.scaled_view_right + // This is view_right
         screen_coords.y * precomp_cam.view_up_orthogonal
     );
 

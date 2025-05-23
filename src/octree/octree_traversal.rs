@@ -533,3 +533,183 @@ impl Octree<ResourceModel> {
         return false;
     }
 }
+impl Octree<ResourceModel> {
+    pub fn get_traversal_data(
+        &self,
+        ray: &mut Ray,
+        max_dst: f32,
+    ) -> (u32, u32, [u32; 24], [f32; 24]) {
+        //octant index, scale, stack
+        let tree_root = match self.root {
+            Some(root) => root,
+            None => {
+                println!("no root");
+                panic!();
+            }
+        };
+        let octree_scale = self.octree_scale;
+
+        let (mut index_stack, mut time_stack): ([u32; 24], [f32; 24]) = Default::default();
+        let mut ro = ray.origin * octree_scale;
+
+        let mut rd: Vec3A = *ray.get_direction();
+
+        let max_dst = max_dst * octree_scale;
+
+        ro += 1.0; // shift the coordinates to [1-2)
+
+        let mut parent_octant_idx = tree_root;
+
+        let mut scale: u32 = (OCTREE_MAX_SCALE - 1) as u32;
+        let mut scale_exp2: f32 = 0.5f32; //exp2(scale-MAX_SCALE)
+
+        let sign_mask: u32 = 1 << 31;
+        let epsilon_bits_without_sign: u32 = OCTREE_EPSILON.to_bits() & !sign_mask;
+        let rd_abs = rd.abs();
+        let b_vec = rd_abs.cmplt(Vec3A::splat(OCTREE_EPSILON));
+
+        (0..3).for_each(|i| {
+            if b_vec.test(i) {
+                rd[i] = f32::from_bits(epsilon_bits_without_sign | rd[i].to_bits() & sign_mask)
+            }
+        });
+
+        let t_coef = 1.0 / -rd_abs;
+        let mut t_bias = t_coef * ro;
+
+        let b_vec = rd.cmpgt(Vec3A::ZERO);
+        let mirror_mask = b_vec.bitmask();
+
+        (0..3).for_each(|i| {
+            if b_vec.test(i) {
+                t_bias[i] = 3.0 * t_coef[i] - t_bias[i];
+            }
+        });
+
+        let mut t_min = (2.0 * t_coef - t_bias).max_element().max(0.0);
+
+        let mut t_max = (t_coef - t_bias).min_element();
+
+        let mut h: f32 = t_max;
+
+        let mut idx: u32 = 0;
+
+        let mut pos: Vec3A = Vec3A::splat(1.0);
+        let value = 1.5 * t_coef - t_bias;
+        let b_vec = value.cmpgt(Vec3A::splat(t_min));
+        let bitmask = b_vec.bitmask();
+        idx ^= bitmask;
+        (0..3).for_each(|i: usize| {
+            if b_vec.test(i) {
+                pos[i] = 1.5;
+            }
+        });
+
+        for i in 0..OCTREE_MAX_STEPS {
+            if max_dst >= 0.0 && t_min > max_dst {
+                return (parent_octant_idx, scale, index_stack, time_stack);
+            }
+
+            let t_corner = pos * t_coef - t_bias;
+
+            let tc_max = t_corner.min_element();
+
+            let unmirrored_idx = idx ^ mirror_mask;
+
+            let child =
+                &self.octants[(parent_octant_idx) as usize].children[unmirrored_idx as usize];
+
+            if !child.is_none() && t_min <= t_max {
+                if child.is_leaf() && t_min > 0.0 {
+                    return (parent_octant_idx, scale, index_stack, time_stack);
+                } else {
+                    let half_scale = scale_exp2 * 0.5;
+
+                    let t_center = half_scale * t_coef + t_corner;
+
+                    let tv_max = t_max.min(tc_max);
+
+                    if t_min <= tv_max && child.is_octant() {
+                        if tc_max < h {
+                            index_stack[scale as usize] = parent_octant_idx;
+                            time_stack[scale as usize] = t_max;
+                        }
+                        h = tc_max;
+
+                        parent_octant_idx = child.get_octant_value().unwrap();
+                        scale -= 1;
+                        scale_exp2 = half_scale;
+
+                        idx = 0;
+                        let b_vec = t_center.cmpgt(Vec3A::splat(t_min));
+                        idx ^= b_vec.bitmask();
+                        (0..3).for_each(|i: usize| {
+                            if b_vec.test(i) {
+                                pos[i] += scale_exp2;
+                            }
+                        });
+
+                        t_max = tv_max;
+                        continue;
+                    }
+                }
+            }
+            //advance
+            //println!("advance!");
+
+            let mut step_mask = 0;
+
+            let b_vec = t_corner.cmple(Vec3A::splat(tc_max));
+            step_mask ^= b_vec.bitmask();
+            (0..3).for_each(|i: usize| {
+                if b_vec.test(i) {
+                    pos[i] -= scale_exp2;
+                }
+            });
+
+            t_min = tc_max;
+            idx ^= step_mask;
+
+            if (idx & step_mask) != 0 {
+                //println!("pop!");
+                let mut differing_bits: u32 = 0;
+
+                if (step_mask & 1) != 0 {
+                    differing_bits |= pos.x.to_bits() ^ (pos.x + scale_exp2).to_bits();
+                }
+
+                if (step_mask & 2) != 0 {
+                    differing_bits |= pos.y.to_bits() ^ (pos.y + scale_exp2).to_bits();
+                }
+
+                if (step_mask & 4) != 0 {
+                    differing_bits |= pos.z.to_bits() ^ (pos.z + scale_exp2).to_bits();
+                }
+                let old_scale = scale;
+                scale = util::find_msb_u32(differing_bits);
+                scale_exp2 = f32::exp2((scale as i32 - OCTREE_MAX_SCALE as i32) as f32);
+
+                if scale >= OCTREE_MAX_SCALE as u32 {
+                    return (parent_octant_idx, old_scale, index_stack, time_stack);
+                }
+                (parent_octant_idx, t_max) =
+                    (index_stack[scale as usize], time_stack[scale as usize]);
+
+                let (shx, shy, shz): (u32, u32, u32);
+
+                shx = pos.x.to_bits() >> scale;
+                pos.x = f32::from_bits(shx << scale);
+
+                shy = pos.y.to_bits() >> scale;
+                pos.y = f32::from_bits(shy << scale);
+
+                shz = pos.z.to_bits() >> scale;
+                pos.z = f32::from_bits(shz << scale);
+
+                idx = (shx & 1) | ((shy & 1) << 1) | ((shz & 1) << 2);
+                h = 0.0;
+            }
+        }
+        return (parent_octant_idx, scale, index_stack, time_stack);
+    }
+}

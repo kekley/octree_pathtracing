@@ -663,7 +663,7 @@ impl TileRenderer {
                 let y_normalized = ((2 * (tile.frame_buffer_resolution.1 - y) - 1) as f32
                     - tile.frame_buffer_resolution.1 as f32)
                     / tile.dim;
-                let ray = camera.get_ray(&mut rng, x_normalized, y_normalized);
+                let ray = camera.get_ray(x_normalized, y_normalized);
                 let color = scene.get_preview_color(ray, x_normalized, y_normalized, &mut rng);
                 //scene.get_color(x_normalized + dx, y_normalized + dy, &mut rng, current_spp);
                 let local_buffer_idx = Self::get_pixel_index(x - tile.x0, y - tile.y0, tile.stride);
@@ -710,7 +710,7 @@ impl TileRenderer {
 
                 let dx = rng.gen_range((-1.0 / tile.dim)..(1.0 / tile.dim));
                 let dy = rng.gen_range((-1.0 / tile.dim)..(1.0 / tile.dim));
-                let ray = camera.get_ray(&mut rng, x_normalized + dx, y_normalized + dy);
+                let ray = camera.get_ray(x_normalized + dx, y_normalized + dy);
                 let color = scene.get_color(ray, &mut rng, current_spp);
                 //scene.get_color(x_normalized + dx, y_normalized + dy, &mut rng, current_spp);
                 let local_buffer_idx = Self::get_pixel_index(x - tile.x0, y - tile.y0, tile.stride);
