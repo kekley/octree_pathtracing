@@ -1,11 +1,9 @@
-use std::mem::transmute;
 use std::sync::atomic::{AtomicU32, AtomicUsize};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{self, Arc, Mutex, RwLock};
 use std::thread::{spawn, JoinHandle};
 use std::time::Instant;
 
-use glam::Vec4;
 use rand::rngs::StdRng;
 
 use rand::{Rng, SeedableRng};

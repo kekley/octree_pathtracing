@@ -1,4 +1,4 @@
-use glam::{Affine3A, Vec2, Vec3A, Vec4};
+use glam::{Affine3A, Vec2, Vec3A};
 use spider_eye::{block_face::FaceName, block_texture::Uv};
 
 use crate::{ray::ray::Ray, scene::resource_manager::MaterialID};

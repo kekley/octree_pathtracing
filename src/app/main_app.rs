@@ -2,21 +2,17 @@ use eframe::egui::{
     self, load::SizedTexture, Button, Color32, ColorImage, DragValue, Image, ImageData,
     ImageSource, Label, RadioButton, TextureHandle, TextureOptions, Ui,
 };
-use glam::UVec3;
 use log::info;
 use spider_eye::coords::block::BlockCoords;
 
 use crate::{
     colors::colors::U8Color,
-    geometry::quad::Quad,
-    octree::octree_parallel::ParallelOctree,
     renderer::{
         gpu_renderer::GPURenderer,
         renderer_trait::{FrameInFlight, FrameInFlightPoll, RenderingBackend},
         tile_renderer::{RendererMode, RendererStatus},
     },
     scene::{resource_manager::ModelManager, scene::Scene},
-    textures::material::Material,
 };
 
 use super::{

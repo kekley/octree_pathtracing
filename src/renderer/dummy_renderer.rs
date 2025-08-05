@@ -1,4 +1,4 @@
-use eframe::egui::{Context, TextureHandle};
+use eframe::egui::TextureHandle;
 
 use super::{camera::Camera, renderer_trait::RenderingBackend, tile_renderer::RendererMode};
 static mut DUMMY_CAMERA: Camera = Camera::DEFAULT_CAMERA;

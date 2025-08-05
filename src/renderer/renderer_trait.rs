@@ -1,18 +1,14 @@
-use std::{future::Future, marker::PhantomData, sync::Arc, thread::JoinHandle};
+use std::sync::Arc;
 
-use eframe::{
-    egui::{mutex::Mutex, Context, TextureHandle},
-    wgpu::{self, Device, Queue, SubmissionIndex},
-};
-use parking_lot::{lock_api::MutexGuard, RawMutex, RwLock};
+use eframe::egui::{Context, TextureHandle};
 
 use crate::{
     scene::scene::Scene,
-    settings::{RenderSettingsWindow, RendererBackendSetting},
+    settings::RendererBackendSetting,
 };
 
 use super::{
-    camera::{self, Camera},
+    camera::Camera,
     dummy_renderer::DummyRenderer,
     tile_renderer::{RendererMode, RendererStatus},
 };

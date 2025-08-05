@@ -6,7 +6,7 @@ use std::{
 
 use aovec::Aovec;
 use glam::I64Vec3;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::ParallelIterator;
 use spider_eye::{
     chunk::Chunk,
     coords::{block::BlockCoords, chunk::ChunkCoords, region::RegionCoords},

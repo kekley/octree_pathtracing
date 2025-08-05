@@ -1,6 +1,5 @@
-use std::default;
 
-use eframe::egui::{self, DragValue, Label, RadioButton, Slider, Window};
+use eframe::egui::{self, DragValue, Label, RadioButton, Window};
 
 use crate::renderer::{gpu_renderer::GPURenderer, renderer_trait::RenderingBackend};
 

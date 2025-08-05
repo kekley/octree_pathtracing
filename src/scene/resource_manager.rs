@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
-use glam::{Affine3A, Quat, Vec3, Vec3A, Vec4, Vec4Swizzles};
+use glam::{Affine3A, Quat, Vec3, Vec3A};
 use spider_eye::{
-    block_element::ElementRotation, block_face::FaceName, block_models::BlockRotation,
-    borrow::nbt_string::NBTStr, chunk_new::section::BlockState, variant::ModelVariant,
+    block_element::ElementRotation, block_face::FaceName, block_models::BlockRotation, chunk_new::section::BlockState, variant::ModelVariant,
     MCResourceLoader,
 };
 

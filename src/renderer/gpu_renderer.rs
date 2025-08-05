@@ -16,7 +16,7 @@ use super::{
     tile_renderer::{RendererMode, RendererStatus},
 };
 use eframe::{
-    egui::{Context, TextureHandle},
+    egui::TextureHandle,
     wgpu::{
         self,
         util::{BufferInitDescriptor, DeviceExt},
@@ -29,7 +29,6 @@ use eframe::{
         Texture, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureView,
         TextureViewDescriptor, TextureViewDimension,
     },
-    Frame,
 };
 use glam::Vec3A;
 use log::info;

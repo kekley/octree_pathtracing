@@ -78,8 +78,8 @@ impl Camera {
         // cot(f / 2) = depth / radius
         let d = (self.fov / 2.0).tan().recip();
         let right = self.direction.cross(self.up);
-        let mut origin = self.eye;
-        let mut new_dir = d * self.direction + x * right + y * self.up;
+        let origin = self.eye;
+        let new_dir = d * self.direction + x * right + y * self.up;
 
         let new_dir = new_dir.normalize();
         Ray::new(origin, new_dir)

@@ -1,4 +1,4 @@
-use std::{mem::transmute, ops::Mul, process::Output};
+use std::{mem::transmute, ops::Mul};
 
 use crate::textures::texture::{LUT_TABLE_BYTE, LUT_TABLE_FLOAT};
 
