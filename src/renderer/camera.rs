@@ -1,7 +1,5 @@
-use eframe::egui::{self, Context, EventFilter, Key, Modifiers};
+use eframe::egui::{self, Context};
 use glam::Vec3A;
-use rand::{rngs::StdRng, Rng};
-use rand_distr::UnitDisc;
 
 use crate::ray::ray::Ray;
 

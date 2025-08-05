@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use eframe::egui::{self, Button, DragValue, Label, Slider, Window};
-use spider_eye::{loaded_world::WorldCoords, MCResourceLoader};
+use spider_eye::coords::block::BlockCoords;
 
 use crate::{renderer::renderer_trait::RenderingBackend, scene::resource_manager::ModelManager};
 
@@ -12,7 +12,7 @@ pub struct WorldLoadingDialog {
     model_manager: ModelManager,
     pub open: bool,
     path: String,
-    position: WorldCoords,
+    position: BlockCoords,
     depth: u32,
 }
 

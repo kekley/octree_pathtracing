@@ -171,8 +171,7 @@ pub struct SceneBuilder {
 impl ModelManager {
     pub fn build(&self, octree: Octree<ResourceModel>) -> Scene {
         let quad_box: Box<[Quad]> = self.quads.read().clone().into_boxed_slice();
-        let materials_box: Box<[Material]> =
-            self.materials.read_value_store().clone().into_boxed_slice();
+        let materials_box: Box<[Material]> = todo!();
 
         Scene {
             sun: Sun::new(
@@ -411,7 +410,7 @@ impl Sun {
             importance_sample_chance: Sun::DEFAULT_IMPORTANCE_SAMPLE_CHANCE,
             importance_sample_radius: Sun::DEFAULT_IMPORTANCE_SAMPLE_RADIUS,
             texture_modification,
-            apparent_texture_brightness: apparent_texture_brightness,
+            apparent_texture_brightness,
             apparent_brightness,
         };
 

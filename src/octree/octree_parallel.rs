@@ -6,10 +6,11 @@ use std::{
 
 use aovec::Aovec;
 use glam::I64Vec3;
-use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use spider_eye::{
     chunk::Chunk,
-    loaded_world::{ChunkCoords, RegionCoords, World, WorldCoords},
+    coords::{block::BlockCoords, chunk::ChunkCoords, region::RegionCoords},
+    loaded_world::World,
     region::LazyRegion,
 };
 
@@ -433,7 +434,7 @@ impl<T: Copy> ParallelOctree<T> {
 
 impl ParallelOctree<ResourceModel> {
     pub fn load_mc_world<P: Position + Sync>(
-        origin: WorldCoords,
+        origin: BlockCoords,
         depth: u8,
         world: World,
         model_manager: &ModelManager,
@@ -496,8 +497,8 @@ impl ParallelOctree<ResourceModel> {
         }
         panic!()
     }
-    //call when size is 2049-inf
 
+    //call when size is 2049-inf
     fn construct_world_level<P: Position + Sync>(
         &self,
         size: u32,
@@ -533,7 +534,7 @@ impl ParallelOctree<ResourceModel> {
                 return;
             });
         } else {
-            let region_coords: RegionCoords = WorldCoords {
+            let region_coords: RegionCoords = BlockCoords {
                 x: pos.x() as i64 + offset.x,
                 y: pos.y() as i64 + offset.y,
                 z: pos.z() as i64 + offset.z,
@@ -617,13 +618,13 @@ impl ParallelOctree<ResourceModel> {
                 return;
             });
         } else {
-            (0..8).into_par_iter().for_each(|i| {
+            (0..8).into_iter().for_each(|i| {
                 let child_pos = P::construct(
                     pos.x() + size * ((i as u32) & 1),
                     pos.y() + size * ((i as u32 >> 1) & 1),
                     pos.z() + size * ((i as u32 >> 2) & 1),
                 );
-                let chunk_coords: ChunkCoords = WorldCoords {
+                let chunk_coords: ChunkCoords = BlockCoords {
                     x: child_pos.x() as i64 + offset.x,
                     y: child_pos.y() as i64 + offset.y,
                     z: child_pos.z() as i64 + offset.z,
@@ -646,11 +647,9 @@ impl ParallelOctree<ResourceModel> {
                         parent_octant_data.set_child(i, Child::Octant(value));
                         self.octants[*parent_id as usize].set(parent_octant_data);
 
-                        // ---- Add this section ----
                         let mut child_octant_data = self.octants[value as usize].get();
                         child_octant_data.parent = Some(*parent_id);
                         self.octants[value as usize].set(child_octant_data);
-                        // ---- End of added section ----
                     }
                 }
             });
@@ -670,7 +669,7 @@ impl ParallelOctree<ResourceModel> {
         let size = size / 2;
         let new_parent: OnceLock<u32> = OnceLock::new();
 
-        (0..8).into_par_iter().for_each(|i| {
+        (0..8).into_iter().for_each(|i| {
             let child_pos = P::construct(
                 pos.x() + size * ((i as u32) & 1),
                 pos.y() + size * ((i as u32 >> 1) & 1),
@@ -716,7 +715,7 @@ impl ParallelOctree<ResourceModel> {
     ) -> Option<OctantId> {
         let new_parent: OnceLock<u32> = OnceLock::new();
         (0..8).into_iter().for_each(|child_idx| {
-            let child_pos = WorldCoords {
+            let child_pos = BlockCoords {
                 x: ((pos.x() + ((child_idx as u32) & 1)) as i64) + offset.x,
                 y: ((pos.y() + ((child_idx as u32 >> 1) & 1)) as i64) + offset.y,
                 z: ((pos.z() + ((child_idx as u32 >> 2) & 1)) as i64) + offset.z,

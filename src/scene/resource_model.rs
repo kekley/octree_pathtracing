@@ -13,6 +13,8 @@ use crate::{
 
 use super::resource_manager::QuadID;
 
+pub struct BlockModel {}
+
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SingleBlockModel {
     pub first_quad_index: QuadID,

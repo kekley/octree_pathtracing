@@ -4,7 +4,8 @@ use glam::{I64Vec3, UVec3};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use spider_eye::{
     chunk::Chunk,
-    loaded_world::{ChunkCoords, RegionCoords, World, WorldCoords},
+    coords::{block::BlockCoords, chunk::ChunkCoords, region::RegionCoords},
+    loaded_world::World,
     region::LazyRegion,
 };
 
@@ -352,15 +353,7 @@ impl<T: Copy> Octree<T> {
                 Child::Leaf(_) => match self.octants[it as usize].set_child(idx, Child::None) {
                     Child::None => return (None, None),
                     Child::Octant(_) => unreachable!(),
-                    Child::Leaf(val) => {
-                        return (
-                            Some(val),
-                            Some(LeafId {
-                                parent: it,
-                                idx: idx,
-                            }),
-                        )
-                    }
+                    Child::Leaf(val) => return (Some(val), Some(LeafId { parent: it, idx })),
                 },
             }
         }
@@ -504,7 +497,7 @@ impl<T: Copy> Octree<T> {
 }
 impl Octree<ResourceModel> {
     pub fn load_mc_world<P: Position>(
-        origin: WorldCoords,
+        origin: BlockCoords,
         depth: u8,
         world: World,
         model_manager: &ModelManager,
@@ -604,7 +597,7 @@ impl Octree<ResourceModel> {
                 return;
             }
             dbg!(&child_pos);
-            let region_coords: RegionCoords = WorldCoords {
+            let region_coords: RegionCoords = BlockCoords {
                 x: child_pos.x() as i64 + offset.x,
                 y: child_pos.y() as i64 + offset.y,
                 z: child_pos.z() as i64 + offset.z,
@@ -654,7 +647,7 @@ impl Octree<ResourceModel> {
                 child.parent = Some(*parent_id);
                 return;
             }
-            let chunk_coords: ChunkCoords = WorldCoords {
+            let chunk_coords: ChunkCoords = BlockCoords {
                 x: child_pos.x() as i64 + offset.x,
                 y: child_pos.y() as i64 + offset.y,
                 z: child_pos.z() as i64 + offset.z,
@@ -723,7 +716,7 @@ impl Octree<ResourceModel> {
     ) -> Option<OctantId> {
         let mut new_parent: Option<OctantId> = None;
         (0..8).for_each(|child_idx| {
-            let child_pos = WorldCoords {
+            let child_pos = BlockCoords {
                 x: ((pos.x() + ((child_idx as u32) & 1)) as i64) + offset.x,
                 y: ((pos.y() + ((child_idx as u32 >> 1) & 1)) as i64) + offset.y,
                 z: ((pos.z() + ((child_idx as u32 >> 2) & 1)) as i64) + offset.z,

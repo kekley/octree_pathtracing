@@ -1,32 +1,21 @@
-use std::{
-    cell::Cell,
-    fmt::format,
-    sync::{Arc, RwLock},
-    time::{Duration, Instant},
+use eframe::egui::{
+    self, load::SizedTexture, Button, Color32, ColorImage, DragValue, Image, ImageData,
+    ImageSource, Label, RadioButton, TextureHandle, TextureOptions, Ui,
 };
-
-use eframe::{
-    egui::{
-        self, load::SizedTexture, Button, Color32, ColorImage, DragValue, Image, ImageData,
-        ImageSource, Label, RadioButton, TextureHandle, TextureOptions, Ui,
-    },
-    wgpu::Texture,
-};
-use glam::{UVec3, Vec3};
+use glam::UVec3;
 use log::info;
-use spider_eye::{loaded_world::WorldCoords, MCResourceLoader};
+use spider_eye::coords::block::BlockCoords;
 
 use crate::{
     colors::colors::U8Color,
     geometry::quad::Quad,
     octree::octree_parallel::ParallelOctree,
     renderer::{
-        self,
         gpu_renderer::GPURenderer,
         renderer_trait::{FrameInFlight, FrameInFlightPoll, RenderingBackend},
-        tile_renderer::{RendererMode, RendererStatus, TileRenderer},
+        tile_renderer::{RendererMode, RendererStatus},
     },
-    scene::{self, resource_manager::ModelManager, scene::Scene},
+    scene::{resource_manager::ModelManager, scene::Scene},
     textures::material::Material,
 };
 
@@ -77,26 +66,29 @@ pub struct Application {
 } */
 pub fn load_world_2(
     path: &str,
-    origin: &WorldCoords,
+    origin: &BlockCoords,
     depth: u8,
     model_manager: &ModelManager,
 ) -> Scene {
     let minecraft_loader = &model_manager.resource_loader;
-    let world = minecraft_loader.open_world(path).unwrap();
-    let octree = ParallelOctree::load_mc_world::<UVec3>(*origin, depth, world, &model_manager);
-    let octree_memory =
-        (octree.octants.len() * size_of_val(&octree.octants[0].get())) as f32 / 1000000.0;
-    let material_memory =
-        (model_manager.materials.len() * size_of::<Material>()) as f32 / 1000000.0;
-    let texture_memory = (model_manager.materials.len() * 16 * 16 * 4) as f32 / 1000000.0;
-    let quad_memory = (model_manager.quads.read().len() * size_of::<Quad>()) as f32 / 1000000.0;
-    info!(
+    if let Ok(world) = minecraft_loader.open_world(path) {
+        let octree = ParallelOctree::load_mc_world::<UVec3>(*origin, depth, world, &model_manager);
+        let octree_memory =
+            (octree.octants.len() * size_of_val(&octree.octants[0].get())) as f32 / 1000000.0;
+        let material_memory =
+            (model_manager.materials.len() * size_of::<Material>()) as f32 / 1000000.0;
+        let texture_memory = (model_manager.materials.len() * 16 * 16 * 4) as f32 / 1000000.0;
+        let quad_memory = (model_manager.quads.read().len() * size_of::<Quad>()) as f32 / 1000000.0;
+        info!(
         "Octree memory: {}MB, Materials memory: {}MB, Texture memory est.:{}MB, Quad memory: {}MB",
         octree_memory, material_memory, texture_memory, quad_memory
     );
-    let scene = model_manager.build(octree.into());
-    //println!("{:?}", tree);
-    scene
+        let scene = model_manager.build(octree.into());
+        //println!("{:?}", tree);
+        scene
+    } else {
+        panic!()
+    }
 }
 impl Default for Application {
     fn default() -> Self {
@@ -256,7 +248,7 @@ impl eframe::App for Application {
             Some(frame) => {
                 let poll = frame.poll();
                 match poll {
-                    FrameInFlightPoll::Ready(texture_handle) => None,
+                    FrameInFlightPoll::Ready(_texture_handle) => None,
                     FrameInFlightPoll::NotReady(frame_in_flight) => Some(frame_in_flight),
                     FrameInFlightPoll::Cancelled => panic!(),
                 }

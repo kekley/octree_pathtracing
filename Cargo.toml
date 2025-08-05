@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-palette = { path = "../palette" }
 rayon = "1.10.0"
 stb_image = "0.3.0"
 spider_eye = { path = "../spider_eye" }
