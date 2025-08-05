@@ -70,25 +70,7 @@ pub fn load_world_2(
     depth: u8,
     model_manager: &ModelManager,
 ) -> Scene {
-    let minecraft_loader = &model_manager.resource_loader;
-    if let Ok(world) = minecraft_loader.open_world(path) {
-        let octree = ParallelOctree::load_mc_world::<UVec3>(*origin, depth, world, &model_manager);
-        let octree_memory =
-            (octree.octants.len() * size_of_val(&octree.octants[0].get())) as f32 / 1000000.0;
-        let material_memory =
-            (model_manager.materials.len() * size_of::<Material>()) as f32 / 1000000.0;
-        let texture_memory = (model_manager.materials.len() * 16 * 16 * 4) as f32 / 1000000.0;
-        let quad_memory = (model_manager.quads.read().len() * size_of::<Quad>()) as f32 / 1000000.0;
-        info!(
-        "Octree memory: {}MB, Materials memory: {}MB, Texture memory est.:{}MB, Quad memory: {}MB",
-        octree_memory, material_memory, texture_memory, quad_memory
-    );
-        let scene = model_manager.build(octree.into());
-        //println!("{:?}", tree);
-        scene
-    } else {
-        panic!()
-    }
+    todo!()
 }
 impl Default for Application {
     fn default() -> Self {

@@ -721,7 +721,7 @@ impl ParallelOctree<ResourceModel> {
                 z: ((pos.z() + ((child_idx as u32 >> 2) & 1)) as i64) + offset.z,
             };
             if let Some(block) = chunk.get_world_block(child_pos) {
-                if let Some(model) = model_manager.load_resource(block) {
+                if let Some(model) = todo!() {
                     let parent_id = new_parent.get_or_init(|| self.new_octant(None));
                     let mut parent = self.octants[*parent_id as usize].get();
                     parent.set_child(child_idx, Child::Leaf(model));

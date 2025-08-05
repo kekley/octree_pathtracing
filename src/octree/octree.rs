@@ -721,7 +721,7 @@ impl Octree<ResourceModel> {
                 y: ((pos.y() + ((child_idx as u32 >> 1) & 1)) as i64) + offset.y,
                 z: ((pos.z() + ((child_idx as u32 >> 2) & 1)) as i64) + offset.z,
             };
-            if let Some(block) = chunk.get_world_block(child_pos) {
+            if let Some(block) = todo!() {
                 if let Some(model) = model_manager.load_resource(block) {
                     let parent_id = new_parent.get_or_insert_with(|| self.new_octant(None));
                     self.octants[*parent_id as usize].set_child(child_idx, Child::Leaf(model));
