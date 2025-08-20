@@ -207,11 +207,7 @@ impl GPURenderer {
         let octree_ = GPUOctreeUniform::from(octree);
         let octree_uniform = slice::from_ref(&octree_);
 
-        let octant_data = octree
-            .octants
-            .iter()
-            .map(|octant| GPUOctreeNode::from(octant))
-            .collect::<Vec<_>>();
+        let octant_data: Vec<GPUOctreeNode> = vec![];
         info!(
             "GPU Data:\n Octree memory: {}MB, Materials Memory: {}MB, Quad Memory: {}MB",
             (octant_data.len() * 4 * 8) as f32 / 1000000.0,
@@ -584,8 +580,7 @@ impl RenderingBackend for GPURenderer {
         };
         let mut ray = self.camera.get_ray(0.0, 0.0);
         let aspect_ratio = self.render_size.0 as f32 / self.render_size.1 as f32;
-        let (traversal_start_index, scale, index_stack, time_stack) =
-            scene.octree.get_traversal_data(&mut ray, 1024.0);
+        let (traversal_start_index, scale, index_stack, time_stack) = todo!();
         let device = &self.device;
         let queue = &self.queue;
         let d_factor = 1.0 / (self.camera.fov / 2.0).tan();

@@ -133,7 +133,7 @@ use glam::{Vec3, Vec3A, Vec3Swizzles, Vec4, Vec4Swizzles};
 use crate::{
     colors::colors::U8Color,
     geometry::{aabb::UP, quad::Quad},
-    octree::octree::Octree,
+    octree::new_octree::Octree,
     random_float,
     ray::{
         path_tracer::{path_trace, preview_render},
@@ -210,9 +210,9 @@ impl Scene {
 
         let max_dst = 1024.0;
 
-        let intersection =
-            self.octree
-                .intersect_octree_path_tracer(ray, max_dst, &self.materials, &self.quads);
+        let intersection = false; //TODO
+                                  //self.octree
+                                  // .intersect_octree_path_tracer(ray, max_dst, &self.materials, &self.quads);
         intersection
     }
     pub fn hit_preview(&self, ray: &mut Ray) -> bool {
@@ -226,9 +226,9 @@ impl Scene {
 
         let max_dst = 1024.0;
 
-        let intersection =
-            self.octree
-                .intersect_octree_preview(ray, max_dst, &self.materials, &self.quads);
+        let intersection = false;
+        //self.octree
+        //  .intersect_octree_preview(ray, max_dst, &self.materials, &self.quads);
         intersection
     }
 

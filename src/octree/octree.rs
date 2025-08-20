@@ -26,8 +26,7 @@ pub trait Position: Copy + Clone + Debug + Sized {
 
 impl Position for UVec3 {
     fn idx(&self) -> u8 {
-        let val = (self.x + self.y * 2 + self.z * 4) as u8;
-        val
+        (self.x + self.y * 2 + self.z * 4) as u8
     }
     fn required_depth(&self) -> u8 {
         let depth = self.max_element();

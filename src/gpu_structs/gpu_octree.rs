@@ -1,7 +1,7 @@
 use std::{fmt::Debug, u16, u32};
 
 use crate::{
-    octree::octree::{Child, Octant, Octree},
+    octree::new_octree::{Child, Octant, Octree},
     scene::resource_manager::ResourceModel,
 };
 use bytemuck::{Pod, Zeroable};
@@ -14,6 +14,7 @@ pub struct GPUOctreeNode {
 
 impl From<&Octant<ResourceModel>> for GPUOctreeNode {
     fn from(value: &Octant<ResourceModel>) -> Self {
+        /*
         let Octant {
             parent,
             child_count,
@@ -53,7 +54,8 @@ impl From<&Octant<ResourceModel>> for GPUOctreeNode {
                 }
             }
         });
-        GPUOctreeNode { data }
+        */
+        GPUOctreeNode { data: todo!() }
     }
 }
 
@@ -68,11 +70,6 @@ pub struct GPUOctreeUniform {
 
 impl From<&Octree<ResourceModel>> for GPUOctreeUniform {
     fn from(value: &Octree<ResourceModel>) -> Self {
-        GPUOctreeUniform {
-            octree_scale: value.octree_scale,
-            depth: value.depth as u32,
-            root: value.root.unwrap(),
-            padding: 0,
-        }
+        todo!()
     }
 }

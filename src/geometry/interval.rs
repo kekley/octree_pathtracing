@@ -10,8 +10,8 @@ impl Interval {
     pub const EMPTY: Interval = Interval::new(INFINITY, -INFINITY);
     pub const UNIVERSE: Interval = Interval::new(-INFINITY, INFINITY);
     pub const ZEROISH_TO_INFINITY: Interval = Interval::new(0.001, INFINITY);
-    #[inline]
 
+    #[inline]
     pub const fn new(min: f32, max: f32) -> Self {
         Self { min, max }
     }
@@ -27,12 +27,10 @@ impl Interval {
         self.max - self.min
     }
     #[inline]
-
     pub fn conains(&self, x: f32) -> bool {
         x >= self.min && x <= self.max
     }
     #[inline]
-
     pub fn surrounds(&self, x: f32) -> bool {
         x > self.min && x < self.max
     }
@@ -58,7 +56,6 @@ impl Interval {
 
 impl Default for Interval {
     #[inline]
-
     fn default() -> Self {
         Self {
             min: INFINITY,

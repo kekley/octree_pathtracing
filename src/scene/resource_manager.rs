@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use glam::{Affine3A, Quat, Vec3, Vec3A};
 use spider_eye::{
-    block_element::ElementRotation, block_face::FaceName, block_models::BlockRotation, chunk_new::section::BlockState, variant::ModelVariant,
-    MCResourceLoader,
+    blockstate::borrow::BlockState, interned::blockstate::InternedVariantType,
+    resource_loader::LoadedResources, serde::block_model::FaceName,
 };
 
 use crate::geometry::quad::Quad;
@@ -15,18 +15,10 @@ pub type QuadID = u32;
 pub type MaterialID = u32;
 pub type ModelID = u32;
 
+#[derive(Default)]
 pub struct ModelManager {
-    pub resource_loader: MCResourceLoader,
+    resources: Option<LoadedResources>,
     pub(crate) quads: Arc<parking_lot::RwLock<Vec<Quad>>>,
-}
-
-impl Default for ModelManager {
-    fn default() -> Self {
-        Self {
-            resource_loader: MCResourceLoader::new(),
-            quads: Default::default(),
-        }
-    }
 }
 
 impl ModelManager {
@@ -36,14 +28,14 @@ impl ModelManager {
     pub fn seen_materials(&self) -> usize {
         todo!()
     }
-    pub fn load_resource(&self, block: &BlockState) -> Option<ResourceModel> {
+    pub fn load_resource(&self, block: &BlockState<'_, '_>) -> Option<ResourceModel> {
         todo!()
     }
     pub fn new() -> Self {
         todo!()
     }
 
-    pub fn build_variant(&self, variants: Vec<ModelVariant>) -> Option<ResourceModel> {
+    pub fn build_variant(&self, variants: Vec<InternedVariantType>) -> Option<ResourceModel> {
         todo!()
     }
 
@@ -53,8 +45,8 @@ impl ModelManager {
     fn make_quads(
         &self,
         block_model: &BlockModel,
-        rotation_x: Option<BlockRotation>,
-        rotation_y: Option<BlockRotation>,
+        rotation_x: Option<i32>,
+        rotation_y: Option<i32>,
     ) -> Vec<Quad> {
         todo!()
     }
@@ -64,8 +56,8 @@ impl ModelManager {
 
         block_model: &BlockModel,
         model_type: ModelType,
-        rotation_x: Option<BlockRotation>,
-        rotation_y: Option<BlockRotation>,
+        rotation_x: Option<i32>,
+        rotation_y: Option<i32>,
     ) -> Option<ResourceModel> {
         todo!()
     }
@@ -132,32 +124,15 @@ fn get_quad_vectors(from: &Vec3, to: &Vec3, face: FaceName) -> (Vec3A, Vec3A, Ve
         }
     }
 }
-fn matrix_from_rotation(rotation: &ElementRotation) -> Affine3A {
-    let axis = match rotation.axis {
-        spider_eye::block_element::ElementAxis::X => Vec3::X,
-        spider_eye::block_element::ElementAxis::Y => Vec3::Y,
-        spider_eye::block_element::ElementAxis::Z => Vec3::Z,
-    };
-    let angle: f32 = rotation.angle.into();
-    let quat = Quat::from_axis_angle(axis, angle.to_radians());
-    Affine3A::from_rotation_translation(quat, Vec3::from_slice(&rotation.origin))
+fn matrix_from_rotation(rotation: &[f32; 3]) -> Affine3A {
+    todo!()
 }
 
-fn matrix_from_block_rotation_x(rotation: &BlockRotation) -> Affine3A {
-    match rotation {
-        BlockRotation::Zero => Affine3A::IDENTITY,
-        BlockRotation::Ninety => Affine3A::from_axis_angle(Vec3::X, 90.0f32.to_radians()),
-        BlockRotation::OneEighty => Affine3A::from_axis_angle(Vec3::X, 180.0f32.to_radians()),
-        BlockRotation::TwoSeventy => Affine3A::from_axis_angle(Vec3::X, 270.0f32.to_radians()),
-    }
+fn matrix_from_block_rotation_x(rotation: i32) -> Affine3A {
+    todo!()
 }
-fn matrix_from_block_rotation_y(rotation: &BlockRotation) -> Affine3A {
-    match rotation {
-        BlockRotation::Zero => Affine3A::IDENTITY,
-        BlockRotation::Ninety => Affine3A::from_axis_angle(Vec3::Y, 90.0f32.to_radians()),
-        BlockRotation::OneEighty => Affine3A::from_axis_angle(Vec3::Y, 180.0f32.to_radians()),
-        BlockRotation::TwoSeventy => Affine3A::from_axis_angle(Vec3::Y, 270.0f32.to_radians()),
-    }
+fn matrix_from_block_rotation_y(rotation: i32) -> Affine3A {
+    todo!()
 }
 
 #[derive(Debug, Clone, Copy)]

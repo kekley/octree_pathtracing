@@ -1,5 +1,5 @@
 use glam::{Affine3A, Vec2, Vec3A};
-use spider_eye::{block_face::FaceName, block_texture::Uv};
+use spider_eye::serde::block_model::FaceName;
 
 use crate::{ray::ray::Ray, scene::resource_manager::MaterialID};
 
@@ -18,11 +18,12 @@ pub struct Quad {
 impl Quad {
     pub fn from_face_name(
         face: &FaceName,
-        uv: &Option<Uv>,
+        uv: &Option<[f32; 4]>,
         from: &[f32; 3],
         to: &[f32; 3],
         material_id: MaterialID,
     ) -> Self {
+        /*
         let from = Vec3A::from_slice(from) / 16.0;
 
         let to = Vec3A::from_slice(to) / 16.0;
@@ -80,6 +81,8 @@ impl Quad {
             .unwrap_or(Vec2::new(0.0, 16.0))
             / 16.0;
         Quad::new(origin, u, v, texture_u_range, texture_v_range, material_id)
+        */
+        todo!()
     }
 }
 

@@ -31,6 +31,7 @@ egui-wgpu = "0.31.1"
 rand_distr = "0.5.1"
 parking_lot = "0.12.3"
 rfd = "0.15.3"
+nonany = "0.3.0"
 
 
 [profile.release-with-debug]

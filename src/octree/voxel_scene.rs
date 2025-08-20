@@ -8,7 +8,7 @@ pub type OctantId = u32;
 pub struct Octant {}
 
 #[derive(Debug)]
-pub struct Octree {
+pub struct Octree<T> {
     root: Option<OctantId>,
     octants: Vec<Octant>,
 }
