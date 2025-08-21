@@ -1,16 +1,23 @@
-use std::{fmt::Debug, num::NonZeroUsize, sync::Arc};
+use std::{
+    fmt::Debug,
+    hint::black_box,
+    num::NonZeroUsize,
+    sync::{Arc, Mutex},
+    time::Instant,
+};
 
-use eframe::glow::DEPTH;
+use eframe::{glow::DEPTH, wgpu::Instance};
 use hashbrown::HashMap;
 use lasso::Spur;
 use nonany::NonAnyU32;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use spider_eye::{
     blockstate::borrow::BlockState,
     borrow::{nbt_compound::RootNBTCompound, nbt_string::NBTStr},
     chunk::{self, borrow::Chunk},
     owned::nbt_string::NBTString,
     region::borrow::Region,
-    section::borrow::Section,
+    section::borrow::{Palette, Section},
 };
 
 pub struct Octree<T> {
@@ -87,6 +94,7 @@ impl<T: Debug> Debug for Octant<T> {
 pub enum Child<T> {
     #[default]
     None,
+    Lod(T),
     Octant(OctantId),
     Leaf(T),
 }
@@ -102,6 +110,7 @@ where
             Self::None => Self::None,
             Self::Octant(arg0) => Self::Octant(arg0.clone()),
             Self::Leaf(arg0) => Self::Leaf(arg0.clone()),
+            Self::Lod(arg0) => Self::Lod(arg0.clone()),
         }
     }
 }
@@ -123,51 +132,93 @@ pub struct LeafId {
     parent: OctantId,
     idx: u8,
 }
-//Assume we're starting from 0,0 towards positive x and z
+
 pub fn construct(target_depth: u8) {
-    let mut octants: Vec<Octant<usize>> = Vec::new();
-    let mut map: HashMap<Arc<[u8]>, usize> = HashMap::new();
+    let region = Region::load_from_file("./world/r.0.0.mca").expect("Could not load region");
 
-    let region = Region::load_from_file("./assets/worlds/test_world/r.0.0.mca")
-        .expect("Could not load region");
-    let chunk = region.load_chunk_data(0, 0).unwrap();
+    let start = Instant::now();
+    let region_chunk_data = region.load_all_chunk_data();
+    let end = Instant::now();
+    println!("time loading chunks: {:?}", end.duration_since(start));
 
-    let compound = RootNBTCompound::from_bytes(&chunk).unwrap();
+    let start = Instant::now();
+    let nbts = region_chunk_data
+        .par_iter()
+        .flatten()
+        .map(|chunk_data| RootNBTCompound::from_bytes(chunk_data.as_slice()).unwrap())
+        .collect::<Vec<_>>();
+    let end = Instant::now();
 
-    let chunk = Chunk::from_compound(compound).unwrap();
+    println!("time parsing nbt: {:?}", end.duration_since(start));
 
-    let sections = chunk.get_sections().unwrap();
+    let start = Instant::now();
+    let chunks = nbts
+        .into_iter()
+        .flat_map(Chunk::from_compound)
+        .collect::<Vec<_>>();
+    let end = Instant::now();
 
-    let mut octants = Vec::new();
+    println!("time creating chunks: {:?}", end.duration_since(start));
+
     let mut blockstate_map: HashMap<NBTString, usize> = HashMap::new();
 
     let air = NBTString::new_from_str("minecraft:air#normal");
 
     blockstate_map.insert(air, 0);
 
-    sections.iter_sections().for_each(|section| {
-        section_to_octant(&section, &mut octants, &mut blockstate_map);
-    });
-}
+    let start = Instant::now();
 
-pub fn section_to_octant(
-    section: &Section<'_, '_>,
-    octants: &mut Vec<Octant<usize>>,
-    blockstate_map: &mut HashMap<NBTString, usize>,
-) {
-    pub const TARGET_DEPTH: usize = 4;
-    //TODO: load sections into an SVO, insert them into an existing tree with a separate worker
-    let mut blockstate_count = blockstate_map.len();
-    let palette = section.get_palette();
-
-    let owned_palette: Vec<_> = palette
+    let sections = chunks
         .iter()
-        .map(|blockstate| blockstate.to_mapped_state())
+        .filter_map(|chunk| {
+            let sections = chunk.get_sections()?;
+
+            Some(sections.iter_sections())
+        })
+        .flatten()
         .collect::<Vec<_>>();
 
-    for nbt_string in owned_palette.as_slice() {
-        println!("mapped state: {}", nbt_string.as_str().to_str());
+    let sections_and_palettes: (Vec<Section<'_, '_>>, Vec<Vec<usize>>) = sections
+        .into_iter()
+        .map(|section| {
+            let palette = section.get_palette();
+            let mapped_palette: Vec<usize> = palette
+                .iter()
+                .map(|blockstate| {
+                    let mapped_state = blockstate.to_mapped_state();
+                    let current_len = blockstate_map.len();
+                    let value = blockstate_map
+                        .entry(mapped_state)
+                        .or_insert_with(|| current_len);
+                    *value
+                })
+                .collect();
+            (section, mapped_palette)
+        })
+        .collect::<(Vec<_>, Vec<_>)>();
+    for block in blockstate_map.keys() {
+        println!("{}", block.as_str());
     }
+
+    let end = Instant::now();
+
+    println!(
+        "time remapping section palettes: {:?}",
+        end.duration_since(start)
+    );
+    let start = Instant::now();
+    let octrees: Vec<Octree<usize>> = sections_and_palettes
+        .par_iter()
+        .map(|(section, palette)| section_to_octree(section, palette))
+        .collect();
+    let end = Instant::now();
+
+    println!("time to build octrees: {:?}", end.duration_since(start));
+}
+
+pub fn section_to_octree(section: &Section<'_, '_>, palette: &Vec<usize>) -> Octree<usize> {
+    let mut octants = vec![];
+    const TARGET_DEPTH: usize = 4;
 
     let mut morton_order_data: [Option<NonZeroUsize>; 4096] = [Option::None; 4096];
 
@@ -175,15 +226,9 @@ pub fn section_to_octant(
         let (x, y, z) = index_to_coordinates(i as u64);
         let morton_code = calculate_morton_code(x, y, z);
 
-        let blockstate = owned_palette
+        let value = palette
             .get(palette_index as usize)
             .expect("index should be in range of palette");
-
-        let value = blockstate_map.entry(blockstate.clone()).or_insert_with(|| {
-            let old = blockstate_count;
-            blockstate_count += 1;
-            old
-        });
 
         morton_order_data[morton_code as usize] = NonZeroUsize::new(*value);
     }
@@ -197,51 +242,106 @@ pub fn section_to_octant(
         let deepest_buffer = child_buffers
             .get_mut(TARGET_DEPTH - 1)
             .expect("octant buffer should be of size TARGET_DEPTH");
-
-        for child_index in 0..8 {
+        let mut child_count = 0;
+        (0..8).for_each(|child_index| {
             if let Some(data_opt) = morton_order_data.get(voxels_iterated) {
                 if let Some(data) = data_opt {
                     deepest_buffer[child_index] = Some(Child::Leaf(data.get()));
+                    child_count += 1;
                 } else {
                     deepest_buffer[child_index] = Some(Child::None);
                 }
             }
             voxels_iterated += 1;
-        }
+        });
+        let mut new_child: Child<usize> = if child_count > 0 {
+            let new_octant = Octant {
+                child_count: child_count as u8,
+                children: child_buffers[TARGET_DEPTH - 1].map(|opt| opt.unwrap()),
+            };
+            let octant_id = octants.len() as u32;
+            octants.push(new_octant);
+            Child::Octant(octant_id)
+        } else {
+            Child::None
+        };
+        child_buffers[TARGET_DEPTH - 1]
+            .iter_mut()
+            .for_each(|child| *child = None);
+
+        let mut search_depth = TARGET_DEPTH - 2;
+        if voxels_iterated > 4090 {
+            black_box(());
+        };
 
         loop {
-            let mut octant_queue: Vec<usize> = vec![];
-
-            for depth in (1..TARGET_DEPTH).rev() {
-                let mut child_count = 0;
-                for child in child_buffers[depth] {
-                    if child.is_some_and(|child| !child.is_none()) {
-                        child_count += 1;
+            let mut free_slot: Option<&mut Option<Child<usize>>> = None;
+            let mut child_count = 0;
+            for child in &mut child_buffers[search_depth] {
+                if child.is_none() {
+                    if free_slot.is_none() {
+                        free_slot = Some(child);
+                        break;
                     }
+                } else if !child.unwrap().is_none() {
+                    child_count += 1
                 }
+            }
 
-                let new_child: Child<usize> = if child_count > 0 {
+            if let Some(free_slot) = free_slot {
+                *free_slot = Some(new_child);
+                break;
+            } else {
+                new_child = if child_count > 0 {
                     let new_octant = Octant {
                         child_count: child_count as u8,
-                        children: child_buffers[depth].map(|opt| opt.unwrap()),
+                        children: child_buffers[search_depth].map(|opt| opt.unwrap()),
                     };
-                    let octant_id = octants.len();
+                    let octant_id = octants.len() as u32;
                     octants.push(new_octant);
-                    child_buffers[depth].iter_mut().for_each(|f| *f = None);
-                    Child::Octant(octant_id as u32)
+                    Child::Octant(octant_id)
                 } else {
                     Child::None
                 };
-                //find space for our new node
-
-                let higher_depth = depth - 1;
-
-                let free_slot = child_buffers[higher_depth]
+                child_buffers[search_depth]
                     .iter_mut()
-                    .enumerate()
-                    .find(|(_, child)| child.is_none());
+                    .for_each(|child| *child = None);
+
+                search_depth -= 1;
             }
-            break;
+        }
+    }
+
+    let child_count = child_buffers[0]
+        .iter()
+        .filter(|child| child.is_some_and(|child| !child.is_none()))
+        .count();
+    if child_count > 0 {
+        let new_octant = Octant {
+            child_count: child_count as u8,
+            children: child_buffers[0].map(|opt| {
+                if let Some(child) = opt {
+                    child
+                } else {
+                    Child::None
+                }
+            }),
+        };
+        let octant_id = octants.len() as u32;
+        octants.push(new_octant);
+
+        Octree {
+            scale: f32::exp(-4.0),
+            root: Some(octant_id),
+            octants,
+            depth: 4,
+        }
+    } else {
+        Octree {
+            scale: 0.0,
+            root: None,
+            octants,
+            depth: 0,
         }
     }
 }
