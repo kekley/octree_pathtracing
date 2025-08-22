@@ -178,7 +178,7 @@ pub fn construct(target_depth: u8) {
         .flatten()
         .collect::<Vec<_>>();
 
-    let sections_and_palettes: (Vec<Section<'_, '_>>, Vec<Vec<usize>>) = sections
+    let sections_and_palettes: Vec<(Section<'_, '_>, Vec<usize>)> = sections
         .into_iter()
         .map(|section| {
             let palette = section.get_palette();
@@ -195,7 +195,7 @@ pub fn construct(target_depth: u8) {
                 .collect();
             (section, mapped_palette)
         })
-        .collect::<(Vec<_>, Vec<_>)>();
+        .collect();
     for block in blockstate_map.keys() {
         println!("{}", block.as_str());
     }
@@ -216,7 +216,7 @@ pub fn construct(target_depth: u8) {
     println!("time to build octrees: {:?}", end.duration_since(start));
 }
 
-pub fn section_to_octree(section: &Section<'_, '_>, palette: &Vec<usize>) -> Octree<usize> {
+pub fn section_to_octree(section: &Section<'_, '_>, palette: &[usize]) -> Octree<usize> {
     let mut octants = vec![];
     const TARGET_DEPTH: usize = 4;
 
