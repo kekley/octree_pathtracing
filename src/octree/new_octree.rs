@@ -1,24 +1,10 @@
-use std::{
-    cell::OnceCell,
-    fmt::Debug,
-    hint::black_box,
-    num::NonZeroUsize,
-    sync::{Arc, Mutex},
-    time::Instant,
-};
-
-use eframe::{glow::DEPTH, wgpu::Instance};
 use hashbrown::HashMap;
-use lasso::Spur;
-use nonany::NonAnyU32;
+use std::{cell::OnceCell, fmt::Debug, hint::black_box, num::NonZeroUsize, time::Instant};
+
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use spider_eye::{
-    blockstate::borrow::BlockState,
-    borrow::{nbt_compound::RootNBTCompound, nbt_string::NBTStr},
-    chunk::{self, borrow::Chunk},
-    owned::nbt_string::NBTString,
-    region::borrow::Region,
-    section::borrow::{Palette, Section},
+    borrow::nbt_compound::RootNBTCompound, chunk::borrow::Chunk, owned::nbt_string::NBTString,
+    region::borrow::Region, section::borrow::Section,
 };
 
 pub struct Octree<T> {
@@ -41,7 +27,7 @@ where
     #[inline]
     fn clone(&self) -> Self {
         Self {
-            child_count: self.child_count.clone(),
+            child_count: self.child_count,
             children: self.children.clone(),
         }
     }
@@ -109,7 +95,7 @@ where
     fn clone(&self) -> Self {
         match self {
             Self::None => Self::None,
-            Self::Octant(arg0) => Self::Octant(arg0.clone()),
+            Self::Octant(arg0) => Self::Octant(*arg0),
             Self::Leaf(arg0) => Self::Leaf(arg0.clone()),
             Self::Lod(arg0) => Self::Lod(arg0.clone()),
         }
@@ -270,7 +256,6 @@ pub fn construct() {
 pub fn section_to_compacted_octree(section: &Section<'_, '_>, palette: &[usize]) -> Octree<usize> {
     let mut octants = vec![];
     const TARGET_DEPTH: usize = 4;
-    println!("{palette:?}");
 
     let mut morton_order_data: [Option<NonZeroUsize>; 4096] = [Option::None; 4096];
 
@@ -295,32 +280,35 @@ pub fn section_to_compacted_octree(section: &Section<'_, '_>, palette: &[usize])
             .get_mut(TARGET_DEPTH - 1)
             .expect("octant buffer should be of size TARGET_DEPTH");
         let mut compactable = true;
+        let first_child = OnceCell::new();
         let mut child_count = 0;
-        let mut lod_value = 0;
         (0..8).for_each(|child_index| {
             let leaf = morton_order_data
                 .get(voxels_iterated)
                 .expect("voxels_iterated should not exceed data length");
+            if first_child.get_or_init(|| *leaf) != leaf {
+                //we can compact the octant only if all leaves are equal
+                compactable = false;
+            }
 
             if let Some(data) = leaf {
                 child_count += 1;
                 deepest_buffer[child_index] = Some(Child::Leaf(data.get()));
-                if lod_value == 0 {
-                    lod_value = data.get();
-                } else if lod_value != data.get() {
-                    compactable = false;
-                }
             } else {
                 deepest_buffer[child_index] = Some(Child::None);
             }
 
             voxels_iterated += 1;
         });
+        let first_child = first_child.get().unwrap();
 
         //the child we will try to insert into the tree while compacting full octants
-        let mut new_child: Child<usize> = if child_count == 0 {
-            Child::None
-        } else if !compactable || child_count < 8 {
+        let mut new_child: Child<usize> = if compactable {
+            match first_child {
+                Some(lod_value) => Child::Lod(lod_value.get()),
+                None => Child::None,
+            }
+        } else {
             let new_octant = Octant {
                 child_count: child_count as u8,
                 children: child_buffers[TARGET_DEPTH - 1].map(|opt| opt.unwrap()),
@@ -328,8 +316,6 @@ pub fn section_to_compacted_octree(section: &Section<'_, '_>, palette: &[usize])
             let octant_id = octants.len() as u32;
             octants.push(new_octant);
             Child::Octant(octant_id)
-        } else {
-            Child::Lod(lod_value)
         };
         child_buffers[TARGET_DEPTH - 1]
             .iter_mut()
@@ -343,18 +329,19 @@ pub fn section_to_compacted_octree(section: &Section<'_, '_>, palette: &[usize])
         loop {
             let mut free_slot: Option<&mut Option<Child<usize>>> = None;
             let mut child_count = 0;
-            let mut lod_value = 0;
             let mut compactable = true;
+            let first_child_value = OnceCell::new();
             for child in &mut child_buffers[search_depth] {
                 if let Some(child) = child {
+                    if first_child_value.get_or_init(|| *child) != child {
+                        compactable = false;
+                    }
                     match child {
                         Child::None => {}
-                        Child::Lod(value) => {
-                            lod_value = *value;
+                        Child::Lod(_) => {
                             child_count += 1;
                         }
                         Child::Octant(_) => {
-                            compactable = false;
                             child_count += 1;
                         }
                         Child::Leaf(_) => {
@@ -371,9 +358,15 @@ pub fn section_to_compacted_octree(section: &Section<'_, '_>, palette: &[usize])
                 *free_slot = Some(new_child);
                 break;
             } else {
-                new_child = if child_count == 0 {
-                    Child::None
-                } else if !compactable || child_count < 8 {
+                let first_child = first_child_value.get().unwrap();
+                new_child = if compactable {
+                    match first_child {
+                        Child::None => Child::None,
+                        Child::Lod(lod_value) => Child::Lod(*lod_value),
+                        Child::Octant(_) => unreachable!(),
+                        Child::Leaf(_) => unreachable!(),
+                    }
+                } else {
                     let new_octant = Octant {
                         child_count: child_count as u8,
                         children: child_buffers[search_depth].map(|opt| opt.unwrap()),
@@ -381,8 +374,6 @@ pub fn section_to_compacted_octree(section: &Section<'_, '_>, palette: &[usize])
                     let octant_id = octants.len() as u32;
                     octants.push(new_octant);
                     Child::Octant(octant_id)
-                } else {
-                    Child::Lod(lod_value)
                 };
                 child_buffers[search_depth]
                     .iter_mut()
