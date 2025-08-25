@@ -162,7 +162,7 @@ pub fn construct_1() {
     let a = section_to_compacted_octree(&sections_and_palettes[0].0, &sections_and_palettes[0].1);
 }
 
-pub fn construct() {
+pub fn construct_all() {
     let region = Region::load_from_file("./world/r.0.0.mca").expect("Could not load region");
 
     let start = Instant::now();
@@ -330,10 +330,10 @@ pub fn section_to_compacted_octree(section: &Section<'_, '_>, palette: &[usize])
             let mut free_slot: Option<&mut Option<Child<usize>>> = None;
             let mut child_count = 0;
             let mut compactable = true;
-            let first_child_value = OnceCell::new();
+            let first_child_voxel = OnceCell::new();
             for child in &mut child_buffers[search_depth] {
                 if let Some(child) = child {
-                    if first_child_value.get_or_init(|| *child) != child {
+                    if first_child_voxel.get_or_init(|| *child) != child {
                         compactable = false;
                     }
                     match child {
@@ -348,7 +348,7 @@ pub fn section_to_compacted_octree(section: &Section<'_, '_>, palette: &[usize])
                             unreachable!()
                         }
                     }
-                } else if free_slot.is_none() {
+                } else {
                     free_slot = Some(child);
                     break;
                 }
@@ -358,7 +358,7 @@ pub fn section_to_compacted_octree(section: &Section<'_, '_>, palette: &[usize])
                 *free_slot = Some(new_child);
                 break;
             } else {
-                let first_child = first_child_value.get().unwrap();
+                let first_child = first_child_voxel.get().unwrap();
                 new_child = if compactable {
                     match first_child {
                         Child::None => Child::None,
@@ -420,136 +420,6 @@ pub fn section_to_compacted_octree(section: &Section<'_, '_>, palette: &[usize])
     }
 }
 
-pub fn section_to_octree(section: &Section<'_, '_>, palette: &[usize]) -> Octree<usize> {
-    let mut octants = vec![];
-    const TARGET_DEPTH: usize = 4;
-
-    let mut morton_order_data: [Option<NonZeroUsize>; 4096] = [Option::None; 4096];
-
-    for (i, palette_index) in section.iter_block_indices().enumerate() {
-        let (x, y, z) = index_to_coordinates(i as u64);
-        let morton_code = calculate_morton_code(x, y, z);
-
-        let value = palette
-            .get(palette_index as usize)
-            .expect("index should be in range of palette");
-
-        morton_order_data[morton_code as usize] = NonZeroUsize::new(*value);
-    }
-
-    let mut child_buffers: [[Option<Child<usize>>; 8]; TARGET_DEPTH] =
-        [Default::default(); TARGET_DEPTH];
-
-    let mut voxels_iterated = 0;
-
-    while voxels_iterated < 4096 {
-        let deepest_buffer = child_buffers
-            .get_mut(TARGET_DEPTH - 1)
-            .expect("octant buffer should be of size TARGET_DEPTH");
-        let mut child_count = 0;
-        (0..8).for_each(|child_index| {
-            if let Some(data_opt) = morton_order_data.get(voxels_iterated) {
-                if let Some(data) = data_opt {
-                    deepest_buffer[child_index] = Some(Child::Leaf(data.get()));
-                    child_count += 1;
-                } else {
-                    deepest_buffer[child_index] = Some(Child::None);
-                }
-            }
-            voxels_iterated += 1;
-        });
-        let mut new_child: Child<usize> = if child_count > 0 {
-            let new_octant = Octant {
-                child_count: child_count as u8,
-                children: child_buffers[TARGET_DEPTH - 1].map(|opt| opt.unwrap()),
-            };
-            let octant_id = octants.len() as u32;
-            octants.push(new_octant);
-            Child::Octant(octant_id)
-        } else {
-            Child::None
-        };
-        child_buffers[TARGET_DEPTH - 1]
-            .iter_mut()
-            .for_each(|child| *child = None);
-
-        let mut search_depth = TARGET_DEPTH - 2;
-        if voxels_iterated > 4090 {
-            black_box(());
-        };
-
-        loop {
-            let mut free_slot: Option<&mut Option<Child<usize>>> = None;
-            let mut child_count = 0;
-            for child in &mut child_buffers[search_depth] {
-                if child.is_none() {
-                    if free_slot.is_none() {
-                        free_slot = Some(child);
-                        break;
-                    }
-                } else if !child.unwrap().is_none() {
-                    child_count += 1
-                }
-            }
-
-            if let Some(free_slot) = free_slot {
-                *free_slot = Some(new_child);
-                break;
-            } else {
-                new_child = if child_count > 0 {
-                    let new_octant = Octant {
-                        child_count: child_count as u8,
-                        children: child_buffers[search_depth].map(|opt| opt.unwrap()),
-                    };
-                    let octant_id = octants.len() as u32;
-                    octants.push(new_octant);
-                    Child::Octant(octant_id)
-                } else {
-                    Child::None
-                };
-                child_buffers[search_depth]
-                    .iter_mut()
-                    .for_each(|child| *child = None);
-
-                search_depth -= 1;
-            }
-        }
-    }
-
-    let child_count = child_buffers[0]
-        .iter()
-        .filter(|child| child.is_some_and(|child| !child.is_none()))
-        .count();
-    if child_count > 0 {
-        let new_octant = Octant {
-            child_count: child_count as u8,
-            children: child_buffers[0].map(|opt| {
-                if let Some(child) = opt {
-                    child
-                } else {
-                    Child::None
-                }
-            }),
-        };
-        let octant_id = octants.len() as u32;
-        octants.push(new_octant);
-
-        Octree {
-            scale: f32::exp(-4.0),
-            root: Some(octant_id),
-            octants,
-            depth: 4,
-        }
-    } else {
-        Octree {
-            scale: 0.0,
-            root: None,
-            octants,
-            depth: 0,
-        }
-    }
-}
-
 #[inline]
 fn calculate_morton_code(x: u64, y: u64, z: u64) -> u64 {
     (part_by_2(z) << 2) + (part_by_2(y) << 1) + part_by_2(x)
@@ -582,5 +452,5 @@ fn index_to_coordinates(index: u64) -> (u64, u64, u64) {
 
 #[test]
 pub fn section_test() {
-    construct();
+    construct_all();
 }
