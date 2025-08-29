@@ -3,8 +3,8 @@ use std::{cell::OnceCell, fmt::Debug, hint::black_box, num::NonZeroUsize, time::
 
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use spider_eye::{
-    borrow::nbt_compound::RootNBTCompound, chunk::borrow::Chunk, owned::nbt_string::NBTString,
-    region::borrow::Region, section::borrow::Section,
+    borrow::nbt_compound::RootNBTCompound, chunk::borrow::Chunk, coords::block::BlockCoords,
+    owned::nbt_string::NBTString, region::borrow::Region, section::borrow::Section,
 };
 
 pub struct Octree<T> {
@@ -162,7 +162,24 @@ pub fn construct_1() {
     let a = section_to_compacted_octree(&sections_and_palettes[0].0, &sections_and_palettes[0].1);
 }
 
+fn calculate_loading_range(position: &BlockCoords, octree_depth: u8) {
+    let world_size = 2_u32.pow(octree_depth as u32);
+
+    let half_world_size = world_size / 2;
+
+    let start_x = position.x - half_world_size as i64;
+    let start_z = position.z - half_world_size as i64;
+}
+
 pub fn construct_all() {
+    let position = BlockCoords {
+        x: 256,
+        y: 70,
+        z: 256,
+    };
+
+    let octree_depth = 9;
+
     let region = Region::load_from_file("./world/r.0.0.mca").expect("Could not load region");
 
     let start = Instant::now();
@@ -171,20 +188,30 @@ pub fn construct_all() {
     println!("time loading chunks: {:?}", end.duration_since(start));
 
     let start = Instant::now();
-    let nbts = region_chunk_data
-        .par_iter()
-        .flatten()
-        .map(|chunk_data| RootNBTCompound::from_bytes(chunk_data.as_slice()).unwrap())
-        .collect::<Vec<_>>();
+    let nbts: [Option<RootNBTCompound<'_>>; 1024] = region_chunk_data
+        .iter()
+        .map(|chunk_data| {
+            let chunk_data = chunk_data.as_ref()?;
+            RootNBTCompound::from_bytes(chunk_data.as_slice())
+                .map_err(|err| println!("{err:?}"))
+                .ok()
+        })
+        .collect::<Vec<Option<RootNBTCompound>>>()
+        .try_into()
+        .unwrap();
+
     let end = Instant::now();
 
     println!("time parsing nbt: {:?}", end.duration_since(start));
 
     let start = Instant::now();
-    let chunks = nbts
+
+    let chunks: [Option<Chunk<'_>>; 1024] = nbts
         .into_iter()
-        .flat_map(Chunk::from_compound)
-        .collect::<Vec<_>>();
+        .map(|nbt| Chunk::from_compound(nbt?))
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap();
     let end = Instant::now();
 
     println!("time creating chunks: {:?}", end.duration_since(start));
@@ -199,15 +226,21 @@ pub fn construct_all() {
 
     let sections = chunks
         .iter()
-        .filter_map(|chunk| {
-            let x = chunk.get_x();
-            let z = chunk.get_z();
+        .enumerate()
+        .filter_map(|(i, chunk)| {
+            let i = i as u16;
+            const BOTTOM_5_BITS: u16 = 0b11111;
+            let local_x = i & BOTTOM_5_BITS;
+            let local_z = i >> 5;
+            println!("x: {local_x} z: {local_z}");
+            let chunk = chunk.as_ref()?;
+
             let sections = chunk.get_sections()?;
 
             Some(sections.iter_sections().map(move |section| {
                 let y = section.get_lowest_y();
 
-                (x, y, z, section)
+                ((local_x, y, local_z), section)
             }))
         })
         .flatten()
@@ -215,7 +248,7 @@ pub fn construct_all() {
 
     let sections_and_palettes = sections
         .into_iter()
-        .map(|(x, y, z, section)| {
+        .map(|((x, y, z), section)| {
             let palette = section.get_palette();
             let mapped_palette: Vec<usize> = palette
                 .iter()
@@ -242,13 +275,15 @@ pub fn construct_all() {
         end.duration_since(start)
     );
     let start = Instant::now();
-    let octrees: Vec<Octree<usize>> = sections_and_palettes
-        .iter()
+
+    //TODO the coordinates need to be shifted so that they are all positive
+    let octrees = sections_and_palettes
+        .into_iter()
         .map(|((x, y, z, section), palette)| {
             println!("section {x},{y},{z}: ");
-            section_to_compacted_octree(section, palette)
+            ((x, y, z), section_to_compacted_octree(&section, &palette))
         })
-        .collect();
+        .collect::<Vec<_>>();
     let end = Instant::now();
 
     println!("time to build octrees: {:?}", end.duration_since(start));
