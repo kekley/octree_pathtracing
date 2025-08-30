@@ -1,5 +1,8 @@
 use hashbrown::HashMap;
-use std::{cell::OnceCell, fmt::Debug, hint::black_box, num::NonZeroUsize, time::Instant};
+use std::sync::Mutex;
+use std::{
+    cell::OnceCell, fmt::Debug, hint::black_box, num::NonZeroUsize, sync::Arc, time::Instant,
+};
 
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use spider_eye::{
@@ -182,6 +185,17 @@ pub fn construct_all() {
 
     let region = Region::load_from_file("./world/r.0.0.mca").expect("Could not load region");
 
+    let blockstate_map = Arc::new(Mutex::new(HashMap::new()));
+
+    let air = NBTString::new_from_str("minecraft:air#normal");
+    blockstate_map.lock().unwrap().insert(air, 0);
+    let region = build_region_octree(region, blockstate_map);
+}
+
+pub fn build_region_octree(
+    region: Region,
+    blockstate_map: Arc<Mutex<HashMap<NBTString, usize>>>,
+) -> Octree<usize> {
     let start = Instant::now();
     let region_chunk_data = region.load_all_chunk_data();
     let end = Instant::now();
@@ -216,14 +230,6 @@ pub fn construct_all() {
 
     println!("time creating chunks: {:?}", end.duration_since(start));
 
-    let mut blockstate_map: HashMap<NBTString, usize> = HashMap::new();
-
-    let air = NBTString::new_from_str("minecraft:air#normal");
-
-    blockstate_map.insert(air, 0);
-
-    let start = Instant::now();
-
     let sections = chunks
         .iter()
         .enumerate()
@@ -237,15 +243,27 @@ pub fn construct_all() {
 
             let sections = chunk.get_sections()?;
 
-            Some(sections.iter_sections().map(move |section| {
-                let y = section.get_lowest_y();
+            Some(sections.iter_sections().filter_map(move |section| {
+                let y_index = section.get_y_index();
+                const LOWEST_SECTION_INDEX: i8 = -4;
 
-                ((local_x, y, local_z), section)
+                const HIGHEST_SECTION_INDEX: i8 = 19;
+
+                if !(LOWEST_SECTION_INDEX..=HIGHEST_SECTION_INDEX).contains(&y_index) {
+                    //TODO allow non vanilla world heights
+                    return None;
+                }
+                let y_pos = y_index + (-LOWEST_SECTION_INDEX);
+
+                Some(((local_x as u64, y_pos as u64, local_z as u64), section))
             }))
         })
         .flatten()
         .collect::<Vec<_>>();
 
+    let mut blockstate_map = blockstate_map.lock().unwrap();
+
+    let start = Instant::now();
     let sections_and_palettes = sections
         .into_iter()
         .map(|((x, y, z), section)| {
@@ -287,6 +305,8 @@ pub fn construct_all() {
     let end = Instant::now();
 
     println!("time to build octrees: {:?}", end.duration_since(start));
+
+    todo!()
 }
 pub fn section_to_compacted_octree(section: &Section<'_, '_>, palette: &[usize]) -> Octree<usize> {
     let mut octants = vec![];
