@@ -26,7 +26,7 @@ impl<T: Default> Octree<T> {
         self.octants.push(Default::default());
         new_octant_id as OctantId
     }
-    pub fn
+    pub fn set_child(&mut self,child:)
 
     fn step_into_or_create_octant_at_morton(&mut self, morton_code: u64) -> OctantId {
         let mut current_octant = if let Some(root) = self.root {
