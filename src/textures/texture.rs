@@ -43,7 +43,7 @@ impl Texture {
                 Vec4::from_array(color.to_array())
             }
             Texture::Image(image) => {
-                if image.image_height <= 0 {
+                if image.image_height == 0 {
                     return Vec4::new(1.0, 1.0, 1.0, 1.0);
                 }
 
