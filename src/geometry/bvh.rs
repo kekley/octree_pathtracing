@@ -192,9 +192,9 @@ impl BVHTree {
             &mut indices,
         );
         Self {
-            nodes: nodes,
-            objects: objects,
-            indices: indices,
+            nodes,
+            objects,
+            indices,
         }
     }
 
@@ -233,7 +233,7 @@ impl BVHTree {
                 swap(&mut dist_1, &mut dist_2);
                 swap(&mut child_1, &mut child_2);
             }
-            if dist_1 == INFINITY {
+            if dist_1 == f32::INFINITY {
                 if stack_idx == 0 {
                     break false;
                 } else {

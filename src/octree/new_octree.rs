@@ -1,11 +1,17 @@
 use hashbrown::HashMap;
+use std::cell::RefCell;
+use std::hint::black_box;
+use std::num::NonZeroU32;
 use std::ops::RangeBounds;
 use std::path::PathBuf;
 use std::slice::SliceIndex;
 use std::sync::Mutex;
 use std::{fmt::Debug, num::NonZeroUsize, sync::Arc, time::Instant};
 
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelBridge,
+    ParallelIterator,
+};
 use spider_eye::{
     borrow::nbt_compound::RootNBTCompound, chunk::borrow::Chunk, coords::block::BlockCoords,
     owned::nbt_string::NBTString, region::borrow::Region, section::borrow::Section,
@@ -205,12 +211,6 @@ fn calculate_loading_range(position: &BlockCoords, octree_depth: u8) {
 }
 
 pub fn construct_all() {
-    let position = BlockCoords {
-        x: 256,
-        y: 70,
-        z: 256,
-    };
-
     let octree_depth = 9;
     let path = PathBuf::from("./assets/worlds/test_world/r.1.0.mca");
 
@@ -220,17 +220,21 @@ pub fn construct_all() {
 
     let air = NBTString::new_from_str("minecraft:air#normal");
     blockstate_map.lock().unwrap().insert(air, 0);
-    let start = Instant::now();
-    let region = build_region_octree(region, blockstate_map);
 
+    let start = Instant::now();
+    let two = build_region_octree(region, blockstate_map);
     let end = Instant::now();
 
     println!("total time: {:?}", end.duration_since(start));
 }
 
+const LOWEST_SECTION_INDEX: i8 = -4;
+
+const HIGHEST_SECTION_INDEX: i8 = 19;
+
 pub fn build_region_octree(
     region: Region,
-    blockstate_map: Arc<Mutex<HashMap<NBTString, usize>>>,
+    blockstate_map: Arc<Mutex<HashMap<NBTString, u32>>>,
 ) -> Octree<usize> {
     //TODO maybe redo blockstate hash function
     let start = Instant::now();
@@ -240,7 +244,7 @@ pub fn build_region_octree(
 
     let start = Instant::now();
     let nbts: [Option<RootNBTCompound<'_>>; 1024] = region_chunk_data
-        .par_iter()
+        .iter()
         .map(|chunk_data| {
             let chunk_data = chunk_data.as_ref()?;
             RootNBTCompound::from_bytes(chunk_data.as_slice())
@@ -267,24 +271,18 @@ pub fn build_region_octree(
 
     println!("time parsing chunks: {:?}", end.duration_since(start));
 
-    let sections = chunks
+    let coords_and_sections = chunks
         .iter()
         .enumerate()
         .filter_map(|(i, chunk)| {
-            let i = i as u16;
-            const BOTTOM_5_BITS: u16 = 0b11111;
-            let chunk_local_x = i & BOTTOM_5_BITS;
-            let chunk_local_z = i >> 5;
+            let (chunk_local_x, chunk_local_z) = chunk_index_to_coordinates(i);
             //println!("x: {local_x} z: {local_z}");
             let chunk = chunk.as_ref()?;
 
-            let sections = chunk.get_sections()?;
+            let sections = chunk.get_section_tower()?;
 
             Some(sections.iter_sections().filter_map(move |section| {
                 let y_index = section.get_y_index();
-                const LOWEST_SECTION_INDEX: i8 = -4;
-
-                const HIGHEST_SECTION_INDEX: i8 = 19;
 
                 if !(LOWEST_SECTION_INDEX..HIGHEST_SECTION_INDEX + 1).contains(&y_index) {
                     //TODO allow non vanilla world heights
@@ -303,15 +301,15 @@ pub fn build_region_octree(
 
     let mut blockstate_map = blockstate_map.lock().unwrap();
     let start = Instant::now();
-    let sections_and_palettes = sections
+    let coords_and_sections = coords_and_sections
         .into_iter()
         .map(|((x, y, z), section)| {
             let palette = section.get_palette();
-            let mapped_palette: Vec<usize> = palette
+            let mapped_palette: Vec<u32> = palette
                 .iter()
                 .map(|blockstate| {
                     let mapped_state = blockstate.to_mapped_state();
-                    let current_len = blockstate_map.len();
+                    let current_len = blockstate_map.len() as u32;
                     let value = blockstate_map
                         .entry(mapped_state)
                         .or_insert_with(|| current_len);
@@ -332,8 +330,8 @@ pub fn build_region_octree(
     );
     let start = Instant::now();
 
-    let mut sections = sections_and_palettes
-        .into_par_iter()
+    let mut sections = coords_and_sections
+        .into_iter()
         .map(|((x, y, z, section), palette)| {
             let morton_code = encode_morton(x, y, z);
             (morton_code, section_to_compacted_octree(&section, &palette))
@@ -345,11 +343,7 @@ pub fn build_region_octree(
     sections.sort_unstable_by_key(|octree| octree.0);
 
     println!("number of sections: {count}", count = sections.len());
-    println!("sorted morton data:");
 
-    for section in &sections {
-        let (x, y, z) = decode_morton(section.0);
-    }
     let mut builder = RegionOctreeBuilder::new();
     let start = Instant::now();
     builder.build(sections);
@@ -361,32 +355,24 @@ pub fn build_region_octree(
     Octree::default()
 }
 
-enum RegionOctreeResult {}
+fn chunk_index_to_coordinates(i: usize) -> (u8, u8) {
+    let i = i as u16;
+    const BOTTOM_5_BITS: u16 = 0b11111;
+    let chunk_local_x = i & BOTTOM_5_BITS;
+    let chunk_local_z = i >> 5;
+    (chunk_local_x as u8, chunk_local_z as u8)
+}
 
 pub const REGION_OCTREE_DEPTH: usize = 9;
 
 #[derive(Debug, Default)]
 struct RegionOctreeBuilder {
-    sections: Vec<SectionOctantResult>,
-    morton_codes: Vec<u64>,
-    octants: Vec<Octant<usize>>,
-}
-
-const fn section_octant_masks() -> [u64; 8] {
-    let mut temp = [0_u64; 8];
-    let mut i = 0_u64;
-    while i < 8 {
-        let shifted = i << ((SECTION_OCTREE_DEPTH) * 3);
-        temp[i as usize] = shifted;
-        i += 1;
-    }
-
-    temp
+    octants: Vec<Octant<u32>>,
 }
 
 enum RegionSubtreeResult {
     Empty,
-    Lod(usize),
+    Lod(u32),
     Octant(OctantId),
 }
 impl RegionOctreeBuilder {
@@ -419,13 +405,11 @@ impl RegionOctreeBuilder {
         let new_depth = target_depth - 1;
         const BITS_PER_DEPTH: usize = 3;
 
-        let mut result = RegionSubtreeResult::Empty;
-
         let prefix_shift_amount = new_depth * BITS_PER_DEPTH as u8;
         let prefix_base = (1 << prefix_shift_amount) - 1; //fills all the bits to the right of
                                                           //prefix_shift_amount with 1
         let mut child_count = 0;
-        let children: [Child<usize>; 8] = (0..8)
+        let children: [Child<u32>; 8] = (0..8)
             .map(|child_index: u64| {
                 let data = data_opt.take().unwrap();
 
@@ -494,7 +478,7 @@ impl RegionOctreeBuilder {
             .unwrap();
 
         let first = &children[0];
-        result = if children.iter().all(|child| child == first) {
+        let result = if children.iter().all(|child| child == first) {
             match first {
                 Child::None => RegionSubtreeResult::Empty,
                 Child::Lod(data) => RegionSubtreeResult::Lod(*data),
@@ -521,7 +505,7 @@ struct ChildBuffer {
     initialized_count: u8,
     child_count: u8,
     uncompactable: bool,
-    buffer: [Child<usize>; CHILD_COUNT],
+    buffer: [Child<u32>; CHILD_COUNT],
 }
 
 impl ChildBuffer {
@@ -530,7 +514,7 @@ impl ChildBuffer {
         self.child_count = 0;
         self.uncompactable = false;
     }
-    pub fn insert_child(&mut self, child: &Child<usize>) -> bool {
+    pub fn insert_child(&mut self, child: &Child<u32>) -> bool {
         if self.initialized_count > 0 {
             if child != &self.buffer[0] {
                 self.uncompactable = true;
@@ -554,26 +538,26 @@ impl ChildBuffer {
     pub fn child_count(&self) -> u8 {
         self.child_count
     }
-    pub fn buffer(&self) -> &[Child<usize>; 8] {
+    pub fn buffer(&self) -> &[Child<u32>; 8] {
         &self.buffer
     }
 }
 
 #[derive(Default, Debug)]
 struct SectionOctantBuilder {
-    octants: Vec<Octant<usize>>,
+    octants: Vec<Octant<u32>>,
     child_buffers: [ChildBuffer; SECTION_OCTREE_DEPTH - 1],
 }
 
 #[derive(Debug, Default)]
 enum SectionOctantResult {
     Subtree {
-        section_octants: Vec<Octant<usize>>,
+        section_octants: Vec<Octant<u32>>,
         root: OctantId,
     },
     #[default]
     Empty,
-    Lod(usize),
+    Lod(u32),
 }
 
 impl SectionOctantBuilder {
@@ -582,7 +566,7 @@ impl SectionOctantBuilder {
     }
     pub fn section_data_to_octants(
         mut self,
-        morton_order_section_data: &[Option<NonZeroUsize>; 4096],
+        morton_order_section_data: &[Option<NonZeroU32>; 4096],
     ) -> SectionOctantResult {
         let (chunks, remainder) = morton_order_section_data.as_chunks::<CHILD_COUNT>();
         assert!(remainder.is_empty());
@@ -624,7 +608,7 @@ impl SectionOctantBuilder {
             }
         }
     }
-    fn leaves_to_child(&mut self, data: &[Option<NonZeroUsize>; 8]) -> Child<usize> {
+    fn leaves_to_child(&mut self, data: &[Option<NonZeroU32>; 8]) -> Child<u32> {
         let first = &data[0];
         let mut uncompactable = false;
         let mut child_count = 0;
@@ -665,7 +649,7 @@ impl SectionOctantBuilder {
         resulting_child
     }
 
-    fn insert_child_and_compact(&mut self, mut new_child: Child<usize>) {
+    fn insert_child_and_compact(&mut self, mut new_child: Child<u32>) {
         let mut search_depth = SECTION_OCTREE_DEPTH - 2;
         loop {
             let current_buffer = &mut self.child_buffers[search_depth];
@@ -694,7 +678,7 @@ impl SectionOctantBuilder {
 
 pub fn section_to_compacted_octree(
     section: &Section<'_, '_>,
-    remapped_palette: &[usize],
+    remapped_palette: &[u32],
 ) -> SectionOctantResult {
     if remapped_palette.len() < 2 {
         return if remapped_palette.len() == 0 {
@@ -710,17 +694,18 @@ pub fn section_to_compacted_octree(
             }
         };
     }
-    let mut morton_order_data: [Option<NonZeroUsize>; 4096] = [Option::None; 4096];
+    let mut morton_order_data: [Option<NonZeroU32>; 4096] = [Option::None; 4096];
 
     for (i, palette_index) in section.iter_block_indices().enumerate() {
-        let (x, y, z) = section_index_to_coordinates(i as u64);
-        let morton_code = encode_morton(x, y, z);
+        let (x, y, z) = section_index_to_block_coordinates(i as u16);
+        let morton_code = encode_morton(x as u64, y as u64, z as u64);
 
         let value = remapped_palette
             .get(palette_index as usize)
+            //remap palettes
             .expect("index should be in range of palette");
 
-        morton_order_data[morton_code as usize] = NonZeroUsize::new(*value);
+        morton_order_data[morton_code as usize] = NonZeroU32::new(*value);
     }
 
     let builder = SectionOctantBuilder::new();
@@ -765,11 +750,12 @@ fn compact_by_2(val: u64) -> u64 {
 }
 
 #[inline]
-fn section_index_to_coordinates(index: u64) -> (u64, u64, u64) {
-    const X_BITS: u64 = 0xF;
-    const Y_BITS: u64 = 0xF00;
-    const Z_BITS: u64 = 0x0F0;
-    const BITS_PER_COORD: u64 = 4;
+fn section_index_to_block_coordinates(index: u16) -> (u16, u16, u16) {
+    assert!(index < 4096);
+    const X_BITS: u16 = 0xF;
+    const Y_BITS: u16 = 0xF00;
+    const Z_BITS: u16 = 0x0F0;
+    const BITS_PER_COORD: u16 = 4;
     let (x, y, z) = (
         index & X_BITS,
         (index & Y_BITS) >> (BITS_PER_COORD * 2),
@@ -785,13 +771,6 @@ mod test {
     #[test]
     pub fn section_test() {
         construct_all();
-    }
-    #[test]
-    pub fn octant_masks() {
-        let masks = section_octant_masks();
-        for mask in masks {
-            println!("{mask:b}");
-        }
     }
     #[test]
     pub fn morton_code_bit_pattern() {
