@@ -1,7 +1,7 @@
-use std::{fmt::Debug, u16, u32};
+use std::{fmt::Debug, u32};
 
 use crate::{
-    octree::new_octree::{Child, Octant, Octree},
+    octree::new_octree::{Octant, Octree},
     scene::resource_manager::ResourceModel,
 };
 use bytemuck::{Pod, Zeroable};

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use glam::{Affine3A, Quat, Vec3, Vec3A};
+use glam::{Affine3A, Vec3, Vec3A};
 use spider_eye::{
     blockstate::borrow::BlockState, interned::blockstate::InternedVariantType,
     resource_loader::LoadedResources, serde::block_model::FaceName,

@@ -578,7 +578,7 @@ impl RenderingBackend for GPURenderer {
             Some(texture) => texture,
             None => return Err(texture),
         };
-        let mut ray = self.camera.get_ray(0.0, 0.0);
+        let ray = self.camera.get_ray(0.0, 0.0);
         let aspect_ratio = self.render_size.0 as f32 / self.render_size.1 as f32;
         let (traversal_start_index, scale, index_stack, time_stack) = todo!();
         let device = &self.device;
