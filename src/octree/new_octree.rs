@@ -1,17 +1,9 @@
 use hashbrown::HashMap;
-use std::cell::RefCell;
-use std::hint::black_box;
 use std::num::NonZeroU32;
-use std::ops::RangeBounds;
 use std::path::PathBuf;
-use std::slice::SliceIndex;
 use std::sync::Mutex;
-use std::{fmt::Debug, num::NonZeroUsize, sync::Arc, time::Instant};
+use std::{fmt::Debug, sync::Arc, time::Instant};
 
-use rayon::iter::{
-    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelBridge,
-    ParallelIterator,
-};
 use spider_eye::{
     borrow::nbt_compound::RootNBTCompound, chunk::borrow::Chunk, coords::block::BlockCoords,
     owned::nbt_string::NBTString, region::borrow::Region, section::borrow::Section,
@@ -32,45 +24,20 @@ impl<T: Default> Octree<T> {
         new_octant_id as OctantId
     }
 
-    fn step_into_or_create_octant_at_morton(&mut self, morton_code: u64) -> OctantId {
-        let mut current_octant = if let Some(root) = self.root {
-            root
-        } else {
-            let new_root = self.new_octant();
-            self.root = Some(new_root);
-            new_root
-        };
+    pub fn root(&self) -> Option<OctantId> {
+        self.root
+    }
 
-        //TODO this doesn't work
+    pub fn octants_slice(&self) -> &[Octant<T>] {
+        &self.octants
+    }
 
-        //+1 because (21 bits per axis *3 axes) = 64
-        let mut shift_amt = 1 + (63 - (3 * self.depth));
-        loop {
-            if shift_amt > 58 {
-                break;
-            }
-            let child_idx = (morton_code << shift_amt) >> 61;
-            println!("child idx: {child_idx}");
-            match self.octants[current_octant as usize].children[child_idx as usize] {
-                Child::None => {
-                    let new_octant_id = self.new_octant();
-                    self.octants[current_octant as usize].children[child_idx as usize] =
-                        Child::Octant(new_octant_id);
-                    current_octant = new_octant_id;
-                }
-                Child::Octant(id) => {
-                    current_octant = id;
-                }
-                _ => {
-                    panic!(
-                        "Tried to place octant at {position:?} but it was not empty",
-                        position = decode_morton(morton_code)
-                    );
-                }
-            }
-            shift_amt += 3;
-        }
-        current_octant
+    pub fn depth(&self) -> u8 {
+        self.depth
+    }
+
+    pub fn scale(&self) -> f32 {
+        f32::exp2(-(self.depth as f32))
     }
 
     pub fn expand_to(&mut self, depth: u8) {
@@ -138,6 +105,9 @@ impl<T> Octant<T> {
     pub fn child_count(&mut self) -> u8 {
         self.child_count
     }
+    pub fn children(&self) -> &[Child<T>] {
+        &self.children
+    }
 }
 
 impl<T: Default> Default for Octant<T> {
@@ -194,6 +164,20 @@ impl<T> Child<T> {
     pub fn is_octant(&self) -> bool {
         matches!(self, Child::Octant(_))
     }
+    pub fn get_leaf_value(&self) -> Option<&T> {
+        if let Child::Leaf(val) = self {
+            Some(val)
+        } else {
+            None
+        }
+    }
+    pub fn get_octant_id(&self) -> Option<OctantId> {
+        if let Child::Octant(id) = self {
+            Some(*id)
+        } else {
+            None
+        }
+    }
 }
 
 pub struct LeafId {
@@ -211,7 +195,6 @@ fn calculate_loading_range(position: &BlockCoords, octree_depth: u8) {
 }
 
 pub fn construct_all() {
-    let octree_depth = 9;
     let path = PathBuf::from("./assets/worlds/test_world/r.1.0.mca");
 
     let region = Region::load_from_file(&path).expect("Could not load region");
@@ -222,7 +205,7 @@ pub fn construct_all() {
     blockstate_map.lock().unwrap().insert(air, 0);
 
     let start = Instant::now();
-    let two = build_region_octree(region, blockstate_map);
+    let _two = build_region_octree(region, blockstate_map);
     let end = Instant::now();
 
     println!("total time: {:?}", end.duration_since(start));
@@ -235,7 +218,7 @@ const HIGHEST_SECTION_INDEX: i8 = 19;
 pub fn build_region_octree(
     region: Region,
     blockstate_map: Arc<Mutex<HashMap<NBTString, u32>>>,
-) -> Octree<usize> {
+) -> Option<Octree<u32>> {
     //TODO maybe redo blockstate hash function
     let start = Instant::now();
     let region_chunk_data = region.load_all_chunk_data();
@@ -243,17 +226,16 @@ pub fn build_region_octree(
     println!("time loading chunks: {:?}", end.duration_since(start));
 
     let start = Instant::now();
-    let nbts: [Option<RootNBTCompound<'_>>; 1024] = region_chunk_data
-        .iter()
-        .map(|chunk_data| {
-            let chunk_data = chunk_data.as_ref()?;
-            RootNBTCompound::from_bytes(chunk_data.as_slice())
-                .map_err(|err| println!("{err:?}"))
-                .ok()
-        })
-        .collect::<Vec<Option<RootNBTCompound>>>()
-        .try_into()
-        .unwrap();
+    let mut nbts: [Option<RootNBTCompound<'_>>; 1024] = [const { None }; 1024];
+    nbts.iter_mut()
+        .zip(region_chunk_data.iter())
+        .for_each(|(nbt, chunk_data)| {
+            if let Some(chunk_data) = chunk_data {
+                *nbt = RootNBTCompound::from_bytes(chunk_data.as_slice())
+                    .map_err(|err| println!("{err:?}"))
+                    .ok()
+            }
+        });
 
     let end = Instant::now();
 
@@ -261,12 +243,12 @@ pub fn build_region_octree(
 
     let start = Instant::now();
 
-    let chunks: [Option<Chunk<'_>>; 1024] = nbts
-        .into_iter()
-        .map(|nbt| Chunk::from_compound(nbt?))
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap();
+    let mut chunks: [Option<Chunk<'_>>; 1024] = [const { None }; 1024];
+    chunks.iter_mut().zip(nbts).for_each(|(chunk, nbt)| {
+        if let Some(nbt) = nbt {
+            *chunk = Chunk::from_compound(nbt);
+        }
+    });
     let end = Instant::now();
 
     println!("time parsing chunks: {:?}", end.duration_since(start));
@@ -333,7 +315,7 @@ pub fn build_region_octree(
     let mut sections = coords_and_sections
         .into_iter()
         .map(|((x, y, z, section), palette)| {
-            let morton_code = encode_morton(x, y, z);
+            let morton_code = encode_morton_lut(x, y, z);
             (morton_code, section_to_compacted_octree(&section, &palette))
         })
         .collect::<Vec<_>>();
@@ -346,13 +328,13 @@ pub fn build_region_octree(
 
     let mut builder = RegionOctreeBuilder::new();
     let start = Instant::now();
-    builder.build(sections);
+    let tree = builder.build(sections);
 
     let end = Instant::now();
 
     println!("time to build region tree:{:?}", end.duration_since(start));
 
-    Octree::default()
+    tree
 }
 
 fn chunk_index_to_coordinates(i: usize) -> (u8, u8) {
@@ -379,7 +361,10 @@ impl RegionOctreeBuilder {
     pub fn new() -> Self {
         Default::default()
     }
-    pub fn build(&mut self, mut morton_codes_and_sections: Vec<(u64, SectionOctantResult)>) {
+    pub fn build(
+        mut self,
+        mut morton_codes_and_sections: Vec<(u64, SectionOctantResult)>,
+    ) -> Option<Octree<u32>> {
         let tree_depth = REGION_OCTREE_DEPTH - SECTION_OCTREE_DEPTH; //we are using local
                                                                      //coordinates and a region
                                                                      //is 32x32 on the x and z
@@ -394,6 +379,27 @@ impl RegionOctreeBuilder {
             "memory footprint: {}kb",
             (self.octants.len() * size_of::<Octant<usize>>()) / 1000
         );
+
+        match result {
+            RegionSubtreeResult::Empty => None,
+            RegionSubtreeResult::Lod(data) => {
+                //this will pretty much never happen
+                let octants = vec![Octant {
+                    child_count: 8,
+                    children: [Child::Lod(data); 8],
+                }];
+                Some(Octree {
+                    root: Some(0),
+                    octants,
+                    depth: 9,
+                })
+            }
+            RegionSubtreeResult::Octant(id) => Some(Octree {
+                root: Some(id),
+                octants: self.octants,
+                depth: REGION_OCTREE_DEPTH as u8,
+            }),
+        }
     }
 
     fn recursive_build(
@@ -409,8 +415,12 @@ impl RegionOctreeBuilder {
         let prefix_base = (1 << prefix_shift_amount) - 1; //fills all the bits to the right of
                                                           //prefix_shift_amount with 1
         let mut child_count = 0;
-        let children: [Child<u32>; 8] = (0..8)
-            .map(|child_index: u64| {
+        let mut children: [Child<u32>; 8] = [Default::default(); 8];
+        children
+            .iter_mut()
+            .enumerate()
+            .for_each(|(child_index, child_mut)| {
+                let child_index = child_index as u64;
                 let data = data_opt.take().unwrap();
 
                 let prefix = (child_index << prefix_shift_amount) | prefix_base;
@@ -421,25 +431,25 @@ impl RegionOctreeBuilder {
                     let (subtree_slice, new_data) = data.split_at_mut(slice_end_index);
                     data_opt = Some(new_data);
                     if subtree_slice.is_empty() {
-                        return Child::None;
+                        *child_mut = Child::None;
                     }
 
                     let child = self.recursive_build(new_depth, subtree_slice);
 
                     match child {
-                        RegionSubtreeResult::Empty => Child::None,
+                        RegionSubtreeResult::Empty => *child_mut = Child::None,
                         RegionSubtreeResult::Lod(data) => {
                             child_count += 1;
-                            Child::Lod(data)
+                            *child_mut = Child::Lod(data)
                         }
                         RegionSubtreeResult::Octant(octant) => {
                             child_count += 1;
-                            Child::Octant(octant)
+                            *child_mut = Child::Octant(octant)
                         }
                     }
                 } else {
                     assert!(data.len() <= 8);
-                    let child = if let Some((_, section)) = data.get_mut(child_index as usize) {
+                    if let Some((_, section)) = data.get_mut(child_index as usize) {
                         match section {
                             SectionOctantResult::Subtree {
                                 section_octants,
@@ -458,24 +468,22 @@ impl RegionOctreeBuilder {
                                     });
                                 });
                                 self.octants.extend(section_octants.as_slice());
-                                Child::Octant(new_root)
+                                *child_mut = Child::Octant(new_root)
                             }
-                            SectionOctantResult::Empty => Child::None,
+                            SectionOctantResult::Empty => {
+                                *child_mut = Child::None;
+                            }
                             SectionOctantResult::Lod(data) => {
                                 child_count += 1;
-                                Child::Lod(*data)
+                                *child_mut = Child::Lod(*data);
                             }
                         }
                     } else {
-                        Child::None
+                        *child_mut = Child::None;
                     };
                     data_opt = Some(data);
-                    child
                 }
-            })
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap();
+            });
 
         let first = &children[0];
         let result = if children.iter().all(|child| child == first) {
@@ -588,7 +596,9 @@ impl SectionOctantBuilder {
                 child_count: root_buffer.child_count(),
                 children: *root_buffer.buffer(),
             };
+
             let octant_id = self.octants.len();
+
             self.octants.push(root_octant);
 
             self.octants.iter_mut().for_each(|octant| {
@@ -609,33 +619,26 @@ impl SectionOctantBuilder {
         }
     }
     fn leaves_to_child(&mut self, data: &[Option<NonZeroU32>; 8]) -> Child<u32> {
-        let first = &data[0];
         let mut uncompactable = false;
         let mut child_count = 0;
-        data.iter().for_each(|item| {
-            if item != first {
+        let first = &data[0];
+        let mut children = [Child::None; 8];
+        children.iter_mut().zip(data).for_each(|(child, data)| {
+            if data != first {
                 uncompactable = true;
             }
-            if item.is_some() {
+            if let Some(leaf) = data {
                 child_count += 1;
+                *child = Child::Leaf(leaf.get());
+            } else {
+                *child = Child::None;
             }
         });
 
-        let resulting_child = if uncompactable {
+        if uncompactable {
             let new_octant = Octant {
                 child_count: child_count as u8,
-                children: data
-                    .iter()
-                    .map(|opt| {
-                        if let Some(leaf) = opt {
-                            Child::Leaf(leaf.get())
-                        } else {
-                            Child::None
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .try_into()
-                    .unwrap(),
+                children,
             };
             let octant_id = self.octants.len() as u32;
             self.octants.push(new_octant);
@@ -644,9 +647,7 @@ impl SectionOctantBuilder {
             Child::Lod(leaf.get())
         } else {
             Child::None
-        };
-
-        resulting_child
+        }
     }
 
     fn insert_child_and_compact(&mut self, mut new_child: Child<u32>) {
@@ -681,16 +682,20 @@ pub fn section_to_compacted_octree(
     remapped_palette: &[u32],
 ) -> SectionOctantResult {
     if remapped_palette.len() < 2 {
-        return if remapped_palette.len() == 0 {
+        return if remapped_palette.is_empty() {
             //this shouldn't happen, but we'll treat the section as full of air
             SectionOctantResult::Empty
         } else {
-            let section_fill_block = remapped_palette.get(0).unwrap();
-            if *section_fill_block == 0 {
-                //UNWRAP: we've ensured the length is 1
-                SectionOctantResult::Empty
+            //palette is known to contain one element
+            if let Some(section_fill_block) = remapped_palette.first() {
+                if *section_fill_block == 0 {
+                    //UNWRAP: we've ensured the length is 1
+                    SectionOctantResult::Empty
+                } else {
+                    SectionOctantResult::Lod(*section_fill_block)
+                }
             } else {
-                SectionOctantResult::Lod(*section_fill_block)
+                unreachable!()
             }
         };
     }
@@ -698,11 +703,10 @@ pub fn section_to_compacted_octree(
 
     for (i, palette_index) in section.iter_block_indices().enumerate() {
         let (x, y, z) = section_index_to_block_coordinates(i as u16);
-        let morton_code = encode_morton(x as u64, y as u64, z as u64);
+        let morton_code = encode_morton_lut(x as u64, y as u64, z as u64);
 
         let value = remapped_palette
             .get(palette_index as usize)
-            //remap palettes
             .expect("index should be in range of palette");
 
         morton_order_data[morton_code as usize] = NonZeroU32::new(*value);
@@ -718,6 +722,55 @@ fn encode_morton(x: u64, y: u64, z: u64) -> u64 {
     (part_by_2(z) << 2) + (part_by_2(y) << 1) + part_by_2(x)
 }
 
+static MORTON_ARRAY_X: [u32; 4096] = section_morton_code_array_x();
+
+static MORTON_ARRAY_Y: [u32; 4096] = section_morton_code_array_y();
+
+static MORTON_ARRAY_Z: [u32; 4096] = section_morton_code_array_z();
+
+const fn section_morton_code_array_x() -> [u32; 4096] {
+    let mut array_x = [0u32; 4096];
+    let mut i = 0_usize;
+    loop {
+        array_x[i] = (part_by_2(i as u64)) as u32;
+        i += 1;
+        if i > 4095 {
+            break;
+        }
+    }
+    array_x
+}
+
+const fn section_morton_code_array_y() -> [u32; 4096] {
+    let mut array_y = [0u32; 4096];
+    let mut i = 0_usize;
+    loop {
+        array_y[i] = (part_by_2(i as u64) << 1) as u32;
+        i += 1;
+        if i > 4095 {
+            break;
+        }
+    }
+    array_y
+}
+
+const fn section_morton_code_array_z() -> [u32; 4096] {
+    let mut array_z = [0u32; 4096];
+    let mut i = 0_usize;
+    loop {
+        array_z[i] = (part_by_2(i as u64) << 2) as u32;
+        i += 1;
+        if i > 4095 {
+            break;
+        }
+    }
+    array_z
+}
+
+fn encode_morton_lut(x: u64, y: u64, z: u64) -> u64 {
+    (MORTON_ARRAY_Z[z as usize] + MORTON_ARRAY_Y[y as usize] + MORTON_ARRAY_X[x as usize]) as u64
+}
+
 #[inline]
 fn decode_morton(val: u64) -> (u64, u64, u64) {
     (
@@ -728,7 +781,7 @@ fn decode_morton(val: u64) -> (u64, u64, u64) {
 }
 
 #[inline]
-fn part_by_2(val: u64) -> u64 {
+const fn part_by_2(val: u64) -> u64 {
     let mut x = val & 0x1fffff; // we only look at the first 21 bits
     x = (x | x << 32) & 0x1f00000000ffff; // shift left 32 bits, OR with self, and 00011111000000000000000000000000000000001111111111111111
     x = (x | x << 16) & 0x1f0000ff0000ff; // shift left 32 bits, OR with self, and 00011111000000000000000011111111000000000000000011111111
@@ -781,5 +834,15 @@ mod test {
         let decoded_coords = decode_morton(code);
 
         assert_eq!(coord, decoded_coords);
+    }
+    #[test]
+    pub fn morton_code_lut_test() {
+        for x in 0..1024 {
+            for y in 0..1024 {
+                for z in 0..1024 {
+                    assert_eq!(encode_morton(x, y, z), encode_morton_lut(x, y, z))
+                }
+            }
+        }
     }
 }

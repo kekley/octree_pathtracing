@@ -1,64 +1,17 @@
 use std::{fmt::Debug, u32};
 
-use crate::{
-    octree::new_octree::{Octant, Octree},
-    scene::resource_manager::ResourceModel,
-};
+use crate::octree::new_octree::{Child, Octree};
 use bytemuck::{Pod, Zeroable};
 
+///The first four words are header data, that leaves 128 bits for metadata about the octants,
+///which is 16 bits per octant
+///The next 8 words are the actual data for each octant. Either an index to the next child or the
+///leaf value
 #[repr(C, align(16))]
 #[derive(Debug, Copy, Clone, Pod, Zeroable)]
 pub struct GPUOctreeNode {
     data: [u32; 12],
 }
-
-impl From<&Octant<ResourceModel>> for GPUOctreeNode {
-    fn from(value: &Octant<ResourceModel>) -> Self {
-        /*
-        let Octant {
-            parent,
-            child_count,
-            children,
-        } = value;
-        let mut data = [0u32; 12];
-        children
-            .iter()
-            .enumerate()
-            .for_each(|(i, child)| match child {
-                Child::None => {}
-                Child::Octant(ind) => {
-                    let child_mask: u32 = u8::MAX as u32;
-                    data[i / 2] |= child_mask << (16 * (i % 2));
-                    data[4 + i] = *ind;
-                }
-                Child::Leaf(val) => {
-                    let bits: u32 = u16::MAX as u32;
-                    data[i / 2] |= bits << (16 * (i % 2));
-                    data[4 + i] = val.get_first_index();
-                }
-            });
-        children.iter().enumerate().for_each(|(i, child)| {
-            let is_child = ((data[i / 2] >> (16 * (i % 2))) & 0x0000FFFF) & u8::MAX as u32 != 0;
-            let is_leaf = ((data[i / 2] >> (16 * (i % 2))) & 0x0000FFFF) ^ u16::MAX as u32 == 0;
-
-            assert!(!child.is_none() == is_child);
-            assert!(child.is_leaf() == is_leaf);
-            if is_child {
-                if is_leaf {
-                    assert_eq!(
-                        child.get_leaf_value().unwrap().get_first_index(),
-                        data[4 + i]
-                    );
-                } else {
-                    assert_eq!(child.get_octant_value().unwrap(), data[4 + i]);
-                }
-            }
-        });
-        */
-        GPUOctreeNode { data: todo!() }
-    }
-}
-
 #[repr(C, align(16))]
 #[derive(Debug, Copy, Clone, Pod, Zeroable)]
 pub struct GPUOctreeUniform {
@@ -68,8 +21,87 @@ pub struct GPUOctreeUniform {
     pub padding: u32,
 }
 
-impl From<&Octree<ResourceModel>> for GPUOctreeUniform {
-    fn from(value: &Octree<ResourceModel>) -> Self {
-        todo!()
-    }
+const LEAF_BIT: u32 = 0b0000_0000_0000_0000_0000_0000_0000_0001;
+const CHILD_BIT: u32 = 0b0000_0000_0000_0000_0000_0000_0000_0010;
+const LOD_BIT: u32 = 0b0000_0000_0000_0000_0000_0000_0000_0100;
+
+fn octree_to_gpu_data(tree: &Octree<u32>) -> (GPUOctreeUniform, Vec<GPUOctreeNode>) {
+    let mut octant_data = [0u32; 12];
+    let gpu_octants = tree
+        .octants_slice()
+        .iter()
+        .map(|octant| {
+            octant
+                .children()
+                .iter()
+                .enumerate()
+                .for_each(|(index, child)| match child {
+                    Child::None => {}
+                    Child::Lod(data) => {
+                        let header_index = index / 2; //first four words are headers
+                        let data_index = 4 + index; //actual data is in the next 8 words
+                        let header_shift = 16 * (index % 2); //each header word is split in
+                                                             //two for each octant
+
+                        octant_data[header_index] |= (LOD_BIT | CHILD_BIT) << header_shift;
+                        octant_data[data_index] = *data;
+                    }
+                    Child::Octant(octant_id) => {
+                        let header_index = index / 2;
+                        let data_index = 4 + index;
+                        let header_shift = 16 * (index % 2);
+
+                        octant_data[header_index] |= CHILD_BIT << header_shift;
+                        octant_data[data_index] = *octant_id;
+                    }
+                    Child::Leaf(data) => {
+                        let header_index = index / 2;
+                        let data_index = 4 + index;
+                        let header_shift = 16 * (index % 2);
+
+                        octant_data[header_index] |= (LEAF_BIT | CHILD_BIT) << header_shift;
+                        octant_data[data_index] = *data;
+                    }
+                });
+
+            //verify
+            octant
+                .children()
+                .iter()
+                .enumerate()
+                .for_each(|(index, child)| {
+                    let header_index = index / 2;
+                    let data_index = 4 + index;
+                    let header_shift = 16 * (index % 2);
+
+                    let is_child = ((octant_data[header_index] >> header_shift) & CHILD_BIT) != 0;
+                    let is_leaf = ((octant_data[header_index] >> header_shift) & LEAF_BIT) != 0;
+
+                    assert!(!child.is_none() == is_child);
+                    assert!(child.is_leaf() == is_leaf);
+                    if is_child {
+                        if is_leaf {
+                            assert_eq!(*child.get_leaf_value().unwrap(), octant_data[data_index]);
+                        } else {
+                            assert_eq!(child.get_octant_id().unwrap(), octant_data[data_index]);
+                        }
+                    }
+                });
+            let node = GPUOctreeNode { data: octant_data };
+
+            octant_data.iter_mut().for_each(|val| {
+                *val = 0;
+            });
+            node
+        })
+        .collect::<Vec<_>>();
+
+    let uniform = GPUOctreeUniform {
+        octree_scale: tree.scale(),
+        depth: tree.depth() as u32,
+        root: tree.root().unwrap(),
+        padding: 0,
+    };
+
+    (uniform, gpu_octants)
 }

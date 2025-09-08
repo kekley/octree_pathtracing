@@ -8,9 +8,9 @@ pub struct GPUQuad {
     pub origin: [f32; 3],
     pub material_id: u32,
     pub u: [f32; 3],
-    pub tex_u: u32,
+    pub tex_u: u32, //two f16s
     pub v: [f32; 3],
-    pub tex_v: u32,
+    pub tex_v: u32, //two f16s
     pub normal: [f32; 3],
     pub d: f32,
 }
