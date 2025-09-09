@@ -151,7 +151,7 @@ pub struct Scene {
     pub emmitter_intensity: f32,
     pub emitter_sampling_strategy: EmitterSamplingStrategy,
     pub f_sub_surface: f32,
-    pub octree: Octree<u32>,
+    pub octree: Octree,
     pub quads: Box<[Quad]>,
     pub materials: Box<[Material]>,
 }
@@ -168,7 +168,7 @@ pub struct SceneBuilder {
 }
 
 impl ModelBuilder {
-    pub fn build(&self, octree: Octree<u32>) -> Scene {
+    pub fn build(&self, octree: Octree) -> Scene {
         Scene {
             sun: Sun::new(
                 PI / 2.5,

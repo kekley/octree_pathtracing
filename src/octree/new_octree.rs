@@ -1,4 +1,5 @@
 use hashbrown::HashMap;
+use std::marker::PhantomData;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -11,13 +12,13 @@ use spider_eye::{
 
 #[derive(Default)]
 //max depth of 21
-pub struct Octree<T> {
+pub struct Octree {
     root: Option<OctantId>,
-    octants: Vec<Octant<T>>,
+    octants: Vec<Octant>,
     depth: u8,
 }
 
-impl<T: Default> Octree<T> {
+impl Octree {
     pub fn new_octant(&mut self) -> OctantId {
         let new_octant_id = self.octants.len();
         self.octants.push(Default::default());
@@ -28,7 +29,7 @@ impl<T: Default> Octree<T> {
         self.root
     }
 
-    pub fn octants_slice(&self) -> &[Octant<T>] {
+    pub fn octants_slice(&self) -> &[Octant] {
         &self.octants
     }
 
@@ -56,7 +57,7 @@ impl<T: Default> Octree<T> {
             let new_root_id = self.new_octant();
 
             if let Some(root_id) = self.root {
-                self.octants[new_root_id as usize].set_child(Child::Octant(root_id), 0);
+                self.octants[new_root_id as usize].set_child(ChildType::Octant, root_id, 0);
             }
             self.root = Some(new_root_id)
         }
@@ -66,114 +67,203 @@ impl<T: Default> Octree<T> {
 
 pub type OctantId = u32;
 
-impl<T> Copy for Octant<T> where T: Copy {}
+#[derive(Default, Debug, Clone)]
+pub struct Octant {
+    child_mask: u16,
+    children: [u32; 8],
+}
 
-impl<T> Clone for Octant<T>
-where
-    T: Clone,
-{
+pub struct OctantChildIterator<'a> {
+    child_mask: u16,
+    index: usize,
+    children: &'a [u32; 8],
+}
+
+impl<'a> Iterator for OctantChildIterator<'a> {
+    type Item = (ChildType, &'a u32);
     #[inline]
-    fn clone(&self) -> Self {
-        Self {
-            child_count: self.child_count,
-            children: self.children.clone(),
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index > 7 {
+            return None;
         }
-    }
-}
+        let i = self.index;
+        self.index += 1;
 
-pub struct Octant<T> {
-    child_count: u8,
-    children: [Child<T>; 8],
-}
-
-impl<T> Octant<T> {
-    #[inline]
-    pub fn set_child(&mut self, mut new_child: Child<T>, index: u8) -> Child<T> {
-        assert!(index < 8);
-        if let Some(old_child) = self.children.get_mut(index as usize) {
-            if old_child.is_none() && !new_child.is_none() {
-                self.child_count += 1;
-            } else if !old_child.is_none() && new_child.is_none() {
-                self.child_count -= 1;
+        if ((1 << i) & self.child_mask) != 0 {
+            if ((1 << (i + 8)) & self.child_mask) != 0 {
+                Some((ChildType::Leaf, &self.children[i]))
+            } else {
+                Some((ChildType::Octant, &self.children[i]))
             }
-            std::mem::swap(&mut new_child, old_child);
-            //contains the old child now
-            return new_child;
-        }
-        unreachable!()
-    }
-    pub fn child_count(&mut self) -> u8 {
-        self.child_count
-    }
-    pub fn children(&self) -> &[Child<T>] {
-        &self.children
-    }
-}
-
-impl<T: Default> Default for Octant<T> {
-    fn default() -> Self {
-        Self {
-            children: Default::default(),
-            child_count: 0,
-        }
-    }
-}
-
-impl<T: Debug> Debug for Octant<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Octant")
-            .field("child_count", &self.child_count)
-            .field("children", &self.children)
-            .finish()
-    }
-}
-
-#[derive(Debug, Default, PartialEq)]
-pub enum Child<T> {
-    #[default]
-    None,
-    Lod(T),
-    Octant(OctantId),
-    Leaf(T),
-}
-
-impl<T> Copy for Child<T> where T: Copy {}
-
-impl<T> Clone for Child<T>
-where
-    T: Clone,
-{
-    fn clone(&self) -> Self {
-        match self {
-            Self::None => Self::None,
-            Self::Octant(arg0) => Self::Octant(*arg0),
-            Self::Leaf(arg0) => Self::Leaf(arg0.clone()),
-            Self::Lod(arg0) => Self::Lod(arg0.clone()),
-        }
-    }
-}
-
-impl<T> Child<T> {
-    pub fn is_leaf(&self) -> bool {
-        matches!(self, Child::Leaf(_))
-    }
-
-    pub fn is_none(&self) -> bool {
-        matches!(self, Child::None)
-    }
-    pub fn is_octant(&self) -> bool {
-        matches!(self, Child::Octant(_))
-    }
-    pub fn get_leaf_value(&self) -> Option<&T> {
-        if let Child::Leaf(val) = self {
-            Some(val)
         } else {
-            None
+            Some((ChildType::Empty, &self.children[i]))
         }
     }
-    pub fn get_octant_id(&self) -> Option<OctantId> {
-        if let Child::Octant(id) = self {
-            Some(*id)
+}
+
+pub struct OctantChildIteratorMut<'a> {
+    child_mask: u16,
+    index: usize,
+    children: *mut u32,
+    phantom_data: PhantomData<&'a mut u32>,
+}
+
+impl<'a> Iterator for OctantChildIteratorMut<'a> {
+    type Item = (ChildType, &'a mut u32);
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index > 7 {
+            return None;
+        }
+        let i = self.index;
+        self.index += 1;
+
+        if ((1 << i) & self.child_mask) != 0 {
+            if ((1 << (i + 8)) & self.child_mask) != 0 {
+                return Some((ChildType::Leaf, unsafe {
+                    self.children.add(i).as_mut().unwrap()
+                }));
+            } else {
+                return Some((ChildType::Octant, unsafe {
+                    self.children.add(i).as_mut().unwrap()
+                }));
+            }
+        }
+        None
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChildType {
+    Empty,
+    Leaf,
+    Octant,
+}
+
+impl Octant {
+    #[inline]
+    pub fn is_child(&self, index: u8) -> bool {
+        ((1 << index as usize) & self.child_mask) != 0
+    }
+
+    #[inline]
+    pub fn is_octant(&self, index: u8) -> bool {
+        self.is_child(index) && !self.is_leaf(index)
+    }
+
+    #[inline]
+    pub fn is_leaf(&self, index: u8) -> bool {
+        ((1 << (index + 8) as usize) & self.child_mask) != 0
+    }
+    #[inline]
+    fn set_mask_for(&mut self, index: u8, child_type: ChildType) {
+        match child_type {
+            ChildType::Empty => {
+                self.child_mask &= !(1 << index);
+
+                self.child_mask &= !(1 << (index + 8));
+            }
+            ChildType::Leaf => {
+                self.child_mask |= 1 << index;
+
+                self.child_mask |= 1 << (index + 8);
+            }
+            ChildType::Octant => {
+                self.child_mask |= 1 << (index + 8);
+
+                self.child_mask &= !(1 << index);
+            }
+        }
+    }
+
+    pub fn child_count(&self) -> u8 {
+        (self.child_mask & 0xFF).count_ones() as u8
+    }
+
+    pub fn iter_children(&self) -> impl Iterator<Item = (ChildType, &u32)> {
+        OctantChildIterator {
+            child_mask: self.child_mask,
+            index: 0,
+            children: &self.children,
+        }
+    }
+
+    pub fn iter_children_mut(&mut self) -> impl Iterator<Item = (ChildType, &mut u32)> {
+        OctantChildIteratorMut {
+            child_mask: self.child_mask,
+            index: 0,
+            children: self.children.as_mut_ptr(),
+            phantom_data: PhantomData,
+        }
+    }
+
+    pub fn init_children_with<F: FnMut(u8) -> (ChildType, u32)>(&mut self, mut f: F) {
+        (0..8u8).for_each(|child_idx| {
+            let (child_type, result_data) = f(child_idx);
+            self.overwrite_child(child_type, result_data, child_idx);
+        });
+    }
+
+    #[inline]
+    pub fn get_type_of(&self, index: u8) -> ChildType {
+        if self.is_child(index) {
+            if self.is_leaf(index) {
+                ChildType::Leaf
+            } else {
+                ChildType::Octant
+            }
+        } else {
+            ChildType::Empty
+        }
+    }
+
+    #[inline]
+    pub fn overwrite_child(&mut self, child_type: ChildType, data: u32, index: u8) {
+        self.set_mask_for(index, child_type);
+        self.children[index as usize] = data;
+    }
+
+    #[inline]
+    pub fn is_compactable(&self) -> bool {
+        let first = &self.children[1];
+        //All leaf bits must be set
+        (((self.child_mask >> 8) as u8) == u8::MAX && self.children.iter().all(|val| val == first))
+            || self.child_mask == 0
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.child_mask == 0
+    }
+
+    #[inline]
+    pub fn set_child(&mut self, child_type: ChildType, data: u32, index: u8) -> (ChildType, u32) {
+        let ret_val = (self.get_type_of(index), self.children[index as usize]);
+        self.set_mask_for(index, child_type);
+        self.children[index as usize] = data;
+
+        ret_val
+    }
+
+    #[inline]
+    pub fn get_child(&self, index: u8) -> (ChildType, u32) {
+        (self.get_type_of(index), self.children[index as usize])
+    }
+    #[inline]
+    fn clear(&mut self) {
+        *self = Octant::default()
+    }
+
+    ///Gets the index of the first empty child slot
+    #[inline]
+    fn free_slot(&self) -> Option<u8> {
+        if let Some(lowest_zero) = (!self.child_mask).lowest_one() {
+            if lowest_zero < 8 {
+                Some(lowest_zero as u8)
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -218,7 +308,7 @@ const HIGHEST_SECTION_INDEX: i8 = 19;
 pub fn build_region_octree(
     region: Region,
     blockstate_map: Arc<Mutex<HashMap<NBTString, u32>>>,
-) -> Option<Octree<u32>> {
+) -> Option<Octree> {
     //TODO maybe redo blockstate hash function
     let start = Instant::now();
     let region_chunk_data = region.load_all_chunk_data();
@@ -326,7 +416,7 @@ pub fn build_region_octree(
 
     println!("number of sections: {count}", count = sections.len());
 
-    let mut builder = RegionOctreeBuilder::new();
+    let builder = RegionOctreeBuilder::new();
     let start = Instant::now();
     let tree = builder.build(sections);
 
@@ -349,7 +439,7 @@ pub const REGION_OCTREE_DEPTH: usize = 9;
 
 #[derive(Debug, Default)]
 struct RegionOctreeBuilder {
-    octants: Vec<Octant<u32>>,
+    octants: Vec<Octant>,
 }
 
 enum RegionSubtreeResult {
@@ -364,7 +454,7 @@ impl RegionOctreeBuilder {
     pub fn build(
         mut self,
         mut morton_codes_and_sections: Vec<(u64, SectionOctantResult)>,
-    ) -> Option<Octree<u32>> {
+    ) -> Option<Octree> {
         let tree_depth = REGION_OCTREE_DEPTH - SECTION_OCTREE_DEPTH; //we are using local
                                                                      //coordinates and a region
                                                                      //is 32x32 on the x and z
@@ -377,7 +467,7 @@ impl RegionOctreeBuilder {
 
         println!(
             "memory footprint: {}kb",
-            (self.octants.len() * size_of::<Octant<usize>>()) / 1000
+            (self.octants.len() * size_of::<Octant>()) / 1000
         );
 
         match result {
@@ -385,8 +475,8 @@ impl RegionOctreeBuilder {
             RegionSubtreeResult::Lod(data) => {
                 //this will pretty much never happen
                 let octants = vec![Octant {
-                    child_count: 8,
-                    children: [Child::Lod(data); 8],
+                    child_mask: u16::MAX,
+                    children: [data; 8],
                 }];
                 Some(Octree {
                     root: Some(0),
@@ -415,152 +505,101 @@ impl RegionOctreeBuilder {
         let prefix_base = (1 << prefix_shift_amount) - 1; //fills all the bits to the right of
                                                           //prefix_shift_amount with 1
         let mut child_count = 0;
-        let mut children: [Child<u32>; 8] = [Default::default(); 8];
-        children
-            .iter_mut()
-            .enumerate()
-            .for_each(|(child_index, child_mut)| {
-                let child_index = child_index as u64;
-                let data = data_opt.take().unwrap();
+        let mut octant = Octant::default();
+        octant.init_children_with(|child_index| {
+            let child_index = child_index as u64;
+            let data = data_opt.take().unwrap();
 
-                let prefix = (child_index << prefix_shift_amount) | prefix_base;
+            let prefix = (child_index << prefix_shift_amount) | prefix_base;
 
-                if new_depth > 0 {
-                    let slice_end_index = data.partition_point(|(value, _)| *value <= prefix);
+            if new_depth > 0 {
+                let slice_end_index = data.partition_point(|(value, _)| *value <= prefix);
 
-                    let (subtree_slice, new_data) = data.split_at_mut(slice_end_index);
-                    data_opt = Some(new_data);
-                    if subtree_slice.is_empty() {
-                        *child_mut = Child::None;
+                let (subtree_slice, new_data) = data.split_at_mut(slice_end_index);
+                data_opt = Some(new_data);
+                if subtree_slice.is_empty() {
+                    return (ChildType::Empty, 0);
+                    //*child_mut = Child::None;
+                }
+
+                let child = self.recursive_build(new_depth, subtree_slice);
+
+                match child {
+                    RegionSubtreeResult::Empty => (ChildType::Empty, 0),
+                    RegionSubtreeResult::Lod(data) => {
+                        child_count += 1;
+                        (ChildType::Leaf, data)
                     }
-
-                    let child = self.recursive_build(new_depth, subtree_slice);
-
-                    match child {
-                        RegionSubtreeResult::Empty => *child_mut = Child::None,
-                        RegionSubtreeResult::Lod(data) => {
+                    RegionSubtreeResult::Octant(octant) => {
+                        child_count += 1;
+                        (ChildType::Octant, octant)
+                    }
+                }
+            } else {
+                assert!(data.len() <= 8);
+                let ret_val = if let Some((_, section)) = data.get_mut(child_index as usize) {
+                    match section {
+                        SectionOctantResult::Subtree {
+                            section_octants,
+                            root,
+                        } => {
                             child_count += 1;
-                            *child_mut = Child::Lod(data)
+                            let current_octants_len = self.octants.len() as u32;
+
+                            let new_root = *root + current_octants_len;
+
+                            section_octants.iter_mut().for_each(|octant| {
+                                octant.iter_children_mut().for_each(|(child_type, value)| {
+                                    if child_type == ChildType::Octant {
+                                        *value += current_octants_len;
+                                    }
+                                });
+                            });
+                            let taken = std::mem::take(section_octants);
+                            self.octants.extend(taken);
+                            (ChildType::Octant, new_root)
                         }
-                        RegionSubtreeResult::Octant(octant) => {
+                        SectionOctantResult::Empty => (ChildType::Empty, 0),
+                        SectionOctantResult::Lod(data) => {
                             child_count += 1;
-                            *child_mut = Child::Octant(octant)
+                            (ChildType::Leaf, *data)
                         }
                     }
                 } else {
-                    assert!(data.len() <= 8);
-                    if let Some((_, section)) = data.get_mut(child_index as usize) {
-                        match section {
-                            SectionOctantResult::Subtree {
-                                section_octants,
-                                root,
-                            } => {
-                                child_count += 1;
-                                let current_octants_len = self.octants.len() as u32;
+                    (ChildType::Empty, 0)
+                };
+                data_opt = Some(data);
+                ret_val
+            }
+        });
 
-                                let new_root = *root + current_octants_len;
-
-                                section_octants.iter_mut().for_each(|octant| {
-                                    octant.children.iter_mut().for_each(|child| {
-                                        if let Child::Octant(val) = child {
-                                            *val += current_octants_len;
-                                        }
-                                    });
-                                });
-                                self.octants.extend(section_octants.as_slice());
-                                *child_mut = Child::Octant(new_root)
-                            }
-                            SectionOctantResult::Empty => {
-                                *child_mut = Child::None;
-                            }
-                            SectionOctantResult::Lod(data) => {
-                                child_count += 1;
-                                *child_mut = Child::Lod(*data);
-                            }
-                        }
-                    } else {
-                        *child_mut = Child::None;
-                    };
-                    data_opt = Some(data);
-                }
-            });
-
-        let first = &children[0];
-        let result = if children.iter().all(|child| child == first) {
-            match first {
-                Child::None => RegionSubtreeResult::Empty,
-                Child::Lod(data) => RegionSubtreeResult::Lod(*data),
-                _ => unreachable!(),
+        if octant.is_compactable() {
+            if octant.is_empty() {
+                RegionSubtreeResult::Empty
+            } else {
+                RegionSubtreeResult::Lod(octant.get_child(0).1)
             }
         } else {
             let octant_id = self.octants.len();
-            self.octants.push(Octant {
-                child_count,
-                children,
-            });
+            self.octants.push(octant);
             RegionSubtreeResult::Octant(octant_id as u32)
-        };
-
-        result
+        }
     }
 }
 
 pub const SECTION_OCTREE_DEPTH: usize = 4;
 pub const CHILD_COUNT: usize = 8;
 
-#[derive(Debug, Default)]
-struct ChildBuffer {
-    initialized_count: u8,
-    child_count: u8,
-    uncompactable: bool,
-    buffer: [Child<u32>; CHILD_COUNT],
-}
-
-impl ChildBuffer {
-    pub fn clear(&mut self) {
-        self.initialized_count = 0;
-        self.child_count = 0;
-        self.uncompactable = false;
-    }
-    pub fn insert_child(&mut self, child: &Child<u32>) -> bool {
-        if self.initialized_count > 0 {
-            if child != &self.buffer[0] {
-                self.uncompactable = true;
-            }
-        }
-        if self.initialized_count < 8 {
-            let free_slot_index = self.initialized_count as usize;
-            if !child.is_none() {
-                self.child_count += 1;
-            }
-            self.buffer[free_slot_index] = *child;
-            self.initialized_count += 1;
-            true
-        } else {
-            false
-        }
-    }
-    pub fn is_compactable(&self) -> bool {
-        !self.uncompactable
-    }
-    pub fn child_count(&self) -> u8 {
-        self.child_count
-    }
-    pub fn buffer(&self) -> &[Child<u32>; 8] {
-        &self.buffer
-    }
-}
-
 #[derive(Default, Debug)]
 struct SectionOctantBuilder {
-    octants: Vec<Octant<u32>>,
-    child_buffers: [ChildBuffer; SECTION_OCTREE_DEPTH - 1],
+    octants: Vec<Octant>,
+    child_buffers: [Octant; SECTION_OCTREE_DEPTH - 1],
 }
 
 #[derive(Debug, Default)]
-enum SectionOctantResult {
+pub enum SectionOctantResult {
     Subtree {
-        section_octants: Vec<Octant<u32>>,
+        section_octants: Vec<Octant>,
         root: OctantId,
     },
     #[default]
@@ -584,30 +623,28 @@ impl SectionOctantBuilder {
             self.insert_child_and_compact(child);
         });
 
-        let root_buffer = &self.child_buffers[0];
-        if root_buffer.is_compactable() {
-            match root_buffer.buffer()[0] {
-                Child::None => SectionOctantResult::Empty,
-                Child::Lod(data) => SectionOctantResult::Lod(data),
-                _ => unreachable!(),
+        let root_octant = &self.child_buffers[0];
+        if root_octant.is_compactable() {
+            let child = root_octant.get_child(0);
+            match child.0 {
+                ChildType::Empty => SectionOctantResult::Empty,
+                ChildType::Leaf => SectionOctantResult::Lod(child.1),
+                ChildType::Octant => unreachable!(),
             }
         } else {
-            let root_octant = Octant {
-                child_count: root_buffer.child_count(),
-                children: *root_buffer.buffer(),
-            };
+            let octants_len = self.octants.len();
 
-            let octant_id = self.octants.len();
-
-            self.octants.push(root_octant);
+            self.octants.push(root_octant.clone());
 
             self.octants.iter_mut().for_each(|octant| {
-                octant.children.iter_mut().for_each(|child| {
-                    if let Child::Octant(id) = child {
-                        let new_id = (octant_id as u32) - *id;
-                        *id = new_id;
-                    }
-                });
+                octant
+                    .iter_children_mut()
+                    .for_each(|(child_type, child_data)| {
+                        if child_type == ChildType::Octant {
+                            let new_id = (octants_len as u32) - *child_data;
+                            *child_data = new_id;
+                        }
+                    });
             });
 
             self.octants.reverse();
@@ -618,59 +655,48 @@ impl SectionOctantBuilder {
             }
         }
     }
-    fn leaves_to_child(&mut self, data: &[Option<NonZeroU32>; 8]) -> Child<u32> {
-        let mut uncompactable = false;
-        let mut child_count = 0;
-        let first = &data[0];
-        let mut children = [Child::None; 8];
-        children.iter_mut().zip(data).for_each(|(child, data)| {
-            if data != first {
-                uncompactable = true;
-            }
-            if let Some(leaf) = data {
-                child_count += 1;
-                *child = Child::Leaf(leaf.get());
+    fn leaves_to_child(&mut self, leaf_data: &[Option<NonZeroU32>; 8]) -> (ChildType, u32) {
+        let first = &leaf_data[0];
+        let mut octant = Octant::default();
+        octant.init_children_with(|i| {
+            if let Some(value) = leaf_data[i as usize] {
+                (ChildType::Leaf, value.get())
             } else {
-                *child = Child::None;
+                (ChildType::Empty, 0)
             }
         });
 
-        if uncompactable {
-            let new_octant = Octant {
-                child_count: child_count as u8,
-                children,
-            };
-            let octant_id = self.octants.len() as u32;
-            self.octants.push(new_octant);
-            Child::Octant(octant_id)
-        } else if let Some(leaf) = first {
-            Child::Lod(leaf.get())
+        if octant.is_compactable() {
+            if first.is_some() {
+                (ChildType::Leaf, first.unwrap().get())
+            } else {
+                (ChildType::Empty, 0)
+            }
         } else {
-            Child::None
+            let octant_id = self.octants.len() as u32;
+            self.octants.push(octant);
+            (ChildType::Octant, octant_id)
         }
     }
 
-    fn insert_child_and_compact(&mut self, mut new_child: Child<u32>) {
+    fn insert_child_and_compact(&mut self, mut new_child: (ChildType, u32)) {
         let mut search_depth = SECTION_OCTREE_DEPTH - 2;
         loop {
-            let current_buffer = &mut self.child_buffers[search_depth];
-            if current_buffer.insert_child(&new_child) {
+            let current_octant = &mut self.child_buffers[search_depth];
+            if let Some(free_slot_index) = current_octant.free_slot() {
+                current_octant.overwrite_child(new_child.0, new_child.1, free_slot_index);
                 break;
             } else {
-                let first_child = current_buffer.buffer[0];
-                new_child = if current_buffer.is_compactable() {
+                let first_child = current_octant.get_child(0);
+                new_child = if current_octant.is_compactable() {
                     first_child
                 } else {
                     let octant_id = self.octants.len();
-                    let new_octant = Octant {
-                        child_count: current_buffer.child_count,
-                        children: *current_buffer.buffer(),
-                    };
-                    self.octants.push(new_octant);
-                    Child::Octant(octant_id as u32)
-                };
-                current_buffer.clear();
 
+                    self.octants.push(current_octant.clone());
+                    (ChildType::Octant, octant_id as u32)
+                };
+                current_octant.clear();
                 search_depth -= 1;
             }
         }
@@ -823,18 +849,7 @@ mod test {
 
     #[test]
     pub fn sizes() {
-        println!(
-            "size of Octant<u32>: {size}",
-            size = size_of::<Octant<u32>>()
-        );
-
-        println!(
-            "size of Octant<u64>: {size}",
-            size = size_of::<Octant<u64>>()
-        );
-
-        println!("size of child<u32>: {size}", size = size_of::<Child<u32>>());
-        println!("size of child<u64>: {size}", size = size_of::<Child<u64>>());
+        println!("size of Octant: {size}", size = size_of::<Octant>());
     }
 
     #[test]
