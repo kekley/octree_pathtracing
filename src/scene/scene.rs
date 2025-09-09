@@ -142,7 +142,7 @@ use crate::{
     textures::{material::Material, texture::Texture},
 };
 
-use super::resource_manager::{MaterialID, ModelManager, ResourceModel};
+use super::resource_manager::{MaterialID, ModelBuilder};
 
 pub struct Scene {
     pub sun: Sun,
@@ -151,8 +151,7 @@ pub struct Scene {
     pub emmitter_intensity: f32,
     pub emitter_sampling_strategy: EmitterSamplingStrategy,
     pub f_sub_surface: f32,
-
-    pub octree: Octree<ResourceModel>,
+    pub octree: Octree<u32>,
     pub quads: Box<[Quad]>,
     pub materials: Box<[Material]>,
 }
@@ -168,11 +167,8 @@ pub struct SceneBuilder {
     pub branch_count: Option<u32>,
 }
 
-impl ModelManager {
-    pub fn build(&self, octree: Octree<ResourceModel>) -> Scene {
-        let quad_box: Box<[Quad]> = self.quads.read().clone().into_boxed_slice();
-        let materials_box: Box<[Material]> = todo!();
-
+impl ModelBuilder {
+    pub fn build(&self, octree: Octree<u32>) -> Scene {
         Scene {
             sun: Sun::new(
                 PI / 2.5,
@@ -189,8 +185,8 @@ impl ModelManager {
             emitters_enabled: false,
             emmitter_intensity: 13.0,
             f_sub_surface: 0.3,
-            quads: quad_box,
-            materials: materials_box,
+            quads: todo!(),
+            materials: todo!(),
             octree: octree,
         }
     }

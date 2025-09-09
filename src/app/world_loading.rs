@@ -3,13 +3,13 @@ use std::sync::Arc;
 use eframe::egui::{self, Button, DragValue, Label, Slider, Window};
 use spider_eye::coords::block::BlockCoords;
 
-use crate::{renderer::renderer_trait::RenderingBackend, scene::resource_manager::ModelManager};
+use crate::{renderer::renderer_trait::RenderingBackend, scene::resource_manager::ModelBuilder};
 
 use super::main_app::load_world_2;
 
 #[derive(Default)]
 pub struct WorldLoadingDialog {
-    model_manager: ModelManager,
+    model_manager: ModelBuilder,
     pub open: bool,
     path: String,
     position: BlockCoords,

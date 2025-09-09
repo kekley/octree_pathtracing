@@ -822,6 +822,22 @@ mod test {
     use super::*;
 
     #[test]
+    pub fn sizes() {
+        println!(
+            "size of Octant<u32>: {size}",
+            size = size_of::<Octant<u32>>()
+        );
+
+        println!(
+            "size of Octant<u64>: {size}",
+            size = size_of::<Octant<u64>>()
+        );
+
+        println!("size of child<u32>: {size}", size = size_of::<Child<u32>>());
+        println!("size of child<u64>: {size}", size = size_of::<Child<u64>>());
+    }
+
+    #[test]
     pub fn section_test() {
         construct_all();
     }

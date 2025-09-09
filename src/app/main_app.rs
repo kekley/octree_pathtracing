@@ -12,7 +12,7 @@ use crate::{
         renderer_trait::{FrameInFlight, FrameInFlightPoll, RenderingBackend},
         tile_renderer::{RendererMode, RendererStatus},
     },
-    scene::{resource_manager::ModelManager, scene::Scene},
+    scene::{resource_manager::ModelBuilder, scene::Scene},
 };
 
 use super::{
@@ -64,7 +64,7 @@ pub fn load_world_2(
     path: &str,
     origin: &BlockCoords,
     depth: u8,
-    model_manager: &ModelManager,
+    model_manager: &ModelBuilder,
 ) -> Scene {
     todo!()
 }

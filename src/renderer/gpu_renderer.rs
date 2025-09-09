@@ -3,10 +3,11 @@ use crate::{
     gpu_structs::{
         gpu_camera::UniformData,
         gpu_material::GPUMaterial,
-        gpu_octree::{GPUOctreeNode, GPUOctreeUniform},
+        gpu_octree::{octree_to_gpu_data, GPUOctreeNode, GPUOctreeUniform},
         gpu_quad::GPUQuad,
     },
     scene::scene::Scene,
+    textures::material,
 };
 use std::{fs, num::NonZero, slice, sync::Arc, time::Instant};
 
@@ -15,6 +16,7 @@ use super::{
     renderer_trait::{FrameInFlight, FrameInFlightPoll, RenderingBackend},
     tile_renderer::{RendererMode, RendererStatus},
 };
+use bytemuck::Zeroable;
 use eframe::{
     egui::TextureHandle,
     wgpu::{
@@ -204,10 +206,8 @@ impl GPURenderer {
         let materials = &scene.materials;
         let quads = &scene.quads;
 
-        let octree_ = GPUOctreeUniform::from(octree);
-        let octree_uniform = slice::from_ref(&octree_);
+        let (octree_uniform, octant_data) = octree_to_gpu_data(&scene.octree);
 
-        let octant_data: Vec<GPUOctreeNode> = vec![];
         info!(
             "GPU Data:\n Octree memory: {}MB, Materials Memory: {}MB, Quad Memory: {}MB",
             (octant_data.len() * 4 * 8) as f32 / 1000000.0,
@@ -263,7 +263,7 @@ impl GPURenderer {
                         array_layer_count: Some(1),
                     });
 
-                    let material = GPUMaterial::from_material(material, i as u32);
+                    let material = GPUMaterial::zeroed();
                     ((texture, texture_view), material)
                 }
                 crate::textures::texture::Texture::Image(rtwimage) => {
@@ -302,15 +302,15 @@ impl GPURenderer {
                         base_array_layer: 0,
                         array_layer_count: Some(1),
                     });
-                    let material = GPUMaterial::from_material(material, i as u32);
+                    let material = GPUMaterial::zeroed();
                     ((texture, texture_view), material)
                 }
             })
-            .unzip();
+            .collect();
 
         let octree_uniform = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Octree Uniform Data"),
-            contents: bytemuck::cast_slice(octree_uniform),
+            contents: bytemuck::cast_slice(slice::from_ref(&octree_uniform)),
             usage: BufferUsages::UNIFORM,
         });
 
