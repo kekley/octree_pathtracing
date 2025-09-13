@@ -23,7 +23,7 @@ impl From<&Quad> for GPUQuad {
             material_id,
             v,
             u,
-            w,
+            w: _,
             d,
             texture_u_range,
             texture_v_range,

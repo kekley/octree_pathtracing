@@ -18,8 +18,8 @@ bitflags! {
 #[repr(C, align(16))]
 #[derive(Copy, Clone, Pod, Zeroable)]
 pub struct Cuboid {
-    flags: u32,
-    matrix_id: u32,         //index to a matrix for rotation,scale,translation
-    material_ids: [u32; 6], // 24 bytes  = 32 bytes(aligned)
-    uvs: [u32; 12],         // 48 bytes (aligned)
+    pub flags: u32,
+    pub matrix_id: u32,         //index to a matrix for rotation,scale,translation
+    pub material_ids: [u32; 6], // 24 bytes  = 32 bytes(aligned)
+    pub uvs: [u32; 12],         // 48 bytes (aligned)
 }

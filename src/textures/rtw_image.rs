@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use stb_image::image::load;
+use stb_image::image::{load, load_from_memory};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub enum BytesPerPixel {
@@ -46,11 +46,87 @@ impl Debug for RTWImage {
     }
 }
 impl RTWImage {
+    pub fn load_from_memory(data: &[u8]) -> Result<Self, String> {
+        let load_result = load_from_memory(data);
+        match load_result {
+            stb_image::image::LoadResult::Error(e) => {
+                return Err(e);
+            }
+            stb_image::image::LoadResult::ImageU8(image) => {
+                let bdata = image.data;
+                let image_width = image.width as u32;
+                let image_height = image.height as u32;
+                let bytes_per_pixel = BytesPerPixel::try_from(image.depth as u32)?;
+                let bytes_per_scanline = image_width * 4 as u32;
+                let mut data: Box<[u8]> =
+                    vec![0u8; (image_height * image_width * 4) as usize].into_boxed_slice();
+                data.chunks_exact_mut(4)
+                    .zip(bdata.chunks_exact(image.depth))
+                    .for_each(|(a, b)| match bytes_per_pixel {
+                        BytesPerPixel::INVALID => panic!(),
+                        BytesPerPixel::One => {
+                            a[0] = b[0];
+                            a[1] = b[0];
+                            a[2] = b[0];
+                            a[3] = 255;
+                        }
+                        BytesPerPixel::Two => {
+                            let arr = [b[0], b[1]];
+                            let col = u16::from_be_bytes(arr) >> 8;
+
+                            a[0] = col as u8;
+
+                            a[1] = col as u8;
+
+                            a[2] = col as u8;
+
+                            a[3] = 255;
+                        }
+                        BytesPerPixel::Three => {
+                            a[0] = b[0];
+                            a[1] = b[1];
+                            a[2] = b[2];
+                            a[3] = 255;
+                        }
+                        BytesPerPixel::Four => {
+                            a[0] = b[0];
+                            a[1] = b[1];
+                            a[2] = b[2];
+                            a[3] = b[3];
+                        }
+                    });
+
+                return Ok(RTWImage {
+                    bytes_per_pixel,
+                    raw_data: data,
+                    image_width,
+                    image_height,
+                    bytes_per_scanline,
+                });
+            }
+            stb_image::image::LoadResult::ImageF32(image) => {
+                let fdata = image.data;
+                let image_width = image.width as u32;
+                let image_height = image.height as u32;
+                let bytes_per_pixel = BytesPerPixel::try_from(image.depth as u32)?;
+                let bytes_per_scanline = image_width * image.depth as u32;
+                let bdata = Self::convert_to_bytes(&fdata);
+                let bdata: Box<[u8]> = Box::from(bdata);
+                return Ok(RTWImage {
+                    bytes_per_pixel,
+                    raw_data: bdata,
+                    image_width,
+                    image_height,
+                    bytes_per_scanline,
+                });
+            }
+        }
+    }
     pub fn load(file_path: &str) -> Result<Self, String> {
         //println!("{}", file_path);
         let load_result = load(file_path);
         match load_result {
-            stb_image::image::LoadResult::Error(e) => {
+            stb_image::image::LoadResult::Error(_e) => {
                 //println!("{}", file_path);
                 return Err(file_path.to_string());
             }

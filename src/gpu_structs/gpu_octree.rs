@@ -1,7 +1,6 @@
 use std::{fmt::Debug, u32};
 
 use crate::octree::new_octree::{ChildType, Octree};
-use anyhow::Chain;
 use bytemuck::{Pod, Zeroable};
 
 ///The first four words are header data, that leaves 128 bits for metadata about the octants,

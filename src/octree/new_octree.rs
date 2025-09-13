@@ -280,8 +280,9 @@ fn calculate_loading_range(position: &BlockCoords, octree_depth: u8) {
 
     let half_world_size = world_size / 2;
 
-    let start_x = position.x - half_world_size as i64;
-    let start_z = position.z - half_world_size as i64;
+    let _start_x = position.x - half_world_size as i64;
+    let _start_z = position.z - half_world_size as i64;
+    todo!()
 }
 
 pub fn construct_all() {

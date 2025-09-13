@@ -1,7 +1,7 @@
 use core::f32;
 use std::f32::consts::PI;
 
-use rand::{rngs::StdRng, Rng};
+use rand::{Rng, rngs::StdRng};
 
 use glam::{Vec2, Vec3A};
 use rand_distr::{Distribution, UnitDisc};
@@ -13,11 +13,11 @@ pub fn degrees_to_rads(degrees: f32) -> f32 {
 
 #[inline]
 pub fn random_float(rng: &mut StdRng) -> f32 {
-    rng.gen::<f32>()
+    rng.random::<f32>()
 }
 
 #[inline]
-pub fn random_int(rng: &mut StdRng, min: i64, max: i64) -> i64 {
+pub fn random_int(rng: &mut StdRng) -> i64 {
     random_float(rng) as i64
 }
 
@@ -133,11 +133,7 @@ pub fn find_msb_u32(x: u32) -> u32 {
 }
 pub fn angle_distance(a1: f32, a2: f32) -> f32 {
     let diff = (a1 - a2).abs() % (2.0 * PI);
-    if diff > PI {
-        2.0 * PI - diff
-    } else {
-        diff
-    }
+    if diff > PI { 2.0 * PI - diff } else { diff }
 }
 
 const NUM_U32_WORDS: usize = 8;

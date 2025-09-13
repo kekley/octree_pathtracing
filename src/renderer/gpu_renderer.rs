@@ -1,9 +1,9 @@
 use crate::{
     colors::colors::PixelColor,
     gpu_structs::{
-        gpu_camera::UniformData,
+        gpu_camera::CameraUniform,
         gpu_material::GPUMaterial,
-        gpu_octree::{octree_to_gpu_data, GPUOctreeNode, GPUOctreeUniform},
+        gpu_octree::{GPUOctreeNode, GPUOctreeUniform, octree_to_gpu_data},
         gpu_quad::GPUQuad,
     },
     scene::scene::Scene,
@@ -20,16 +20,15 @@ use bytemuck::Zeroable;
 use eframe::{
     egui::TextureHandle,
     wgpu::{
-        self,
+        self, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout,
+        BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType, Buffer,
+        BufferBindingType, BufferUsages, CommandEncoderDescriptor, ComputePassDescriptor,
+        ComputePipeline, ComputePipelineDescriptor, Device, Extent3d, MaintainBase, Origin3d,
+        PipelineLayout, PipelineLayoutDescriptor, Queue, SamplerDescriptor, ShaderModule,
+        ShaderModuleDescriptor, ShaderSource, ShaderStages, StorageTextureAccess, SubmissionIndex,
+        TexelCopyTextureInfo, Texture, TextureDescriptor, TextureDimension, TextureFormat,
+        TextureUsages, TextureView, TextureViewDescriptor, TextureViewDimension,
         util::{BufferInitDescriptor, DeviceExt},
-        BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
-        BindGroupLayoutEntry, BindingResource, BindingType, Buffer, BufferBindingType,
-        BufferUsages, CommandEncoderDescriptor, ComputePassDescriptor, ComputePipeline,
-        ComputePipelineDescriptor, Device, Extent3d, MaintainBase, Origin3d, PipelineLayout,
-        PipelineLayoutDescriptor, Queue, SamplerDescriptor, ShaderModule, ShaderModuleDescriptor,
-        ShaderSource, ShaderStages, StorageTextureAccess, SubmissionIndex, TexelCopyTextureInfo,
-        Texture, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureView,
-        TextureViewDescriptor, TextureViewDimension,
     },
 };
 use glam::Vec3A;
@@ -37,7 +36,7 @@ use log::info;
 pub fn create_render_data(
     device: &Device,
     render_bind_group_layout: &BindGroupLayout,
-    uniform_data: &UniformData,
+    uniform_data: &CameraUniform,
     index_stack: &[u32; 24],
     time_stack: &[f32; 24],
 ) -> RenderData {
@@ -589,7 +588,7 @@ impl RenderingBackend for GPURenderer {
             .normalize();
         let view_right = self.camera.direction.cross(view_up_ortho);
 
-        let uniform_data = UniformData {
+        let uniform_data = CameraUniform {
             camera_scaled_view_dir: (self.camera.direction * d_factor).to_array(),
             traversal_start_idx: traversal_start_index,
             camera_scaled_view_right: (aspect_ratio * view_right).to_array(),

@@ -16,7 +16,7 @@ pub struct HittableBVH {
 
 impl HittableBVH {
     pub fn new(bvh: BVHTree) -> Self {
-        let bbox = *bvh.bbox();
+        let _bbox = *bvh.bbox();
 
         Self {
             bvh: Box::from(bvh),
@@ -38,7 +38,7 @@ pub struct HittableHitList {
 
 impl HittableHitList {
     pub fn new(hitlist: HitList) -> Self {
-        let bbox = hitlist.bbox.clone();
+        let _bbox = hitlist.bbox.clone();
         Self {
             hit_list: Box::from(hitlist),
         }
