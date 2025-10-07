@@ -9,7 +9,6 @@ use super::main_app::load_world_2;
 
 #[derive(Default)]
 pub struct WorldLoadingDialog {
-    model_manager: ModelBuilder,
     pub open: bool,
     path: String,
     position: BlockCoords,
@@ -48,12 +47,7 @@ impl WorldLoadingDialog {
                     }
                 });
                 if ui.add(Button::new("Load")).clicked() {
-                    let scene = load_world_2(
-                        &self.path,
-                        &self.position,
-                        self.depth as u8,
-                        &self.model_manager,
-                    );
+                    let scene = load_world_2(&self.path, &self.position, self.depth as u8);
                     let scene = Arc::new(parking_lot::RwLock::new(scene));
                     renderer.as_mut().set_scene(&scene);
                 }

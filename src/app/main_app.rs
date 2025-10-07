@@ -1,6 +1,6 @@
 use eframe::egui::{
-    self, load::SizedTexture, Button, Color32, ColorImage, DragValue, Image, ImageData,
-    ImageSource, Label, RadioButton, TextureHandle, TextureOptions, Ui,
+    self, Button, Color32, ColorImage, DragValue, Image, ImageData, ImageSource, Label,
+    RadioButton, TextureHandle, TextureOptions, Ui, load::SizedTexture,
 };
 use log::info;
 use spider_eye::coords::block::BlockCoords;
@@ -60,12 +60,7 @@ pub struct Application {
     //println!("{:?}", tree);
     (model_manager, scene)
 } */
-pub fn load_world_2(
-    path: &str,
-    origin: &BlockCoords,
-    depth: u8,
-    model_manager: &ModelBuilder,
-) -> Scene {
+pub fn load_world_2(path: &str, origin: &BlockCoords, depth: u8) -> Scene {
     todo!()
 }
 impl Default for Application {

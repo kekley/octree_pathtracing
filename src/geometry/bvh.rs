@@ -1,11 +1,11 @@
-use std::{cmp::Ordering, f32::INFINITY, mem::swap};
+use std::{cmp::Ordering, mem::swap};
 
 use crate::{
     hittable::hittable::{HitList, Hittable},
     ray::ray::Ray,
 };
 
-use super::aabb::{Axis, AABB};
+use super::aabb::{AABB, Axis};
 
 #[derive(Debug, Clone)]
 pub struct BVHTree {
@@ -52,11 +52,7 @@ impl BVHTree {
             });
 
         let cost = left_count as f32 * left_box.area() + right_count as f32 * right_box.area();
-        if cost > 0.0 {
-            cost
-        } else {
-            INFINITY
-        }
+        if cost > 0.0 { cost } else { f32::INFINITY }
     }
     pub fn bbox(&self) -> &AABB {
         &self.nodes[0].bbox
@@ -77,7 +73,7 @@ impl BVHTree {
             indices: &mut Vec<u32>,
         ) {
             let mut best_axis = Axis::X;
-            let mut best_cost = INFINITY;
+            let mut best_cost = f32::INFINITY;
             let mut best_pos = 0.0;
 
             for axis in Axis::iter() {
@@ -242,7 +238,7 @@ impl BVHTree {
                 }
             } else {
                 node = child_1;
-                if dist_2 != INFINITY {
+                if dist_2 != f32::INFINITY {
                     stack[stack_idx] = child_2;
                     stack_idx += 1;
                 }

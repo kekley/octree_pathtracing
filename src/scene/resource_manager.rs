@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use glam::{Mat4, Vec3};
+use glam::{Mat4, Quat, Vec3, Vec3A};
 use hashbrown::HashMap;
 use lasso::{Rodeo, Spur};
 use spider_eye::{
@@ -11,11 +11,15 @@ use spider_eye::{
         blockstate::{InternedBlockVariants, InternedModelProperties, VariantModelType},
     },
     resource_loader::LoadedResources,
-    serde::block_model::{DisplayPosition, PositionData},
+    serde::block_model::{DisplayPosition, FaceName, PositionData},
 };
 
 use crate::{
-    gpu_structs::{cuboid::Cuboid, gpu_material::GPUMaterial, model::Model},
+    gpu_structs::{
+        cuboid::{Cuboid, CuboidFlags},
+        gpu_material::GPUMaterial,
+        model::Model,
+    },
     textures::{rtw_image::RTWImage, texture::Texture},
 };
 
@@ -23,6 +27,9 @@ pub type TextureID = u32;
 pub type CuboidID = u32;
 pub type MaterialID = u32;
 pub type ModelID = u32;
+
+pub const UNIT_BLOCK_MIN: Vec3A = Vec3A::splat(-0.5);
+pub const UNIT_BLOCK_MAX: Vec3A = Vec3A::splat(0.5);
 
 pub struct FinalizedBlockModel {
     ambient_occlusion: bool,
@@ -79,6 +86,7 @@ impl ModelBuilder {
         &mut self,
         model_properties: &InternedModelProperties,
     ) -> Option<Model> {
+        let model_location = model_properties.get_model_location_spur();
         todo!()
     }
     fn get_block_model(&self, resource_location: &str) -> Option<&InternedBlockModel> {
@@ -208,28 +216,83 @@ impl ModelBuilder {
                 let block_matrix = Mat4::IDENTITY * center_matrix * x_rotation * y_rotation;
 
                 let elements = model.elements();
+                assert!(!elements.is_empty());
 
-                let cuboids = elements
-                    .iter()
-                    .map(|element| {
-                        let from = element.from();
-                        let to = element.to();
-                        let faces = element.faces();
-                        let rotation = element.rotation();
+                //TODO figure out if this model is a single AABB and therefore doesn't require a
+                //matrix
 
-                        if let Some(rotation) = rotation {
-                            let origin = rotation.origin();
-                        }
+                let element_count = elements.len();
 
-                        Cuboid {
-                            flags: todo!(),
-                            matrix_id: todo!(),
-                            material_ids: todo!(),
-                            uvs: todo!(),
-                        };
-                    })
-                    .collect::<Vec<_>>();
+                fn element_is_aabb(element: &InternedElement) -> bool {
+                    element.from() == &[0.0, 0.0, 0.0]
+                        && element.to() == &[16.0, 16.0, 16.0]
+                        && element.faces().len() == 6
+                }
+
+                if element_count > 1 || !element_is_aabb(&elements[0]) {
+                    let cuboids = elements
+                        .iter()
+                        .map(|element| {
+                            let from: Vec3A = Vec3A::from_slice(element.from());
+                            let to: Vec3A = Vec3A::from_slice(element.to());
+                            let scaled_shifted_from = (from / 16.0) - 0.5;
+                            let scaled_shifted_to = (to / 16.0) - 0.5;
+                            let translation_vector = scaled_shifted_from - UNIT_BLOCK_MIN;
+                            let scale_vector = (scaled_shifted_to - scaled_shifted_from);
+
+                            let scale_translation_matrix = Mat4::from_scale_rotation_translation(
+                                scale_vector.into(),
+                                Quat::IDENTITY,
+                                translation_vector.into(),
+                            );
+
+                            let faces = element.faces();
+                            let element_rotation = element.rotation();
+
+                            let rotation_matrix = if let Some(element_rotation) = element_rotation {
+                                let origin = element_rotation.origin();
+                                let axis = element_rotation.axis();
+                                let angle = element_rotation.angle();
+                                let quat = match axis {
+                                    spider_eye::serde::block_model::Axis::X => {
+                                        Quat::from_rotation_x(angle)
+                                    }
+                                    spider_eye::serde::block_model::Axis::Y => {
+                                        Quat::from_rotation_y(angle)
+                                    }
+                                    spider_eye::serde::block_model::Axis::Z => {
+                                        Quat::from_rotation_z(angle)
+                                    }
+                                };
+                                Mat4::from_rotation_translation(todo!(), todo!())
+                            } else {
+                                Mat4::IDENTITY
+                            };
+                            let final_matrix = scale_translation_matrix * rotation_matrix;
+
+                            let matrix_id = self.matrices.len();
+                            self.matrices.push(final_matrix);
+
+                            let mut flags = CuboidFlags::empty();
+
+                            for (face_name, face_data) in element.faces() {
+                                flags |= todo!();
+                            }
+
+                            Cuboid {
+                                flags: todo!(),
+                                matrix_id: todo!(),
+                                material_ids: todo!(),
+                                uvs: todo!(),
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                } else {
+                    todo!()
+                    //TODO simple AABB model case
+                }
             }
+
             VariantModelType::Multipart(items) => {
                 let model_properties = items
                     .iter()

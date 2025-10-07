@@ -288,7 +288,12 @@ fn calculate_loading_range(position: &BlockCoords, octree_depth: u8) {
 pub fn construct_all() {
     let path = PathBuf::from("./assets/worlds/test_world/r.1.0.mca");
 
-    let region = Region::load_from_file(&path).expect("Could not load region");
+    let bytes = std::fs::read(&path).unwrap();
+
+    let region = Region::from_bytes(
+        &bytes,
+        spider_eye::coords::region::RegionCoords { x: 1, z: 0 },
+    );
 
     let blockstate_map = Arc::new(Mutex::new(HashMap::new()));
 
@@ -322,7 +327,7 @@ pub fn build_region_octree(
         .zip(region_chunk_data.iter())
         .for_each(|(nbt, chunk_data)| {
             if let Some(chunk_data) = chunk_data {
-                *nbt = RootNBTCompound::from_bytes(chunk_data.as_slice())
+                *nbt = RootNBTCompound::from_bytes(&chunk_data)
                     .map_err(|err| println!("{err:?}"))
                     .ok()
             }
@@ -457,9 +462,9 @@ impl RegionOctreeBuilder {
         mut morton_codes_and_sections: Vec<(u64, SectionOctantResult)>,
     ) -> Option<Octree> {
         let tree_depth = REGION_OCTREE_DEPTH - SECTION_OCTREE_DEPTH; //we are using local
-                                                                     //coordinates and a region
-                                                                     //is 32x32 on the x and z
-                                                                     //axes, so depth is 5
+        //coordinates and a region
+        //is 32x32 on the x and z
+        //axes, so depth is 5
 
         let result =
             self.recursive_build(tree_depth as u8, morton_codes_and_sections.as_mut_slice());
@@ -504,7 +509,7 @@ impl RegionOctreeBuilder {
 
         let prefix_shift_amount = new_depth * BITS_PER_DEPTH as u8;
         let prefix_base = (1 << prefix_shift_amount) - 1; //fills all the bits to the right of
-                                                          //prefix_shift_amount with 1
+        //prefix_shift_amount with 1
         let mut child_count = 0;
         let mut octant = Octant::default();
         octant.init_children_with(|child_index| {
