@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use glam::{Mat4, Quat, Vec3, Vec3A};
+use glam::{Mat4, Quat, Vec2, Vec3, Vec3A};
 use hashbrown::HashMap;
 use lasso::{Rodeo, Spur};
 use spider_eye::{
@@ -20,7 +20,7 @@ use crate::{
         gpu_material::GPUMaterial,
         model::Model,
     },
-    textures::{rtw_image::RTWImage, texture::Texture},
+    textures::{material::Material, rtw_image::RTWImage, texture::Texture},
 };
 
 pub type TextureID = u32;
@@ -232,63 +232,9 @@ impl ModelBuilder {
                 if element_count > 1 || !element_is_aabb(&elements[0]) {
                     let cuboids = elements
                         .iter()
-                        .map(|element| {
-                            let from: Vec3A = Vec3A::from_slice(element.from());
-                            let to: Vec3A = Vec3A::from_slice(element.to());
-                            let scaled_shifted_from = (from / 16.0) - 0.5;
-                            let scaled_shifted_to = (to / 16.0) - 0.5;
-                            let translation_vector = scaled_shifted_from - UNIT_BLOCK_MIN;
-                            let scale_vector = (scaled_shifted_to - scaled_shifted_from);
-
-                            let scale_translation_matrix = Mat4::from_scale_rotation_translation(
-                                scale_vector.into(),
-                                Quat::IDENTITY,
-                                translation_vector.into(),
-                            );
-
-                            let faces = element.faces();
-                            let element_rotation = element.rotation();
-
-                            let rotation_matrix = if let Some(element_rotation) = element_rotation {
-                                let origin = element_rotation.origin();
-                                let axis = element_rotation.axis();
-                                let angle = element_rotation.angle();
-                                let quat = match axis {
-                                    spider_eye::serde::block_model::Axis::X => {
-                                        Quat::from_rotation_x(angle)
-                                    }
-                                    spider_eye::serde::block_model::Axis::Y => {
-                                        Quat::from_rotation_y(angle)
-                                    }
-                                    spider_eye::serde::block_model::Axis::Z => {
-                                        Quat::from_rotation_z(angle)
-                                    }
-                                };
-                                Mat4::from_rotation_translation(todo!(), todo!())
-                            } else {
-                                Mat4::IDENTITY
-                            };
-                            let final_matrix = scale_translation_matrix * rotation_matrix;
-
-                            let matrix_id = self.matrices.len();
-                            self.matrices.push(final_matrix);
-
-                            let mut flags = CuboidFlags::empty();
-
-                            for (face_name, face_data) in element.faces() {
-                                flags |= todo!();
-                            }
-
-                            Cuboid {
-                                flags: todo!(),
-                                matrix_id: todo!(),
-                                material_ids: todo!(),
-                                uvs: todo!(),
-                            }
-                        })
+                        .map(|element| block_element_to_cuboid(element))
                         .collect::<Vec<_>>();
                 } else {
-                    todo!()
                     //TODO simple AABB model case
                 }
             }
@@ -329,4 +275,63 @@ impl ModelBuilder {
 pub enum ModelType {
     Simple,
     Complex,
+}
+
+enum ModelData {
+    SimpleAABB {
+        uvs: [Vec2; 12],
+        materials: [Material; 6],
+    },
+    Cuboid {
+        matrix: Option<Mat4>,
+        flags: CuboidFlags,
+        uvs: [Vec2; 12],
+        materials: [Material; 6],
+    },
+}
+
+fn block_element_to_cuboid(element: &InternedElement) -> ModelData {
+    let from: Vec3A = Vec3A::from_slice(element.from());
+    let to: Vec3A = Vec3A::from_slice(element.to());
+    let scaled_shifted_from = (from / 16.0) - 0.5;
+    let scaled_shifted_to = (to / 16.0) - 0.5;
+    let translation_vector = scaled_shifted_from - UNIT_BLOCK_MIN;
+    let scale_vector = scaled_shifted_to - scaled_shifted_from;
+
+    let scale_translation_matrix = Mat4::from_scale_rotation_translation(
+        scale_vector.into(),
+        Quat::IDENTITY,
+        translation_vector.into(),
+    );
+
+    let faces = element.faces();
+    let element_rotation = element.rotation();
+
+    let rotation_matrix = if let Some(element_rotation) = element_rotation {
+        let origin = element_rotation.origin();
+        let axis = element_rotation.axis();
+        let angle = element_rotation.angle();
+        let quat = match axis {
+            spider_eye::serde::block_model::Axis::X => Quat::from_rotation_x(angle),
+            spider_eye::serde::block_model::Axis::Y => Quat::from_rotation_y(angle),
+            spider_eye::serde::block_model::Axis::Z => Quat::from_rotation_z(angle),
+        };
+        let translation = Vec3::from_slice(origin);
+        Some(Mat4::from_rotation_translation(quat, translation))
+    } else {
+        None
+    };
+    let final_matrix = if let Some(rotation_matrix) = rotation_matrix {
+        scale_translation_matrix * rotation_matrix
+    } else {
+        scale_translation_matrix
+    };
+
+    let mut flags = CuboidFlags::empty();
+
+    for (face_name, face_data) in element.faces() {
+        flags |= todo!();
+    }
+
+    todo!()
 }
