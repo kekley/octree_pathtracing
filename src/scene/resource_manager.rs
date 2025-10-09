@@ -1,11 +1,10 @@
-
 use glam::{Mat4, Quat, Vec2, Vec3, Vec3A};
 use hashbrown::HashMap;
 use lasso::{Rodeo, Spur};
 use spider_eye::{
     blockstate::borrow::BlockState,
     interned::{
-        block_model::{InternedBlockModel, InternedElement},
+        block_model::{BlockModel, Element},
         blockstate::{InternedModelProperties, VariantModelType},
     },
     resource_loader::LoadedResources,
@@ -31,7 +30,7 @@ pub const UNIT_BLOCK_MAX: Vec3A = Vec3A::splat(0.5);
 pub struct FinalizedBlockModel {
     ambient_occlusion: bool,
     textures: HashMap<Spur, Spur>,
-    elements: Vec<InternedElement>,
+    elements: Vec<Element>,
 }
 
 impl FinalizedBlockModel {
@@ -56,7 +55,7 @@ impl FinalizedBlockModel {
             }
         }
     }
-    pub fn elements(&self) -> &[InternedElement] {
+    pub fn elements(&self) -> &[Element] {
         &self.elements
     }
 }
@@ -90,7 +89,7 @@ impl ModelBuilder {
     fn cache_model_and_parents(
         &mut self,
         resource_location: Spur,
-        model: InternedBlockModel,
+        model: BlockModel,
         resources: &LoadedResources,
     ) {
         if let Some(parent_location_spur) = model.get_parent_location() {
@@ -136,7 +135,7 @@ impl ModelBuilder {
             }
         } else {
             //model has no parent, finalize and place in cache
-            let InternedBlockModel {
+            let BlockModel {
                 parent: _,
                 ambient_occlusion,
                 display: _,
@@ -221,28 +220,7 @@ impl ModelBuilder {
 
                 let block_matrix = Mat4::IDENTITY * center_matrix * x_rotation * y_rotation;
 
-                let elements = model.elements();
                 assert!(!elements.is_empty());
-
-                //TODO figure out if this model is a single AABB and therefore doesn't require a
-                //matrix
-
-                let element_count = elements.len();
-
-                fn element_is_aabb(element: &InternedElement) -> bool {
-                    element.from() == &[0.0, 0.0, 0.0]
-                        && element.to() == &[16.0, 16.0, 16.0]
-                        && element.faces().len() == 6
-                }
-
-                if element_count > 1 || !element_is_aabb(&elements[0]) {
-                    let cuboids = elements
-                        .iter()
-                        .map(block_element_to_cuboid)
-                        .collect::<Vec<_>>();
-                } else {
-                    //TODO simple AABB model case
-                }
             }
 
             VariantModelType::Multipart(items) => {
@@ -285,9 +263,36 @@ enum ModelData {
     },
 }
 
-fn block_element_to_cuboid(element: &InternedElement) -> ModelData {
-    let min: Vec3A = Vec3A::from_slice(element.from());
-    let max: Vec3A = Vec3A::from_slice(element.to());
+fn finalized_block_model_to_model(model: &FinalizedBlockModel) -> Option<Model> {
+    let FinalizedBlockModel {
+        ambient_occlusion,
+        textures,
+        elements,
+    } = model;
+
+    let element_count = elements.len();
+
+    fn element_is_aabb(element: &Element) -> bool {
+        element.get_from() == &[0.0, 0.0, 0.0]
+            && element.get_to() == &[16.0, 16.0, 16.0]
+            && element.get_faces().len() == 6
+    }
+
+    if element_count > 1 || !element_is_aabb(&elements[0]) {
+        let cuboids = elements
+            .iter()
+            .map(block_element_to_cuboid)
+            .collect::<Vec<_>>();
+    } else {
+        //TODO simple AABB model case
+    }
+
+    todo!()
+}
+
+fn block_element_to_cuboid(element: &Element) -> ModelData {
+    let min: Vec3A = Vec3A::from_slice(element.get_from());
+    let max: Vec3A = Vec3A::from_slice(element.get_to());
     let scaled_shifted_from = (min / 16.0) - 0.5;
     let scaled_shifted_to = (max / 16.0) - 0.5;
     let translation_vector = scaled_shifted_from - UNIT_BLOCK_MIN;
@@ -299,9 +304,9 @@ fn block_element_to_cuboid(element: &InternedElement) -> ModelData {
         translation_vector.into(),
     );
 
-    let faces = element.faces();
+    let faces = element.get_faces();
 
-    let element_rotation = element.rotation();
+    let element_rotation = element.get_rotation();
 
     let rotation_matrix = if let Some(element_rotation) = element_rotation {
         let origin = element_rotation.origin();
@@ -325,7 +330,7 @@ fn block_element_to_cuboid(element: &InternedElement) -> ModelData {
 
     let mut flags = CuboidFlags::empty();
 
-    for (face_name, face_data) in element.faces() {
+    for (face_name, face_data) in element.get_faces() {
         flags |= todo!();
     }
 
