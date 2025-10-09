@@ -1,17 +1,14 @@
-use std::sync::Arc;
 
 use glam::{Mat4, Quat, Vec2, Vec3, Vec3A};
 use hashbrown::HashMap;
 use lasso::{Rodeo, Spur};
 use spider_eye::{
     blockstate::borrow::BlockState,
-    borrow::nbt_string::NBTStr,
     interned::{
         block_model::{InternedBlockModel, InternedElement},
-        blockstate::{InternedBlockVariants, InternedModelProperties, VariantModelType},
+        blockstate::{InternedModelProperties, VariantModelType},
     },
     resource_loader::LoadedResources,
-    serde::block_model::{DisplayPosition, FaceName, PositionData},
 };
 
 use crate::{
@@ -20,7 +17,7 @@ use crate::{
         gpu_material::GPUMaterial,
         model::Model,
     },
-    textures::{material::Material, rtw_image::RTWImage, texture::Texture},
+    textures::{material::Material, texture::Texture},
 };
 
 pub type TextureID = u32;
@@ -192,7 +189,7 @@ impl ModelBuilder {
                     .expect("There should always be at least one model");
                 let model_location_spur = model_properties.get_model_location_spur();
 
-                let mut model: &FinalizedBlockModel;
+                let model: &FinalizedBlockModel;
 
                 loop {
                     if let Some(cached_model_option) = self.cache.get(&model_location_spur) {

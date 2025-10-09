@@ -12,7 +12,7 @@ use crate::{
         renderer_trait::{FrameInFlight, FrameInFlightPoll, RenderingBackend},
         tile_renderer::{RendererMode, RendererStatus},
     },
-    scene::{Scene, resource_manager::ModelBuilder},
+    scene::Scene,
 };
 
 use super::{

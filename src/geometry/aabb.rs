@@ -143,7 +143,7 @@ impl AABB {
     pub fn intersects(&self, ray: &Ray) -> bool {
         let mut t_min = f32::NEG_INFINITY;
         let mut t_max = f32::INFINITY;
-        let mut tmp = Axis::iter();
+        let tmp = Axis::iter();
         for axis in tmp {
             let box_axis_min = self.get_interval(axis).min;
             let box_axis_max = self.get_interval(axis).max;

@@ -3,11 +3,10 @@ use crate::{
     gpu_structs::{
         gpu_camera::CameraUniform,
         gpu_material::GPUMaterial,
-        gpu_octree::{GPUOctreeNode, GPUOctreeUniform, octree_to_gpu_data},
+        gpu_octree::octree_to_gpu_data,
         gpu_quad::GPUQuad,
     },
     scene::Scene,
-    textures::material,
 };
 use std::{fs, num::NonZero, slice, sync::Arc, time::Instant};
 
