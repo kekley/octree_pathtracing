@@ -1,7 +1,7 @@
 use glam::{Affine3A, Vec2, Vec3A};
 use spider_eye::serde::block_model::FaceName;
 
-use crate::{ray::ray::Ray, scene::resource_manager::MaterialID};
+use crate::{ray::Ray, scene::resource_manager::MaterialID};
 
 #[derive(Debug, Clone, Default)]
 pub struct Quad {
@@ -101,11 +101,11 @@ impl Quad {
         let d = normal.dot(origin);
 
         Quad {
-            origin: origin,
-            v: v,
-            u: u,
-            w: w,
-            normal: normal,
+            origin,
+            v,
+            u,
+            w,
+            normal,
             material_id,
             texture_u_range,
             texture_v_range,
@@ -186,7 +186,7 @@ impl Quad {
         let alpha = self.w.dot(planar_hit_point.cross(self.v));
         let beta = self.w.dot(self.u.cross(planar_hit_point));
 
-        if alpha < 0.0 || alpha > 1.0 || beta < 0.0 || beta > 1.0 {
+        if !(0.0..=1.0).contains(&alpha) || !(0.0..=1.0).contains(&beta) {
             return false;
         }
 

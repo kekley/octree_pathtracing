@@ -44,6 +44,8 @@ impl FinalizedBlockModel {
         interner: &'a Rodeo,
     ) -> Option<(Spur, &'a str)> {
         let mut current_var = texture;
+        //Texture variables can point to other texture variables, return when we get to the actual
+        //resource path
         loop {
             let result = self.textures.get(&current_var)?;
 
@@ -68,13 +70,11 @@ pub struct ModelBuilder {
     matrices: Vec<Mat4>,
     materials: Vec<GPUMaterial>,
     textures: HashMap<Spur, Texture>,
-    resources: LoadedResources,
 }
 
 impl ModelBuilder {
-    pub fn new(resources: LoadedResources) -> Self {
+    pub fn new() -> Self {
         Self {
-            resources,
             cache: Default::default(),
             cuboids: Default::default(),
             matrices: Default::default(),
@@ -89,11 +89,13 @@ impl ModelBuilder {
         let model_location = model_properties.get_model_location_spur();
         todo!()
     }
-    fn get_block_model(&self, resource_location: &str) -> Option<&InternedBlockModel> {
-        self.resources.get_model_data(resource_location)
-    }
 
-    fn cache_model_and_parents(&mut self, resource_location: Spur, model: InternedBlockModel) {
+    fn cache_model_and_parents(
+        &mut self,
+        resource_location: Spur,
+        model: InternedBlockModel,
+        resources: &LoadedResources,
+    ) {
         if let Some(parent_location_spur) = model.get_parent_location() {
             if let Some(cached_parent) = self.cache.get(&parent_location_spur) {
                 //We've seen this parent model before
@@ -124,16 +126,16 @@ impl ModelBuilder {
                 self.cache.insert(resource_location, Some(finalized_model));
             } else {
                 //parent has not been cached
-                let parent_location_str = self.resources.interner.resolve(&parent_location_spur);
+                let parent_location_str = resources.interner.resolve(&parent_location_spur);
 
-                let Some(parent_model) = self.get_block_model(parent_location_str) else {
+                let Some(parent_model) = resources.get_model_data(parent_location_str) else {
                     eprintln!("model with location {parent_location_str} was not found");
                     self.cache.insert(parent_location_spur, None);
                     return;
                 };
 
-                self.cache_model_and_parents(parent_location_spur, parent_model.clone());
-                self.cache_model_and_parents(resource_location, model);
+                self.cache_model_and_parents(parent_location_spur, parent_model.clone(), resources);
+                self.cache_model_and_parents(resource_location, model, resources);
             }
         } else {
             //model has no parent, finalize and place in cache
@@ -157,6 +159,7 @@ impl ModelBuilder {
     pub fn load_model_for_mapped_state(
         &mut self,
         block_state: BlockState<'_, '_>,
+        resources: &LoadedResources,
     ) -> Option<Model> {
         let mapped_state = block_state.to_mapped_state();
         let mapped_state_str = mapped_state.as_nbt_str().to_str();
@@ -165,11 +168,12 @@ impl ModelBuilder {
 
         let block_name = block_state.get_name().to_str();
 
-        let Some(variants) = self.get_variants_for_block(&block_name) else {
+        let Some(variants) = resources.get_variant_data(&block_name) else {
             eprintln!("No variants for {block_name}");
             return None;
         };
-        let Some(mapped_state_spur) = self.resources.interner.get(&mapped_state_str) else {
+
+        let Some(mapped_state_spur) = resources.interner.get(&mapped_state_str) else {
             eprintln!("No entry in interner for {mapped_state_str}");
             return None;
         };
@@ -177,26 +181,31 @@ impl ModelBuilder {
         match variants.get_model_properties_for_mapped_state(
             mapped_state_spur,
             &mapped_state_str,
-            &self.resources.interner,
+            &resources.interner,
         )? {
             VariantModelType::SingleModel(items) => {
                 //TODO this would be a random model every instance of the block. might not
                 //implement this
 
                 let model_properties = items
-                    .get(0)
+                    .first()
                     .expect("There should always be at least one model");
                 let model_location_spur = model_properties.get_model_location_spur();
 
                 let mut model: &FinalizedBlockModel;
+
                 loop {
-                    if let Some(model_opt) = self.cache.get(&model_location_spur) {
-                        model = model_opt.as_ref()?;
+                    if let Some(cached_model_option) = self.cache.get(&model_location_spur) {
+                        model = cached_model_option.as_ref()?;
+                        break;
                     } else {
-                        let model_location_str =
-                            self.resources.interner.resolve(&model_location_spur);
-                        if let Some(model) = self.get_block_model(model_location_str) {
-                            self.cache_model_and_parents(model_location_spur, model.clone());
+                        let model_location_str = resources.interner.resolve(&model_location_spur);
+                        if let Some(model) = resources.get_model_data(model_location_str) {
+                            self.cache_model_and_parents(
+                                model_location_spur,
+                                model.clone(),
+                                resources,
+                            );
                         } else {
                             self.cache.insert(model_location_spur, None);
                         }
@@ -232,7 +241,7 @@ impl ModelBuilder {
                 if element_count > 1 || !element_is_aabb(&elements[0]) {
                     let cuboids = elements
                         .iter()
-                        .map(|element| block_element_to_cuboid(element))
+                        .map(block_element_to_cuboid)
                         .collect::<Vec<_>>();
                 } else {
                     //TODO simple AABB model case
@@ -244,7 +253,7 @@ impl ModelBuilder {
                     .iter()
                     .map(|slice_of_models| {
                         slice_of_models
-                            .get(0)
+                            .first()
                             .expect("The should always be at least one model here")
                     })
                     .collect::<Vec<_>>();
@@ -253,22 +262,11 @@ impl ModelBuilder {
 
         todo!()
     }
+}
 
-    pub fn get_variants_for_block(&self, block_name: &str) -> Option<&InternedBlockVariants> {
-        self.resources.variants.get(block_name)
-    }
-    pub fn load_texture(&self, resource_location: &str) -> Option<Texture> {
-        self.resources.textures.get(resource_location).map(|data| {
-            let image = RTWImage::load_from_memory(data)
-                .map_err(|err| eprintln!("error loading image {resource_location}: {err}"))
-                .ok()?;
-            let image_arc = Arc::new(image);
-            Some(Texture::Image(image_arc))
-        })?
-    }
-    pub fn load_texture_by_spur(&self, resource_location_spur: Spur) -> Option<Texture> {
-        let resource_location = self.resources.interner.resolve(&resource_location_spur);
-        self.load_texture(resource_location)
+impl Default for ModelBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -291,10 +289,10 @@ enum ModelData {
 }
 
 fn block_element_to_cuboid(element: &InternedElement) -> ModelData {
-    let from: Vec3A = Vec3A::from_slice(element.from());
-    let to: Vec3A = Vec3A::from_slice(element.to());
-    let scaled_shifted_from = (from / 16.0) - 0.5;
-    let scaled_shifted_to = (to / 16.0) - 0.5;
+    let min: Vec3A = Vec3A::from_slice(element.from());
+    let max: Vec3A = Vec3A::from_slice(element.to());
+    let scaled_shifted_from = (min / 16.0) - 0.5;
+    let scaled_shifted_to = (max / 16.0) - 0.5;
     let translation_vector = scaled_shifted_from - UNIT_BLOCK_MIN;
     let scale_vector = scaled_shifted_to - scaled_shifted_from;
 
@@ -305,6 +303,7 @@ fn block_element_to_cuboid(element: &InternedElement) -> ModelData {
     );
 
     let faces = element.faces();
+
     let element_rotation = element.rotation();
 
     let rotation_matrix = if let Some(element_rotation) = element_rotation {

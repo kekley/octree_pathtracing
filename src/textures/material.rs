@@ -35,7 +35,7 @@ impl MaterialBuilder {
 
         Material {
             index_of_refraction: self.index_of_refraction.unwrap_or(DEFAULT_IOR),
-            material_flags: self.material_flags.unwrap_or(MaterialFlags::default()),
+            material_flags: self.material_flags.unwrap_or_default(),
             specular: self.specular.unwrap_or(0.0),
             emittance: self.emittance.unwrap_or(0.0),
             roughness: self.roughness.unwrap_or(0.0),
@@ -111,7 +111,7 @@ impl Material {
         texture: Texture::DEFAULT_TEXTURE,
         tint_index: 0,
     };
-    pub fn new() -> MaterialBuilder {
+    pub fn builder() -> MaterialBuilder {
         MaterialBuilder {
             index_of_refraction: Some(1.000293),
             material_flags: None,
@@ -126,6 +126,6 @@ impl Material {
 
 impl Default for Material {
     fn default() -> Self {
-        Material::new().build()
+        Material::builder().build()
     }
 }

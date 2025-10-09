@@ -1,4 +1,3 @@
-
 use eframe::egui::{self, DragValue, Label, RadioButton, Window};
 
 use crate::renderer::{gpu_renderer::GPURenderer, renderer_trait::RenderingBackend};
@@ -97,7 +96,7 @@ impl RenderSettingsWindow {
             Some(_) => {}
             None => {
                 let render_resolution = renderer.get_resolution();
-                self.resolution = (render_resolution.0 as u32, render_resolution.1 as u32);
+                self.resolution = (render_resolution.0, render_resolution.1);
             }
         };
     }

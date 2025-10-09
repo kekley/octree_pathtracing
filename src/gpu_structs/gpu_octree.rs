@@ -1,4 +1,4 @@
-use std::{fmt::Debug, u32};
+use std::fmt::Debug;
 
 use crate::octree::new_octree::{ChildType, Octree};
 use bytemuck::{Pod, Zeroable};

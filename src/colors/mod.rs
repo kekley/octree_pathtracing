@@ -97,21 +97,21 @@ impl F32Color {
     pub fn splat(value: f32) -> Self {
         Self { data: [value; 4] }
     }
-    pub fn to_array(self) -> [f32; 4] {
+    pub fn into_array(self) -> [f32; 4] {
         self.data
     }
     pub fn min_element(&self) -> f32 {
         *self
             .data
             .iter()
-            .min_by(|a, b| a.total_cmp(&b))
+            .min_by(|a, b| a.total_cmp(b))
             .unwrap_or(&self.data[0])
     }
     pub fn max_element(&self) -> f32 {
         *self
             .data
             .iter()
-            .max_by(|a, b| a.total_cmp(&b))
+            .max_by(|a, b| a.total_cmp(b))
             .unwrap_or(&self.data[0])
     }
     //Returns a color containing each minumum component of the two inputs
@@ -174,9 +174,9 @@ impl PixelColor<u8> for U8Color {
     }
 }
 
-impl Into<[u8; 4]> for U8Color {
-    fn into(self) -> [u8; 4] {
-        unsafe { transmute::<U8Color, [u8; 4]>(self) }
+impl From<U8Color> for [u8; 4] {
+    fn from(val: U8Color) -> Self {
+        unsafe { transmute::<U8Color, [u8; 4]>(val) }
     }
 }
 
@@ -184,7 +184,7 @@ impl From<&F32Color> for U8Color {
     fn from(value: &F32Color) -> Self {
         let res: [f32; 4] = (value * 255.0)
             .min_color(&F32Color::splat(255.0))
-            .to_array();
+            .into_array();
         let r = LUT_TABLE_BYTE[res[0] as usize];
         let g = LUT_TABLE_BYTE[res[1] as usize];
         let b = LUT_TABLE_BYTE[res[2] as usize];
@@ -197,7 +197,7 @@ impl From<F32Color> for U8Color {
     fn from(value: F32Color) -> Self {
         let res: [f32; 4] = (value * 255.0)
             .min_color(&F32Color::splat(255.0))
-            .to_array();
+            .into_array();
         let r = LUT_TABLE_BYTE[res[0] as usize];
         let g = LUT_TABLE_BYTE[res[1] as usize];
         let b = LUT_TABLE_BYTE[res[2] as usize];

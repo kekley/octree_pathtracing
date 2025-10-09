@@ -1,4 +1,4 @@
-use std::f32::INFINITY;
+use core::f32;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Interval {
@@ -7,9 +7,9 @@ pub struct Interval {
 }
 
 impl Interval {
-    pub const EMPTY: Interval = Interval::new(INFINITY, -INFINITY);
-    pub const UNIVERSE: Interval = Interval::new(-INFINITY, INFINITY);
-    pub const ZEROISH_TO_INFINITY: Interval = Interval::new(0.001, INFINITY);
+    pub const EMPTY: Interval = Interval::new(f32::INFINITY, f32::NEG_INFINITY);
+    pub const UNIVERSE: Interval = Interval::new(f32::NEG_INFINITY, f32::INFINITY);
+    pub const ZEROISH_TO_INFINITY: Interval = Interval::new(0.001, f32::INFINITY);
 
     #[inline]
     pub const fn new(min: f32, max: f32) -> Self {
@@ -42,7 +42,7 @@ impl Interval {
             return self.max;
         }
 
-        return x;
+        x
     }
     #[inline]
     pub fn expand(&self, delta: f32) -> Interval {
@@ -58,8 +58,8 @@ impl Default for Interval {
     #[inline]
     fn default() -> Self {
         Self {
-            min: INFINITY,
-            max: -INFINITY,
+            min: f32::INFINITY,
+            max: f32::NEG_INFINITY,
         }
     }
 }

@@ -23,23 +23,23 @@ pub fn random_int(rng: &mut StdRng) -> i64 {
 
 #[inline]
 pub fn random_float_in_range(rng: &mut StdRng, min: f32, max: f32) -> f32 {
-    return min + (max - min) * random_float(rng);
+    min + (max - min) * random_float(rng)
 }
 
 #[inline]
 pub fn linear_to_gamma(linear_component: f32) -> f32 {
     if linear_component > 0.0 {
-        return f32::sqrt(linear_component);
+        f32::sqrt(linear_component)
     } else {
-        return 0.0;
+        0.0
     }
 }
 #[inline]
 pub fn random_vec(rng: &mut StdRng) -> Vec3A {
     Vec3A::new(random_float(rng), random_float(rng), random_float(rng))
 }
-#[inline]
 
+#[inline]
 pub fn random_vec_in_range(rng: &mut StdRng, min: f32, max: f32) -> Vec3A {
     Vec3A::new(
         random_float_in_range(rng, min, max),
@@ -47,8 +47,8 @@ pub fn random_vec_in_range(rng: &mut StdRng, min: f32, max: f32) -> Vec3A {
         random_float_in_range(rng, min, max),
     )
 }
-#[inline]
 
+#[inline]
 pub fn random_unit_vec(rng: &mut StdRng) -> Vec3A {
     loop {
         let p = random_vec_in_range(rng, -1.0, 1.0);
@@ -63,9 +63,9 @@ pub fn random_unit_vec(rng: &mut StdRng) -> Vec3A {
 pub fn random_on_hemisphere(rng: &mut StdRng, normal: Vec3A) -> Vec3A {
     let on_sphere = random_unit_vec(rng);
     if on_sphere.dot(normal) > 0.0 {
-        return on_sphere;
+        on_sphere
     } else {
-        return -on_sphere;
+        -on_sphere
     }
 }
 

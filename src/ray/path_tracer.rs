@@ -1,5 +1,5 @@
 use core::f32;
-use std::f32::INFINITY;
+use std::hint::black_box;
 
 use rand::rngs::StdRng;
 
@@ -7,11 +7,10 @@ use glam::{Vec3A, Vec4, Vec4Swizzles};
 
 use crate::{
     random_float,
-    scene::scene::{EmitterSamplingStrategy, Scene},
+    ray::Ray,
+    scene::{EmitterSamplingStrategy, Scene},
     textures::material::{Material, MaterialFlags},
 };
-
-use super::ray::Ray;
 
 pub fn path_trace(
     rng: &mut StdRng,
@@ -140,7 +139,9 @@ pub fn preview_render(rng: &mut StdRng, scene: &Scene, ray: &mut Ray, attenuatio
     loop {
         if !next_intersection_preview(scene, ray) {
             break;
-        } else if !(ray.hit.current_material == 0) && ray.hit.color.w > 0.0 {
+        } else if (ray.hit.current_material != 0) && ray.hit.color.w > 0.0 {
+            //TODO
+            black_box(());
             break;
         } else {
             dbg!("s");
@@ -223,7 +224,7 @@ pub fn do_diffuse_reflection(
 
     if scene.sun_sampling_strategy.sun_sampling {
         dbg!("huh?");
-        *next = ray.clone();
+        *next = ray.new_from_self();
         scene.sun.get_random_sun_direction(next, rng);
 
         let mut direct_light_r = 0.0;
@@ -242,7 +243,7 @@ pub fn do_diffuse_reflection(
                 next.origin += -Ray::OFFSET * ray.hit.normal;
             }
 
-            next.hit.current_material = next.hit.previous_material.clone();
+            next.hit.current_material = next.hit.previous_material;
 
             get_direct_light_attenuation(scene, next, attenuation);
 
@@ -289,7 +290,7 @@ pub fn do_diffuse_reflection(
             cumulative_color.z += ray.hit.color.z * indirect_emmitter_color.z;
         }
     } else {
-        let ray_color = ray.hit.color.clone();
+        let ray_color = ray.hit.color;
         next.diffuse_reflection(ray, rng, scene);
         hit = path_trace(rng, scene, next, false, attenuation, branch_count) || hit;
 
@@ -350,7 +351,7 @@ pub fn do_refraction(
             cumulative_color.z += next.hit.color.z;
         }
     } else {
-        *next = ray.clone();
+        *next = ray.new_from_self();
 
         let a = ior1overior2 - 1.0;
         let b = ior1overior2 + 1.0;
@@ -410,7 +411,7 @@ pub fn do_transmission(
     branch_count: u32,
 ) -> bool {
     let mut hit = false;
-    *next = ray.clone();
+    *next = ray.new_from_self();
     next.origin = next.at(Ray::OFFSET);
 
     if path_trace(rng, scene, next, false, attenuation, branch_count) {
@@ -427,33 +428,31 @@ pub fn translucent_ray_color(
     cumulative_color: &mut Vec4,
     absorption: f32,
 ) {
-    let rgb_trans;
     //todo: implement fancy translucent ray color
-    rgb_trans = Vec3A::from(ray.hit.color.xyz()) * absorption;
+    let rgb_trans = Vec3A::from(ray.hit.color.xyz()) * absorption;
 
-    let output_color;
-    output_color = Vec4::new(rgb_trans.x, rgb_trans.y, rgb_trans.z, 1.0) * next.hit.color;
+    let output_color = Vec4::new(rgb_trans.x, rgb_trans.y, rgb_trans.z, 1.0) * next.hit.color;
 
     *cumulative_color += output_color;
 }
 pub fn next_intersection(scene: &Scene, ray: &mut Ray) -> bool {
-    ray.hit.previous_material = ray.hit.current_material.clone();
-    ray.hit.t = INFINITY;
+    ray.hit.previous_material = ray.hit.current_material;
+    ray.hit.t = f32::INFINITY;
     if scene.hit(ray) {
         return true;
     }
 
-    return false;
+    false
 }
 pub fn next_intersection_preview(scene: &Scene, ray: &mut Ray) -> bool {
-    ray.hit.previous_material = ray.hit.current_material.clone();
-    ray.hit.t = INFINITY;
+    ray.hit.previous_material = ray.hit.current_material;
+    ray.hit.t = f32::INFINITY;
     if scene.hit_preview(ray) {
         ray.origin = ray.at(ray.hit.t);
         return true;
     }
 
-    return false;
+    false
 }
 
 pub fn get_direct_light_attenuation(scene: &Scene, ray: &mut Ray, attenuation: &mut Vec4) {

@@ -1,13 +1,10 @@
 use core::f32;
-use std::f32::INFINITY;
-
 
 use glam::Vec3A;
 
-use crate::{ray::ray::Ray, textures::texture::Texture};
+use crate::{ray::Ray, textures::texture::Texture};
 
 use super::aabb::AABB;
-
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum Face {
@@ -68,13 +65,9 @@ impl Cuboid {
     }
 
     pub fn hit(&self, ray: &mut Ray) -> bool {
-        ray.hit.t = INFINITY;
-        let t = self.bbox.intersects(ray);
-        if !t {
-            return false;
-        } else {
-            true
-        }
+        ray.hit.t = f32::INFINITY;
+
+        self.bbox.intersects(ray)
     }
 
     pub fn intersect_texture(ray: &mut Ray, texture: &Texture) -> bool {

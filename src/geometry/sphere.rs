@@ -1,9 +1,8 @@
 use std::f32::consts::PI;
-use std::f32::INFINITY;
 
 use glam::Vec3A;
 
-use crate::ray::ray::Ray;
+use crate::ray::Ray;
 
 use super::aabb::AABB;
 
@@ -17,8 +16,8 @@ pub struct Sphere {
 impl Sphere {
     pub fn new(center: Vec3A, radius: f32, material_idx: u16) -> Self {
         Self {
-            center: center,
-            radius: radius,
+            center,
+            radius,
             material_idx,
         }
     }
@@ -26,8 +25,7 @@ impl Sphere {
     pub fn bbox(&self) -> AABB {
         let radius_vec: Vec3A = Vec3A::splat(self.radius);
 
-        let bbox = AABB::from_points(self.center - radius_vec, self.center + radius_vec);
-        bbox
+        AABB::from_points(self.center - radius_vec, self.center + radius_vec)
     }
     #[inline]
     pub fn hit(&self, ray: &mut Ray) -> bool {
@@ -40,7 +38,7 @@ impl Sphere {
         let discriminant = h * h - a * c;
 
         if discriminant < 0.0 {
-            ray.hit.t = INFINITY;
+            ray.hit.t = f32::INFINITY;
             return false;
         }
 

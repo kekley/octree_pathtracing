@@ -2,10 +2,7 @@ use std::sync::Arc;
 
 use eframe::egui::{Context, TextureHandle};
 
-use crate::{
-    scene::scene::Scene,
-    settings::RendererBackendSetting,
-};
+use crate::{scene::Scene, settings::RendererBackendSetting};
 
 use super::{
     camera::Camera,

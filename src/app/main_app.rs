@@ -6,13 +6,13 @@ use log::info;
 use spider_eye::coords::block::BlockCoords;
 
 use crate::{
-    colors::colors::U8Color,
+    colors::U8Color,
     renderer::{
         gpu_renderer::GPURenderer,
         renderer_trait::{FrameInFlight, FrameInFlightPoll, RenderingBackend},
         tile_renderer::{RendererMode, RendererStatus},
     },
-    scene::{resource_manager::ModelBuilder, scene::Scene},
+    scene::{Scene, resource_manager::ModelBuilder},
 };
 
 use super::{
@@ -76,9 +76,10 @@ impl Default for Application {
     }
 }
 
+//TODO move this to colors module
 fn pixel_slice_to_u8_slice(slice: &[U8Color]) -> &[u8] {
     let ptr = slice.as_ptr();
-    let len = slice.len() * size_of::<U8Color>();
+    let len = std::mem::size_of_val(slice);
     unsafe { std::slice::from_raw_parts(ptr.cast(), len) }
 }
 
@@ -135,7 +136,7 @@ impl Application {
         {
             self.settings.open = true;
         }
-        self.settings.show(&ctx, frame, &mut self.renderer);
+        self.settings.show(ctx, frame, &mut self.renderer);
     }
     pub fn draw_load_world_button(&mut self, ctx: &egui::Context, ui: &mut Ui) {
         if ui.add_enabled(true, Button::new("Load World")).clicked() {
@@ -226,10 +227,7 @@ impl eframe::App for Application {
                     FrameInFlightPoll::Cancelled => panic!(),
                 }
             }
-            None => match self.renderer.render_frame(&frame, texture.clone()) {
-                Ok(frame_in_flight) => Some(frame_in_flight),
-                Err(texture) => None,
-            },
+            None => self.renderer.render_frame(frame, texture.clone()).ok(),
         };
         if self.frame_in_flight.is_none() {
             self.renderer.as_mut().update_scene(ctx);

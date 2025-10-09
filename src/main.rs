@@ -54,10 +54,10 @@ fn ui() -> eframe::Result {
             present_mode: eframe::wgpu::PresentMode::AutoVsync,
             desired_maximum_frame_latency: None,
             wgpu_setup: egui_wgpu::WgpuSetup::Existing(WgpuSetupExisting {
-                instance: instance,
-                adapter: adapter,
-                device: device,
-                queue: queue,
+                instance,
+                adapter,
+                device,
+                queue,
             }),
             ..Default::default()
         },

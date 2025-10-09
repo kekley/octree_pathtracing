@@ -1,9 +1,9 @@
+use crate::hittable::HittableIdx;
 use glam::Vec3A;
 
-use crate::{hittable::hittable::HittableIdx, ray::ray::Ray};
+use crate::ray::Ray;
 
 use super::interval::Interval;
-
 
 pub struct Translation {
     hittable_idx: HittableIdx,

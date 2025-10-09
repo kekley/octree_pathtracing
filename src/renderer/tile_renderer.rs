@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicU32, AtomicUsize};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{self, Arc, Mutex, RwLock};
-use std::thread::{spawn, JoinHandle};
+use std::thread::{JoinHandle, spawn};
 use std::time::Instant;
 
 use rand::rngs::StdRng;
@@ -9,8 +9,8 @@ use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
-use crate::colors::colors::{F32Color, PixelColor, U8Color};
-use crate::scene::scene::Scene;
+use crate::colors::{F32Color, PixelColor as _, U8Color};
+use crate::scene::Scene;
 
 use super::camera::Camera;
 
@@ -128,7 +128,7 @@ impl Tile {
             x1,
             y1,
             local_buffer: vec![F32Color::BLACK; (y1 - y0) * (x1 - x0)],
-            frame_buffer: frame_buffer,
+            frame_buffer,
             frame_buffer_resolution,
             dim,
         }
@@ -153,7 +153,7 @@ impl TileRenderer {
             output_image_receiver: None,
             output_image_buffer: None,
             target_spp: target_samples_per_pixel,
-            branch_count: branch_count,
+            branch_count,
             mode: RendererMode::Preview,
         }
     }
@@ -167,18 +167,17 @@ impl TileRenderer {
     }
 
     pub fn reset_render(&mut self) {
-        match &self.msg_channel {
-            Some(msg_channel) => match msg_channel.send(RendererMessage::Reset) {
+        if let Some(msg_channel) = &self.msg_channel {
+            match msg_channel.send(RendererMessage::Reset) {
                 Ok(_) => {}
                 Err(error) => {
                     dbg!(error.to_string());
                 }
-            },
-            None => {}
+            }
         }
     }
     pub fn get_resolution(&self) -> (usize, usize) {
-        self.resolution.clone()
+        self.resolution
     }
     pub fn get_camera(&self) -> Camera {
         self.camera.lock().unwrap().clone()
@@ -197,12 +196,12 @@ impl TileRenderer {
     pub fn get_current_branch_count(current_spp: u32, scene_branch_count: u32) -> u32 {
         if current_spp < scene_branch_count {
             if current_spp <= (scene_branch_count as f32).sqrt() as u32 {
-                return 1;
+                1
             } else {
-                return scene_branch_count - current_spp;
+                scene_branch_count - current_spp
             }
         } else {
-            return scene_branch_count;
+            scene_branch_count
         }
     }
     pub fn get_branch_count(&mut self) -> u32 {
@@ -236,11 +235,9 @@ impl TileRenderer {
             None => match self.output_image_receiver.as_ref()?.try_recv() {
                 Ok(result) => {
                     self.output_image_buffer = Some(result);
-                    return Some(self.output_image_buffer.as_ref()?);
+                    Some(self.output_image_buffer.as_ref()?)
                 }
-                Err(_) => {
-                    return None;
-                }
+                Err(_) => None,
             },
         }
     }
@@ -272,9 +269,8 @@ impl TileRenderer {
         }
 
         let thread_handle = self.render_thread.take();
-        match thread_handle {
-            Some(thread) => thread.join().unwrap(),
-            None => {}
+        if let Some(thread) = thread_handle {
+            thread.join().unwrap()
         }
         self.current_spp.store(0, sync::atomic::Ordering::SeqCst);
     }
@@ -319,13 +315,12 @@ impl TileRenderer {
         let status_arc = self.status.clone();
 
         let image_output_buffer = (0..resolution.0 * resolution.1)
-            .into_iter()
             .map(|_| U8Color::BLACK)
             .collect::<Vec<_>>();
 
         self.output_image_buffer = Some(image_output_buffer);
 
-        Some(spawn(move || {
+        spawn(move || {
             Self::thread_task(
                 spp_arc,
                 status_arc,
@@ -338,7 +333,7 @@ impl TileRenderer {
                 branch_count,
                 target_spp,
             )
-        }));
+        });
     }
 
     fn render_preview(&mut self, scene: Arc<RwLock<Scene>>) {
@@ -360,13 +355,12 @@ impl TileRenderer {
         let status_arc = self.status.clone();
 
         let image_output_buffer = (0..resolution.0 * resolution.1)
-            .into_iter()
             .map(|_| U8Color::BLACK)
             .collect::<Vec<_>>();
 
         self.output_image_buffer = Some(image_output_buffer);
 
-        Some(spawn(move || {
+        spawn(move || {
             Self::preview_thread_task(
                 status_arc,
                 scene_arc,
@@ -376,7 +370,7 @@ impl TileRenderer {
                 resolution,
                 thread_count,
             )
-        }));
+        });
     }
 
     fn thread_task(
@@ -397,13 +391,12 @@ impl TileRenderer {
         );
         let frame_buffer = Arc::new(Mutex::new(
             (0..resolution.0 * resolution.1)
-                .into_iter()
                 .map(|_| F32Color::BLACK)
                 .collect::<Vec<_>>(),
         ));
 
-        let tile_width = (resolution.0 + rayon_thread_count - 1) / rayon_thread_count;
-        let tile_height = (resolution.1 + rayon_thread_count - 1) / rayon_thread_count;
+        let tile_width = resolution.0.div_ceil(rayon_thread_count);
+        let tile_height = resolution.1.div_ceil(rayon_thread_count);
         let mut tiles = Vec::with_capacity(rayon_thread_count * rayon_thread_count);
         (0..rayon_thread_count).for_each(|y| {
             (0..rayon_thread_count).for_each(|x| {
@@ -503,21 +496,20 @@ impl TileRenderer {
         camera_arc: Arc<Mutex<Camera>>,
     ) {
         let status_arc = self.status.clone();
-        let resolution = self.resolution.clone();
-        let rayon_thread_count = self.thread_count.clone();
+        let resolution = self.resolution;
+        let rayon_thread_count = self.thread_count;
         status_arc.store(
             RendererStatus::Running as usize,
             sync::atomic::Ordering::SeqCst,
         );
         let frame_buffer = Arc::new(Mutex::new(
             (0..resolution.0 * resolution.1)
-                .into_iter()
                 .map(|_| F32Color::BLACK)
                 .collect::<Vec<_>>(),
         ));
 
-        let tile_width = (resolution.0 + rayon_thread_count - 1) / rayon_thread_count;
-        let tile_height = (resolution.1 + rayon_thread_count - 1) / rayon_thread_count;
+        let tile_width = resolution.0.div_ceil(rayon_thread_count);
+        let tile_height = resolution.1.div_ceil(rayon_thread_count);
         let mut tiles = Vec::with_capacity(rayon_thread_count * rayon_thread_count);
         (0..rayon_thread_count).for_each(|y| {
             (0..rayon_thread_count).for_each(|x| {
@@ -534,6 +526,7 @@ impl TileRenderer {
         });
 
         'outer: loop {
+            //TODO deal with this warning. idr what I wanted here
             let scene = scene_arc.read().unwrap();
             let camera = camera_arc.lock().unwrap().clone();
             let start = Instant::now();
@@ -564,13 +557,12 @@ impl TileRenderer {
         );
         let frame_buffer = Arc::new(Mutex::new(
             (0..resolution.0 * resolution.1)
-                .into_iter()
                 .map(|_| F32Color::BLACK)
                 .collect::<Vec<_>>(),
         ));
 
-        let tile_width = (resolution.0 + rayon_thread_count - 1) / rayon_thread_count;
-        let tile_height = (resolution.1 + rayon_thread_count - 1) / rayon_thread_count;
+        let tile_width = resolution.0.div_ceil(rayon_thread_count);
+        let tile_height = resolution.1.div_ceil(rayon_thread_count);
         let mut tiles = Vec::with_capacity(rayon_thread_count * rayon_thread_count);
         (0..rayon_thread_count).for_each(|y| {
             (0..rayon_thread_count).for_each(|x| {
@@ -706,8 +698,8 @@ impl TileRenderer {
                     - tile.frame_buffer_resolution.1 as f32)
                     / tile.dim;
 
-                let dx = rng.gen_range((-1.0 / tile.dim)..(1.0 / tile.dim));
-                let dy = rng.gen_range((-1.0 / tile.dim)..(1.0 / tile.dim));
+                let dx = rng.random_range((-1.0 / tile.dim)..(1.0 / tile.dim));
+                let dy = rng.random_range((-1.0 / tile.dim)..(1.0 / tile.dim));
                 let ray = camera.get_ray(x_normalized + dx, y_normalized + dy);
                 let color = scene.get_color(ray, &mut rng, current_spp);
                 //scene.get_color(x_normalized + dx, y_normalized + dy, &mut rng, current_spp);
@@ -742,11 +734,10 @@ impl TileRenderer {
     }
     #[inline]
     fn get_pixel_index(x: usize, y: usize, stride: usize) -> usize {
-        let val = (y * stride) + x;
         //println!("stride:{}", stride);
         //println!("x:{}, y:{}", x, y);
         //println!("val: {}", val);
-        val
+        (y * stride) + x
     }
 
     fn normalize_coordinates(x: f32, y: f32, width: f32, height: f32) -> (f32, f32) {

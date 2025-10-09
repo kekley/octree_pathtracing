@@ -49,15 +49,13 @@ impl RTWImage {
     pub fn load_from_memory(data: &[u8]) -> Result<Self, String> {
         let load_result = load_from_memory(data);
         match load_result {
-            stb_image::image::LoadResult::Error(e) => {
-                return Err(e);
-            }
+            stb_image::image::LoadResult::Error(e) => Err(e),
             stb_image::image::LoadResult::ImageU8(image) => {
                 let bdata = image.data;
                 let image_width = image.width as u32;
                 let image_height = image.height as u32;
                 let bytes_per_pixel = BytesPerPixel::try_from(image.depth as u32)?;
-                let bytes_per_scanline = image_width * 4 as u32;
+                let bytes_per_scanline = image_width * 4_u32;
                 let mut data: Box<[u8]> =
                     vec![0u8; (image_height * image_width * 4) as usize].into_boxed_slice();
                 data.chunks_exact_mut(4)
@@ -96,13 +94,13 @@ impl RTWImage {
                         }
                     });
 
-                return Ok(RTWImage {
+                Ok(RTWImage {
                     bytes_per_pixel,
                     raw_data: data,
                     image_width,
                     image_height,
                     bytes_per_scanline,
-                });
+                })
             }
             stb_image::image::LoadResult::ImageF32(image) => {
                 let fdata = image.data;
@@ -112,13 +110,13 @@ impl RTWImage {
                 let bytes_per_scanline = image_width * image.depth as u32;
                 let bdata = Self::convert_to_bytes(&fdata);
                 let bdata: Box<[u8]> = Box::from(bdata);
-                return Ok(RTWImage {
+                Ok(RTWImage {
                     bytes_per_pixel,
                     raw_data: bdata,
                     image_width,
                     image_height,
                     bytes_per_scanline,
-                });
+                })
             }
         }
     }
@@ -128,14 +126,14 @@ impl RTWImage {
         match load_result {
             stb_image::image::LoadResult::Error(_e) => {
                 //println!("{}", file_path);
-                return Err(file_path.to_string());
+                Err(file_path.to_string())
             }
             stb_image::image::LoadResult::ImageU8(image) => {
                 let bdata = image.data;
                 let image_width = image.width as u32;
                 let image_height = image.height as u32;
                 let bytes_per_pixel = BytesPerPixel::try_from(image.depth as u32)?;
-                let bytes_per_scanline = image_width * 4 as u32;
+                let bytes_per_scanline = image_width * 4_u32;
                 let mut data: Box<[u8]> =
                     vec![0u8; (image_height * image_width * 4) as usize].into_boxed_slice();
                 data.chunks_exact_mut(4)
@@ -174,13 +172,13 @@ impl RTWImage {
                         }
                     });
 
-                return Ok(RTWImage {
+                Ok(RTWImage {
                     bytes_per_pixel,
                     raw_data: data,
                     image_width,
                     image_height,
                     bytes_per_scanline,
-                });
+                })
             }
             stb_image::image::LoadResult::ImageF32(image) => {
                 let fdata = image.data;
@@ -190,13 +188,13 @@ impl RTWImage {
                 let bytes_per_scanline = image_width * image.depth as u32;
                 let bdata = Self::convert_to_bytes(&fdata);
                 let bdata: Box<[u8]> = Box::from(bdata);
-                return Ok(RTWImage {
+                Ok(RTWImage {
                     bytes_per_pixel,
                     raw_data: bdata,
                     image_width,
                     image_height,
                     bytes_per_scanline,
-                });
+                })
             }
         }
     }
@@ -208,7 +206,7 @@ impl RTWImage {
         if value >= 1.0 {
             return 255;
         }
-        return (256.0 * value) as u8;
+        (256.0 * value) as u8
     }
 
     #[inline]
@@ -216,7 +214,7 @@ impl RTWImage {
         value as f32 / 255.0
     }
 
-    pub fn convert_to_bytes(floats: &Vec<f32>) -> Vec<u8> {
+    pub fn convert_to_bytes(floats: &[f32]) -> Vec<u8> {
         let total_bytes = floats.len();
         let mut bytes = Vec::with_capacity(total_bytes);
         floats.iter().for_each(|f| {
@@ -224,7 +222,7 @@ impl RTWImage {
         });
         bytes
     }
-    pub fn convert_to_floats(bytes: &Vec<u8>) -> Vec<f32> {
+    pub fn convert_to_floats(bytes: &[u8]) -> Vec<f32> {
         let total_bytes = bytes.len();
         let mut floats = Vec::with_capacity(total_bytes);
         bytes.iter().for_each(|f| {

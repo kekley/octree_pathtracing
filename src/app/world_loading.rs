@@ -3,7 +3,7 @@ use std::sync::Arc;
 use eframe::egui::{self, Button, DragValue, Label, Slider, Window};
 use spider_eye::coords::block::BlockCoords;
 
-use crate::{renderer::renderer_trait::RenderingBackend, scene::resource_manager::ModelBuilder};
+use crate::renderer::renderer_trait::RenderingBackend;
 
 use super::main_app::load_world_2;
 
@@ -17,7 +17,7 @@ pub struct WorldLoadingDialog {
 
 impl WorldLoadingDialog {
     pub fn show(&mut self, ctx: &egui::Context, renderer: &mut Box<dyn RenderingBackend>) {
-        match Window::new("World Loading")
+        if Window::new("World Loading")
             .resizable([true, true])
             .open(&mut self.open)
             .default_width(280.0)
@@ -40,10 +40,10 @@ impl WorldLoadingDialog {
                 ui.separator();
                 ui.horizontal(|ui| {
                     ui.text_edit_singleline(&mut self.path);
-                    if ui.button("Browse...").clicked() {
-                        if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                            self.path = path.display().to_string();
-                        }
+                    if ui.button("Browse...").clicked()
+                        && let Some(path) = rfd::FileDialog::new().pick_folder()
+                    {
+                        self.path = path.display().to_string();
                     }
                 });
                 if ui.add(Button::new("Load")).clicked() {
@@ -52,9 +52,8 @@ impl WorldLoadingDialog {
                     renderer.as_mut().set_scene(&scene);
                 }
                 ui.separator();
-            }) {
-            Some(_) => {}
-            None => {}
-        }
+            })
+            .is_some()
+        {}
     }
 }

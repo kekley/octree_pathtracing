@@ -327,7 +327,7 @@ pub fn build_region_octree(
         .zip(region_chunk_data.iter())
         .for_each(|(nbt, chunk_data)| {
             if let Some(chunk_data) = chunk_data {
-                *nbt = RootNBTCompound::from_bytes(&chunk_data)
+                *nbt = RootNBTCompound::from_bytes(chunk_data)
                     .map_err(|err| println!("{err:?}"))
                     .ok()
             }

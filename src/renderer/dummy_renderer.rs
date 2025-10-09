@@ -1,5 +1,7 @@
 use eframe::egui::TextureHandle;
 
+use crate::scene::Scene;
+
 use super::{camera::Camera, renderer_trait::RenderingBackend, tile_renderer::RendererMode};
 static mut DUMMY_CAMERA: Camera = Camera::DEFAULT_CAMERA;
 
@@ -17,11 +19,7 @@ impl RenderingBackend for DummyRenderer {
 
     fn update_scene(&mut self, ctx: &eframe::egui::Context) {}
 
-    fn set_scene(
-        &mut self,
-        scene: &std::sync::Arc<parking_lot::RwLock<crate::scene::scene::Scene>>,
-    ) {
-    }
+    fn set_scene(&mut self, scene: &std::sync::Arc<parking_lot::RwLock<Scene>>) {}
 
     fn get_mode(&self) -> super::tile_renderer::RendererMode {
         super::tile_renderer::RendererMode::Preview

@@ -1,10 +1,10 @@
 use eframe::egui::{self, Context};
 use glam::Vec3A;
 
-use crate::ray::ray::Ray;
+use crate::ray::Ray;
 
 /// A simple thin-lens perspective camera
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Camera {
     /// Location of the camera
     pub eye: Vec3A,

@@ -6,7 +6,7 @@ use std::{
 use glam::{Vec3A, Vec4};
 use lazy_static::lazy_static;
 
-use crate::colors::colors::{F32Color, U8Color};
+use crate::colors::{F32Color, U8Color};
 
 use super::rtw_image::RTWImage;
 
@@ -30,7 +30,8 @@ impl Texture {
     }
     fn generate_gamma_lut() -> [u8; 256] {
         let mut lut = [0u8; 256];
-        for i in 0..256 {
+        let tmp = 0..256;
+        for i in tmp {
             lut[i] = (((i as f32 / 255.0).powf(1.0 / 2.2)) * 255.0) as u8;
         }
         lut
@@ -40,7 +41,7 @@ impl Texture {
         match self {
             Texture::Color(color) => {
                 let color = F32Color::from(color);
-                Vec4::from_array(color.to_array())
+                Vec4::from_array(color.into_array())
             }
             Texture::Image(image) => {
                 if image.image_height == 0 {

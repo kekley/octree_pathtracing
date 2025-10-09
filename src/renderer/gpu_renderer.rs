@@ -1,12 +1,12 @@
 use crate::{
-    colors::colors::PixelColor,
+    colors::PixelColor as _,
     gpu_structs::{
         gpu_camera::CameraUniform,
         gpu_material::GPUMaterial,
         gpu_octree::{GPUOctreeNode, GPUOctreeUniform, octree_to_gpu_data},
         gpu_quad::GPUQuad,
     },
-    scene::scene::Scene,
+    scene::Scene,
     textures::material,
 };
 use std::{fs, num::NonZero, slice, sync::Arc, time::Instant};
@@ -58,7 +58,7 @@ pub fn create_render_data(
 
     let render_bind_group = device.create_bind_group(&BindGroupDescriptor {
         label: Some("Render bind group"),
-        layout: &render_bind_group_layout,
+        layout: render_bind_group_layout,
         entries: &[
             BindGroupEntry {
                 binding: 0,
@@ -76,7 +76,7 @@ pub fn create_render_data(
     });
     RenderData {
         render_uniform: context_uniform,
-        render_bind_group: render_bind_group,
+        render_bind_group,
         index_stack,
         time_stack,
     }
@@ -313,7 +313,7 @@ impl GPURenderer {
             usage: BufferUsages::UNIFORM,
         });
 
-        let quads: Vec<_> = quads.iter().map(|quad| GPUQuad::from(quad)).collect();
+        let quads: Vec<_> = quads.iter().map(GPUQuad::from).collect();
 
         let material_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("materials"),
@@ -488,7 +488,7 @@ impl GPURenderer {
                 ],
             });
 
-        let view_array: Vec<_> = texture_views.iter().map(|view| view).collect();
+        let view_array: Vec<_> = texture_views.iter().collect();
 
         let octree_bind_group = device.create_bind_group(&BindGroupDescriptor {
             label: Some("Octree bind group"),
@@ -539,7 +539,7 @@ impl GPURenderer {
             compilation_options: Default::default(),
             cache: None,
         });
-        return SVOPipeline {
+        SVOPipeline {
             shader: module,
             pipeline_layout,
             compute_pipeline: pipeline,
@@ -554,7 +554,7 @@ impl GPURenderer {
             octree_bind_group_layout,
             render_bind_group_layout,
             octree_uniform_buffer: octree_uniform,
-        };
+        }
     }
 }
 
@@ -592,7 +592,7 @@ impl RenderingBackend for GPURenderer {
             camera_scaled_view_dir: (self.camera.direction * d_factor).to_array(),
             traversal_start_idx: traversal_start_index,
             camera_scaled_view_right: (aspect_ratio * view_right).to_array(),
-            scale: scale,
+            scale,
             camera_view_up_ortho: view_up_ortho.to_array(),
             inv_image_size_x: 1.0 / self.render_size.0 as f32,
             camera_world_position: self.camera.eye.to_array(),
@@ -617,7 +617,7 @@ impl RenderingBackend for GPURenderer {
                 timestamp_writes: None,
             });
 
-            compute_pass.set_pipeline(&pipeline);
+            compute_pass.set_pipeline(pipeline);
             compute_pass.set_bind_group(1, octree_bind_group, &[]);
             compute_pass.set_bind_group(0, render_bind_group, &[]);
             compute_pass.dispatch_workgroups(1280, 720, 1);
@@ -631,7 +631,7 @@ impl RenderingBackend for GPURenderer {
                 aspect: eframe::wgpu::TextureAspect::All,
             },
             TexelCopyTextureInfo {
-                texture: &inner_texture.texture.as_ref().unwrap(),
+                texture: inner_texture.texture.as_ref().unwrap(),
                 mip_level: 0,
                 origin: Origin3d::ZERO,
                 aspect: eframe::wgpu::TextureAspect::All,
@@ -663,8 +663,10 @@ impl RenderingBackend for GPURenderer {
     fn set_scene(&mut self, scene: &std::sync::Arc<parking_lot::RwLock<Scene>>) {
         self.scene = Some(scene.clone());
         let scene = scene.read();
-        if self.pipeline.is_some() {}
-        self.pipeline = Some(Self::create_pipeline(&self.device, &self.queue, &scene));
+        if self.pipeline.is_some() {
+        } else {
+            self.pipeline = Some(Self::create_pipeline(&self.device, &self.queue, &scene));
+        }
     }
 
     fn get_mode(&self) -> RendererMode {

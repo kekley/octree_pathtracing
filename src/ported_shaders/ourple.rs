@@ -7,7 +7,7 @@ const BOX_SIZE_X: f32 = 1.0;
 
 fn wrap(mut x: f32, a: f32, s: f32) -> f32 {
     x -= s;
-    return (x - a * (x / a).floor()) + s;
+    (x - a * (x / a).floor()) + s
 }
 
 fn trans_a(z: &mut Vec2, a: f32, b: f32) {
@@ -15,7 +15,7 @@ fn trans_a(z: &mut Vec2, a: f32, b: f32) {
 
     *z *= -i_r;
     z.x = -b - z.x;
-    z.y = a + z.y;
+    z.y += a;
 }
 
 fn jos_kleinian(mut z: Vec2, time: f32) -> f32 {
@@ -33,9 +33,9 @@ fn jos_kleinian(mut z: Vec2, time: f32) -> f32 {
     let f = b.signum() * 1.;
 
     for _ in 0..150 {
-        z.x = z.x + f * b / a * z.y;
+        z.x += f * b / a * z.y;
         z.x = wrap(z.x, 2. * BOX_SIZE_X, -BOX_SIZE_X);
-        z.x = z.x - f * b / a * z.y;
+        z.x -= f * b / a * z.y;
 
         //If above the separation line, rotate by 180° about (-b/2, a/2)
         if z.y
@@ -64,7 +64,7 @@ fn jos_kleinian(mut z: Vec2, time: f32) -> f32 {
         llz = lz;
         lz = z;
     }
-    return flag;
+    flag
 }
 
 pub fn main_image(x: f32, y: f32, resolution: Vec2, time: f32) -> Vec4 {
@@ -77,5 +77,5 @@ pub fn main_image(x: f32, y: f32, resolution: Vec2, time: f32) -> Vec4 {
     let hit = jos_kleinian(uv, time);
     let c = (1.0 - hit) * BACKGROUND_1_COLOR + hit * COLOR_3;
 
-    return Vec4::new(c.x, c.y, c.z, 1.0);
+    Vec4::new(c.x, c.y, c.z, 1.0)
 }

@@ -1,9 +1,8 @@
 use core::f32;
-use std::f32::{INFINITY, NEG_INFINITY};
 
 use glam::Vec3A;
 
-use crate::ray::ray::Ray;
+use crate::ray::Ray;
 
 use super::interval::Interval;
 
@@ -50,7 +49,7 @@ impl Iterator for AxisIter {
         }
     }
 }
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct AABB {
     pub min: Vec3A,
     pub max: Vec3A,
@@ -67,12 +66,12 @@ impl Default for AABB {
 
 impl AABB {
     pub const EMPTY: AABB = AABB::new(
-        Vec3A::new(INFINITY, INFINITY, INFINITY),
-        Vec3A::new(NEG_INFINITY, NEG_INFINITY, NEG_INFINITY),
+        Vec3A::new(f32::INFINITY, f32::INFINITY, f32::INFINITY),
+        Vec3A::new(f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY),
     );
     pub const UNIVERSE: AABB = AABB::new(
-        Vec3A::new(NEG_INFINITY, NEG_INFINITY, NEG_INFINITY),
-        Vec3A::new(INFINITY, INFINITY, INFINITY),
+        Vec3A::new(f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY),
+        Vec3A::new(f32::INFINITY, f32::INFINITY, f32::INFINITY),
     );
 
     #[inline]
@@ -142,10 +141,10 @@ impl AABB {
     }
 
     pub fn intersects(&self, ray: &Ray) -> bool {
-        let mut t_min = -INFINITY;
-        let mut t_max = INFINITY;
+        let mut t_min = f32::NEG_INFINITY;
+        let mut t_max = f32::INFINITY;
         let mut tmp = Axis::iter();
-        while let Some(axis) = tmp.next() {
+        for axis in tmp {
             let box_axis_min = self.get_interval(axis).min;
             let box_axis_max = self.get_interval(axis).max;
             let ray_axis_origin = ray.origin[axis as usize];

@@ -1,8 +1,8 @@
 use std::{cmp::Ordering, mem::swap};
 
 use crate::{
-    hittable::hittable::{HitList, Hittable},
-    ray::ray::Ray,
+    hittable::{HitList, Hittable},
+    ray::Ray,
 };
 
 use super::aabb::{AABB, Axis};
@@ -30,8 +30,8 @@ impl BVHNode {
 
 impl BVHTree {
     pub fn evaluate_sah(
-        objects: &Vec<Hittable>,
-        indices: &Vec<u32>,
+        objects: &[Hittable],
+        indices: &[u32],
         node: &BVHNode,
         axis: Axis,
         pos: f32,
@@ -84,7 +84,7 @@ impl BVHTree {
                     let candidate_pos = obj.get_bbox().centroid(axis);
                     let cost = BVHTree::evaluate_sah(
                         objects,
-                        &indices,
+                        indices,
                         &nodes[node_idx],
                         axis,
                         candidate_pos,
@@ -169,7 +169,7 @@ impl BVHTree {
 
         let root_node_idx: usize = 0;
         let mut nodes_used: u32 = 1;
-        let root_node = &mut nodes[root_node_idx as usize];
+        let root_node = &mut nodes[root_node_idx];
         root_node.left_node_idx = 0;
         root_node.first_hittable_idx = 0;
         root_node.hittable_count = objects.len() as u32;
@@ -194,9 +194,9 @@ impl BVHTree {
         }
     }
 
-    pub fn hit(&self, ray: &mut Ray) -> bool {
+    pub fn intersect(&self, ray: &mut Ray) -> bool {
         let mut node = &self.nodes[0];
-        let mut stack_idx = 0 as usize;
+        let mut stack_idx = 0_usize;
         let mut stack = [node; 64];
         let mut closest_hit = ray.hit.t;
         loop {
@@ -253,9 +253,5 @@ fn box_compare(a: &Hittable, b: &Hittable, axis: Axis) -> Ordering {
     let binding = b.get_bbox();
     let b_axis_interval = binding.get_interval(axis);
 
-    match a_axis_interval.min.total_cmp(&b_axis_interval.min) {
-        Ordering::Less => Ordering::Less,
-        Ordering::Equal => Ordering::Equal,
-        Ordering::Greater => Ordering::Greater,
-    }
+    a_axis_interval.min.total_cmp(&b_axis_interval.min)
 }
