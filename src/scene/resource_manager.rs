@@ -2,12 +2,7 @@ use glam::{Mat4, Quat, Vec2, Vec3, Vec3A};
 use hashbrown::HashMap;
 use lasso::{Rodeo, Spur};
 use spider_eye::{
-    blockstate::borrow::BlockState,
-    interned::{
-        block_model::{BlockModel, Element},
-        blockstate::{InternedModelProperties, VariantModelType},
-    },
-    resource_loader::LoadedResources,
+    blockstate::borrow::BlockState, element::borrow::Element, face::common::rotation::Axis,
 };
 
 use crate::{
@@ -27,25 +22,19 @@ pub type ModelID = u32;
 pub const UNIT_BLOCK_MIN: Vec3A = Vec3A::splat(-0.5);
 pub const UNIT_BLOCK_MAX: Vec3A = Vec3A::splat(0.5);
 
-pub struct FinalizedBlockModel {
+pub struct FinalizedBlockModel<'a> {
     ambient_occlusion: bool,
-    textures: HashMap<Spur, Spur>,
-    elements: Vec<Element>,
+    textures: HashMap<&'a str, &'a str>,
+    elements: Vec<Element<'a>>,
 }
 
-impl FinalizedBlockModel {
-    pub fn resolve_texture_variable_to_path<'a>(
-        &self,
-        texture: Spur,
-        interner: &'a Rodeo,
-    ) -> Option<(Spur, &'a str)> {
+impl FinalizedBlockModel<'_> {
+    pub fn resolve_texture_variable_to_path<'a>(&'a self, texture: &str) -> Option<&'a str> {
         let mut current_var = texture;
         //Texture variables can point to other texture variables, return when we get to the actual
         //resource path
         loop {
             let result = self.textures.get(&current_var)?;
-
-            let resolved = interner.resolve(result);
 
             if resolved.starts_with("#") {
                 //variable
@@ -290,7 +279,7 @@ fn finalized_block_model_to_model(model: &FinalizedBlockModel) -> Option<Model> 
     todo!()
 }
 
-fn block_element_to_cuboid(element: &Element) -> ModelData {
+fn block_element_to_cuboid(element: &Element<'_>) -> ModelData {
     let min: Vec3A = Vec3A::from_slice(element.get_from());
     let max: Vec3A = Vec3A::from_slice(element.get_to());
     let scaled_shifted_from = (min / 16.0) - 0.5;
@@ -313,9 +302,9 @@ fn block_element_to_cuboid(element: &Element) -> ModelData {
         let axis = element_rotation.axis();
         let angle = element_rotation.angle();
         let quat = match axis {
-            spider_eye::serde::block_model::Axis::X => Quat::from_rotation_x(angle),
-            spider_eye::serde::block_model::Axis::Y => Quat::from_rotation_y(angle),
-            spider_eye::serde::block_model::Axis::Z => Quat::from_rotation_z(angle),
+            Axis::X => Quat::from_rotation_x(angle),
+            Axis::Y => Quat::from_rotation_y(angle),
+            Axis::Z => Quat::from_rotation_z(angle),
         };
         let translation = Vec3::from_slice(origin);
         Some(Mat4::from_rotation_translation(quat, translation))
