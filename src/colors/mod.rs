@@ -133,7 +133,7 @@ impl F32Color {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct U8Color {
     data: [u8; 4],
 }

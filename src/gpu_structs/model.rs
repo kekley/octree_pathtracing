@@ -14,8 +14,8 @@ bitflags! {
 #[repr(C, align(16))]
 #[derive(Copy, Clone, Pod, Zeroable)]
 pub struct Model {
-    model_flags: ModelFlags,
-    cuboid_start_index: u32,
-    length: u32,
-    padding: u32,
+    pub(crate) model_flags: ModelFlags,
+    pub(crate) cuboid_start_index: u32,
+    pub(crate) length: u32,
+    pub(crate) padding: u32,
 }

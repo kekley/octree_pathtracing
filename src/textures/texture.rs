@@ -1,3 +1,4 @@
+use std::hash::Hash;
 use std::{
     array::{self},
     sync::Arc,
@@ -10,10 +11,33 @@ use crate::colors::{F32Color, U8Color};
 
 use super::rtw_image::RTWImage;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum Texture {
     Color(U8Color),
     Image(Arc<RTWImage>),
+}
+
+impl std::hash::Hash for Texture {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            Texture::Color(u8_color) => {
+                u8_color.hash(state);
+            }
+            Texture::Image(rtwimage) => Arc::as_ptr(rtwimage).hash(state),
+        }
+    }
+}
+
+impl Eq for Texture {}
+
+impl PartialEq for Texture {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Color(l0), Self::Color(r0)) => l0 == r0,
+            (Self::Image(l0), Self::Image(r0)) => Arc::ptr_eq(l0, r0),
+            _ => false,
+        }
+    }
 }
 lazy_static! {
     pub static ref LUT_TABLE_FLOAT: [f32; 256] = Texture::linear_lut();

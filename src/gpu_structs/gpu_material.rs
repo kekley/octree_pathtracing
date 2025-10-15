@@ -1,18 +1,35 @@
+use std::hash::Hash;
+
 use bytemuck::{Pod, Zeroable};
 
 use crate::textures::material::Material;
 
 #[repr(C, align(16))]
-#[derive(Copy, Clone, Pod, Zeroable)]
+#[derive(Copy, Clone, Pod, Zeroable, PartialEq)]
 pub struct GPUMaterial {
-    ior: f32,
-    specular: f32,
-    emittance: f32,
-    roughness: f32,
-    metalness: f32,
-    texture_index: u32,
-    tint_index: u32,
-    flags: u32,
+    pub(crate) ior: f32,
+    pub(crate) specular: f32,
+    pub(crate) emittance: f32,
+    pub(crate) roughness: f32,
+    pub(crate) metalness: f32,
+    pub(crate) texture_index: u32,
+    pub(crate) tint_index: u32,
+    pub(crate) flags: u32,
+}
+
+impl Eq for GPUMaterial {}
+
+impl Hash for GPUMaterial {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.ior.to_bits().hash(state);
+        self.specular.to_bits().hash(state);
+        self.emittance.to_bits().hash(state);
+        self.roughness.to_bits().hash(state);
+        self.metalness.to_bits().hash(state);
+        self.texture_index.hash(state);
+        self.tint_index.hash(state);
+        self.flags.hash(state);
+    }
 }
 
 impl GPUMaterial {

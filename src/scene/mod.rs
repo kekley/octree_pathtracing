@@ -166,31 +166,6 @@ pub struct SceneBuilder {
     pub branch_count: Option<u32>,
 }
 
-impl ModelBuilder {
-    pub fn build(&self, octree: Octree) -> Scene {
-        Scene {
-            sun: Sun::new(
-                PI / 2.5,
-                PI / 3.0,
-                0.03,
-                Vec4::splat(1.0),
-                Texture::Color(U8Color::new(25, 25, 25, 25)),
-                true,
-                false,
-                Vec3A::splat(1.0),
-            ),
-            sun_sampling_strategy: SunSamplingStrategy::IMPORTANCE,
-            emitter_sampling_strategy: EmitterSamplingStrategy::NONE,
-            emitters_enabled: false,
-            emmitter_intensity: 13.0,
-            f_sub_surface: 0.3,
-            quads: todo!(),
-            materials: todo!(),
-            octree,
-        }
-    }
-}
-
 impl Scene {
     pub const SKY_COLOR: Vec4 = Vec4::new(0.5, 0.7, 1.0, 1.0);
 

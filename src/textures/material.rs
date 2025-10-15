@@ -126,6 +126,6 @@ impl Material {
 
 impl Default for Material {
     fn default() -> Self {
-        Material::builder().build()
+        todo!()
     }
 }
