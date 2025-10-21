@@ -99,6 +99,9 @@ pub struct ModelBuilder {
     resources: ResourceLoader,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct ModelHandle(pub(crate) usize);
+
 impl ModelBuilder {
     pub fn new(resources: ResourceLoader) -> Self {
         Self {
@@ -107,8 +110,16 @@ impl ModelBuilder {
             textures: Default::default(),
         }
     }
-    pub fn try_add_model_from_mapped_state(&mut self, mapped_state_str: &str) -> Option<usize> {
+    pub fn try_add_model_from_mapped_state(
+        &mut self,
+        mapped_state_str: &str,
+    ) -> Option<ModelHandle> {
         self.load_model_for_mapped_state(mapped_state_str)
+            .map(|index| ModelHandle(index))
+    }
+
+    pub fn get_intermediate_model_data(&self, handle: ModelHandle) -> &ModelData {
+        self.model_data.get(handle.0).unwrap()
     }
 
     pub fn build(&self) -> BuiltModels {
