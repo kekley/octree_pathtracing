@@ -11,7 +11,7 @@ use crate::colors::{F32Color, U8Color};
 
 use super::rtw_image::RTWImage;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum Texture {
     Color(U8Color),
     Image(Arc<RTWImage>),

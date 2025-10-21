@@ -3,7 +3,12 @@ use crate::gpu_structs::{
     gpu_material::GPUMaterial,
     model::{Model, ModelFlags},
 };
-use std::{hash::Hash, mem::MaybeUninit, sync::Arc, u16};
+use std::{
+    hash::Hash,
+    mem::MaybeUninit,
+    sync::{Arc, Once},
+    u16,
+};
 
 use glam::Mat4;
 use glam::{Quat, Vec2, Vec3A};
@@ -74,6 +79,7 @@ pub type ModelID = u32;
 pub const UNIT_BLOCK_MIN: Vec3A = Vec3A::splat(-0.5);
 pub const UNIT_BLOCK_MAX: Vec3A = Vec3A::splat(0.5);
 
+#[derive(Debug)]
 pub struct FinalizedBlockModel<'a> {
     textures: HashMap<&'a str, &'a str>,
     elements: Vec<Element<'a>>,
@@ -115,7 +121,7 @@ impl ModelBuilder {
         mapped_state_str: &str,
     ) -> Option<ModelHandle> {
         self.load_model_for_mapped_state(mapped_state_str)
-            .map(|index| ModelHandle(index))
+            .map(ModelHandle)
     }
 
     pub fn get_intermediate_model_data(&self, handle: ModelHandle) -> &ModelData {
@@ -283,31 +289,29 @@ impl ModelBuilder {
                 }
             });
 
-        let mut matrices_uninit: Vec<MaybeUninit<Mat4>> =
-            vec![MaybeUninit::uninit(); unique_matrices.len()];
+        let mut unsorted_matrices = unique_matrices.into_iter().collect::<Vec<_>>();
+        unsorted_matrices.sort_by_key(|(_, i)| *i);
 
-        unique_matrices.iter().for_each(|(mat, index)| {
-            matrices_uninit[*index as usize].write(*mat.to_mat4_ref());
-        });
-        let matrices: Vec<Mat4> = unsafe { std::mem::transmute(matrices_uninit) };
+        let matrices = unsorted_matrices
+            .into_iter()
+            .map(|(mat, _)| mat.to_mat4())
+            .collect::<Vec<_>>();
 
-        let mut materials_uninit: Vec<MaybeUninit<GPUMaterial>> =
-            vec![MaybeUninit::uninit(); unique_materials.len()];
+        let mut unsorted_materials = unique_materials.into_iter().collect::<Vec<_>>();
+        unsorted_materials.sort_by_key(|(_, i)| *i);
 
-        unique_materials.iter().for_each(|(mat, index)| {
-            materials_uninit[*index as usize].write(*mat);
-        });
+        let materials: Vec<GPUMaterial> = unsorted_materials
+            .into_iter()
+            .map(|(material, _)| material)
+            .collect::<Vec<_>>();
 
-        let materials: Vec<GPUMaterial> = unsafe { std::mem::transmute(materials_uninit) };
+        let mut unsorted_textures = texture_index_map.into_iter().collect::<Vec<_>>();
+        unsorted_textures.sort_by_key(|(_, i)| *i);
 
-        let mut textures_uninit: Vec<MaybeUninit<Texture>> =
-            vec![MaybeUninit::uninit(); texture_index_map.len()];
-
-        texture_index_map.iter().for_each(|(tex, index)| {
-            textures_uninit[*index as usize].write(tex.clone());
-        });
-
-        let textures: Vec<Texture> = unsafe { std::mem::transmute(textures_uninit) };
+        let textures = unsorted_textures
+            .into_iter()
+            .map(|(texture, _)| texture)
+            .collect::<Vec<_>>();
 
         BuiltModels {
             models,
@@ -447,18 +451,38 @@ impl ModelBuilder {
         resources: &'a ResourceLoader,
     ) -> Option<FinalizedBlockModel<'a>> {
         let mut current_model = model;
+        let mut elements = if model.get_elements().is_empty() {
+            None
+        } else {
+            Some(model.get_elements())
+        };
+        println!("elements: {elements:?}");
         let mut final_texture_map = current_model.get_textures().clone();
 
         let finalized_model: FinalizedBlockModel;
 
         loop {
             if let Some(parent_model_location) = current_model.get_parent() {
-                current_model = resources.get_block_model(parent_model_location)?;
+                let parent_model = if parent_model_location.split_once(":").is_some() {
+                    resources.get_block_model(parent_model_location).unwrap()
+                } else {
+                    let mut namespace_added = String::new();
+                    namespace_added.push_str("minecraft:");
+                    namespace_added.push_str(parent_model_location);
+
+                    resources.get_block_model(&namespace_added).unwrap()
+                };
+
+                current_model = parent_model;
+                if elements.is_none() && !current_model.get_elements().is_empty() {
+                    elements = Some(current_model.get_elements());
+                }
+
                 final_texture_map.extend(current_model.get_textures());
             } else {
                 finalized_model = FinalizedBlockModel {
                     textures: final_texture_map,
-                    elements: current_model.get_elements().to_vec(),
+                    elements: elements?.to_vec(),
                 };
                 break;
             };
@@ -473,8 +497,11 @@ impl ModelBuilder {
             return None;
         };
 
+        println!("variant found");
+
         match model_result {
             ModelResult::SingleModel(items) => {
+                println!("single model");
                 //TODO this would be a random model every instance of the block. might not
                 //implement this
 
@@ -484,9 +511,13 @@ impl ModelBuilder {
 
                 let model_location = block_model_info.get_resource_path();
 
+                println!("looking for model: {model_location}");
                 let block_model = resources.get_block_model(model_location)?;
+                println!("got block model");
 
                 let finalized_model = Self::try_finalize_block_model(block_model, resources)?;
+
+                println!("got finalized model: {finalized_model:?}");
 
                 let elements = finalized_model.get_elements();
 
@@ -503,6 +534,7 @@ impl ModelBuilder {
 
                 let index = self.model_data.len();
                 self.model_data.push(model_data);
+                println!("returning from model loading!");
                 Some(index)
             }
 
@@ -748,7 +780,10 @@ impl ModelBuilder {
                 materials[index] = new_material;
             }
 
-            Some(ModelData::SimpleAABB { uvs, materials })
+            Some(ModelData::SimpleAABB {
+                uvs,
+                materials: materials.into(),
+            })
         }
     }
 
@@ -839,9 +874,7 @@ impl ModelBuilder {
         variable: &'a str,
     ) -> Option<&'a str> {
         let mut current_var = variable;
-        if !variable.starts_with("#") {
-            return Some(variable);
-        }
+
         //Texture variables can point to other texture variables, return when we get to the actual
         //resource path
         loop {
@@ -862,14 +895,16 @@ pub enum ModelType {
     Complex,
 }
 
-enum ModelData {
+#[derive(Debug)]
+pub enum ModelData {
     SimpleAABB {
         uvs: [Vec2; 12],
-        materials: [Material; 6],
+        materials: Box<[Material; 6]>,
     },
     Cuboids(Vec<CuboidData>),
 }
 
+#[derive(Debug)]
 struct CuboidData {
     matrix: Option<Mat4>,
     flags: CuboidFlags,
