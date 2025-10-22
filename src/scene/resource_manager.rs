@@ -3,12 +3,7 @@ use crate::gpu_structs::{
     gpu_material::GPUMaterial,
     model::{Model, ModelFlags},
 };
-use std::{
-    hash::Hash,
-    mem::MaybeUninit,
-    sync::{Arc, Once},
-    u16,
-};
+use std::{hash::Hash, sync::Arc, u16};
 
 use glam::Mat4;
 use glam::{Quat, Vec2, Vec3A};
@@ -526,6 +521,7 @@ impl ModelBuilder {
                 let mut model_data = Self::finalized_block_model_to_model_data(
                     &finalized_model,
                     &mut self.textures,
+                    resources,
                 )?;
 
                 Self::apply_uv_lock(&mut model_data, block_model_info);
@@ -563,6 +559,7 @@ impl ModelBuilder {
                         let cuboids = Self::finalized_model_to_cuboids_only(
                             &finalized_model,
                             &mut self.textures,
+                            resources,
                         );
 
                         let mut model_data = ModelData::Cuboids(cuboids);
@@ -715,6 +712,7 @@ impl ModelBuilder {
     fn finalized_model_to_cuboids_only(
         model: &FinalizedBlockModel,
         loaded_textures: &mut HashMap<String, Texture>,
+        resources: &ResourceLoader,
     ) -> Vec<CuboidData> {
         let FinalizedBlockModel {
             textures: texture_map,
@@ -723,13 +721,16 @@ impl ModelBuilder {
 
         elements
             .iter()
-            .map(|element| Self::block_element_to_cuboid(element, texture_map, loaded_textures))
+            .map(|element| {
+                Self::block_element_to_cuboid(element, texture_map, loaded_textures, resources)
+            })
             .collect::<Vec<_>>()
     }
 
     fn finalized_block_model_to_model_data(
         model: &FinalizedBlockModel,
         loaded_textures: &mut HashMap<String, Texture>,
+        resources: &ResourceLoader,
     ) -> Option<ModelData> {
         let FinalizedBlockModel {
             textures: texture_map,
@@ -747,51 +748,86 @@ impl ModelBuilder {
         if element_count > 1 || !element_is_aabb(&elements[0]) {
             let cuboids = elements
                 .iter()
-                .map(|element| Self::block_element_to_cuboid(element, texture_map, loaded_textures))
+                .map(|element| {
+                    Self::block_element_to_cuboid(element, texture_map, loaded_textures, resources)
+                })
                 .collect::<Vec<_>>();
             Some(ModelData::Cuboids(cuboids))
         } else {
             let element = &elements[0];
 
-            let mut materials = [const { Material::AIR }; 6];
-
-            let mut uvs = [Vec2::default(); 12];
-
-            for face in element.get_faces() {
-                let name = face.get_name();
-                let index = name as usize;
-                let uv = face.get_uv();
-                let x_uv = Vec2::new(uv[0], uv[1]);
-                let y_uv = Vec2::new(uv[2], uv[3]);
-                uvs[index * 2] = x_uv;
-                uvs[index * 2 + 1] = y_uv;
-
-                let texture_variable = face.get_texture();
-                let texture_path =
-                    Self::resolve_texture_variable_to_path(texture_map, texture_variable).unwrap();
-
-                let texture = loaded_textures.entry_ref(texture_path).or_insert_with(|| {
-                    let image = Arc::new(RTWImage::load(texture_path).unwrap());
-                    Texture::Image(image)
-                });
-
-                let new_material = Material::builder().albedo(texture.clone()).build();
-
-                materials[index] = new_material;
-            }
-
             Some(ModelData::SimpleAABB {
-                uvs,
-                materials: materials.into(),
+                uvs: Self::get_uvs_from_element(element),
+                materials: Self::get_materials_from_element(
+                    element,
+                    texture_map,
+                    loaded_textures,
+                    resources,
+                )
+                .into(),
             })
         }
     }
 
-    fn block_element_to_cuboid(
+    fn get_uvs_from_element(element: &Element<'_>) -> [Vec2; 12] {
+        let mut uvs = [Vec2::default(); 12];
+
+        for face in element.get_faces() {
+            let name = face.get_name();
+            let index = name as usize;
+            let uv = face.get_uv();
+            let x_uv = Vec2::new(uv[0], uv[1]);
+            let y_uv = Vec2::new(uv[2], uv[3]);
+            uvs[index * 2] = x_uv;
+            uvs[index * 2 + 1] = y_uv;
+        }
+
+        uvs
+    }
+
+    fn get_flags_from_element(element: &Element<'_>) -> CuboidFlags {
+        let mut flags = CuboidFlags::empty();
+        for face in element.get_faces() {
+            let name = face.get_name();
+            flags |= CuboidFlags::from(name);
+        }
+        flags
+    }
+
+    fn get_materials_from_element(
         element: &Element<'_>,
         texture_map: &HashMap<&str, &str>,
         loaded_textures: &mut HashMap<String, Texture>,
-    ) -> CuboidData {
+        resources: &ResourceLoader,
+    ) -> [Material; 6] {
+        let mut materials = [const { Material::AIR }; 6];
+
+        for face in element.get_faces() {
+            let name = face.get_name();
+            let index = name as usize;
+
+            let texture_variable = face.get_texture();
+            let texture_path =
+                Self::resolve_texture_variable(texture_map, texture_variable).unwrap();
+
+            let texture = loaded_textures.entry_ref(texture_path).or_insert_with(|| {
+                let texture_data = resources
+                    .get_texture_data(texture_path)
+                    .expect("Texture data not found");
+                let image = Arc::new(
+                    RTWImage::load_from_memory(texture_data).expect("Faild to create RTWImage"),
+                );
+                Texture::Image(image)
+            });
+
+            let new_material = Material::builder().albedo(texture.clone()).build();
+
+            materials[index] = new_material;
+        }
+        materials
+    }
+
+    fn get_matrix_from_element(element: &Element<'_>) -> Option<Mat4> {
         let min: Vec3A = Vec3A::from_array(element.get_from());
         let max: Vec3A = Vec3A::from_array(element.get_to());
         let scaled_shifted_from = (min / 16.0) - 0.5;
@@ -828,61 +864,47 @@ impl ModelBuilder {
         };
         let final_matrix = translation_matrix * rotation_matrix * scale_matrix;
 
-        let mut flags = CuboidFlags::empty();
-        let mut materials = [const { Material::AIR }; 6];
-        let mut uvs = [Vec2::default(); 12];
-
-        for face in element.get_faces() {
-            let name = face.get_name();
-            let index = name as usize;
-            flags |= CuboidFlags::from(name);
-            let uv = face.get_uv();
-            let x_uv = Vec2::new(uv[0], uv[1]);
-            let y_uv = Vec2::new(uv[2], uv[3]);
-
-            uvs[index * 2] = x_uv;
-            uvs[index * 2 + 1] = y_uv;
-
-            let texture_variable = face.get_texture();
-            let texture_path =
-                Self::resolve_texture_variable_to_path(texture_map, texture_variable).unwrap();
-
-            let texture = loaded_textures.entry_ref(texture_path).or_insert_with(|| {
-                let image = Arc::new(RTWImage::load(texture_path).unwrap());
-                Texture::Image(image)
-            });
-
-            let new_material = Material::builder().albedo(texture.clone()).build();
-
-            materials[index] = new_material;
-        }
-
-        CuboidData {
-            matrix: if final_matrix == Mat4::IDENTITY {
-                None
-            } else {
-                Some(final_matrix)
-            },
-            flags,
-            uvs,
-            materials,
+        if final_matrix == Mat4::IDENTITY {
+            None
+        } else {
+            Some(final_matrix)
         }
     }
 
-    fn resolve_texture_variable_to_path<'a>(
+    fn block_element_to_cuboid(
+        element: &Element<'_>,
+        texture_map: &HashMap<&str, &str>,
+        loaded_textures: &mut HashMap<String, Texture>,
+        resources: &ResourceLoader,
+    ) -> CuboidData {
+        CuboidData {
+            matrix: Self::get_matrix_from_element(element),
+            flags: Self::get_flags_from_element(element),
+            uvs: Self::get_uvs_from_element(element),
+            materials: Self::get_materials_from_element(
+                element,
+                texture_map,
+                loaded_textures,
+                resources,
+            ),
+        }
+    }
+
+    fn resolve_texture_variable<'a>(
         texture_map: &'a HashMap<&str, &str>,
         variable: &'a str,
     ) -> Option<&'a str> {
-        let mut current_var = variable;
+        println!("looking up texture: {variable}");
+        let mut current_var = variable.strip_prefix("#").unwrap();
 
         //Texture variables can point to other texture variables, return when we get to the actual
         //resource path
         loop {
-            let result = texture_map.get(&current_var)?;
+            let result = texture_map.get(&current_var).unwrap();
 
             if result.starts_with("#") {
                 //variable
-                current_var = result.strip_prefix("#")?;
+                current_var = result.strip_prefix("#").unwrap();
             } else {
                 return Some(result);
             }
