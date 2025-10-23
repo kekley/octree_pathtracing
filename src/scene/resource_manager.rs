@@ -19,6 +19,7 @@ use spider_eye::{
     resource_loader::ResourceLoader,
 };
 
+///Struct for getting around the fact that floats do not implement ``Hash`` or ``Eq``
 #[derive(Debug, Clone)]
 struct Mat4Wrapper {
     data: Mat4,
@@ -80,12 +81,13 @@ pub struct FinalizedBlockModel<'a> {
     elements: Vec<Element<'a>>,
 }
 
-impl FinalizedBlockModel<'_> {
-    pub fn get_elements(&self) -> &[Element] {
+impl<'strings> FinalizedBlockModel<'strings> {
+    pub fn get_elements(&self) -> &[Element<'strings>] {
         &self.elements
     }
 }
 
+///Model data that can be serialized to send to the gpu
 pub struct BuiltModels {
     models: Vec<Model>,
     cuboids: Vec<Cuboid>,
@@ -100,6 +102,7 @@ pub struct ModelBuilder {
     resources: ResourceLoader,
 }
 
+///A handle for accessing a model's data before calling .build() on the builder
 #[derive(Debug, Clone, Copy)]
 pub struct ModelHandle(pub(crate) usize);
 
