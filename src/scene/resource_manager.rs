@@ -11,13 +11,22 @@ use hashbrown::HashMap;
 use spider_eye::{
     block_model::borrow::BlockModel,
     block_state::{
-        borrow::{BlockModelInfo, ModelResult},
+        borrow::{BlockModelInfo, BlockstateType},
         common::BlockRotation,
     },
     element::borrow::Element,
     face::common::{face_name::FaceName, rotation::Axis},
-    resource_loader::ResourceLoader,
+    resource_loader::{BlockstateLookupError, ResourceLoader},
 };
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum ModelLoadingError {
+    #[error("Error when looking up blockstate: {0}")]
+    BlockStateLookupError(#[from] BlockstateLookupError),
+    #[error("Model fetch returned None. Location:{0}")]
+    ModelNotFound(String),
+}
 
 ///Struct for getting around the fact that floats do not implement ``Hash`` or ``Eq``
 #[derive(Debug, Clone)]
@@ -117,7 +126,7 @@ impl ModelBuilder {
     pub fn try_add_model_from_mapped_state(
         &mut self,
         mapped_state_str: &str,
-    ) -> Option<ModelHandle> {
+    ) -> Result<ModelHandle, ModelLoadingError> {
         self.load_model_for_mapped_state(mapped_state_str)
             .map(ModelHandle)
     }
@@ -427,7 +436,7 @@ impl ModelBuilder {
             }
         }
     }
-    pub fn create_model_matrix(block_model_info: &BlockModelInfo) -> Option<Mat4> {
+    fn create_model_matrix(block_model_info: &BlockModelInfo) -> Option<Mat4> {
         let block_x_rotation = block_model_info.get_block_rotation_x();
         let block_y_rotation = block_model_info.get_block_rotation_y();
 
@@ -447,7 +456,7 @@ impl ModelBuilder {
     fn try_finalize_block_model<'a>(
         model: &'a BlockModel<'a>,
         resources: &'a ResourceLoader,
-    ) -> Option<FinalizedBlockModel<'a>> {
+    ) -> Result<FinalizedBlockModel<'a>, ModelLoadingError> {
         let mut current_model = model;
         let mut elements = if model.get_elements().is_empty() {
             None
@@ -488,17 +497,17 @@ impl ModelBuilder {
         Some(finalized_model)
     }
 
-    fn load_model_for_mapped_state(&mut self, mapped_state_str: &str) -> Option<usize> {
+    fn load_model_for_mapped_state(
+        &mut self,
+        mapped_state_str: &str,
+    ) -> Result<usize, ModelLoadingError> {
         let resources = &self.resources;
-        let Some(model_result) = resources.get_model_for_mapped_state(mapped_state_str) else {
-            eprintln!("No variants for {}", mapped_state_str);
-            return None;
-        };
+        let blockstate_type = resources.get_blockstates_for_mapped_state(mapped_state_str)?;
 
         println!("variant found");
 
-        match model_result {
-            ModelResult::SingleModel(items) => {
+        match blockstate_type {
+            BlockstateType::SingleModel(items) => {
                 println!("single model");
                 //TODO this would be a random model every instance of the block. might not
                 //implement this
@@ -510,7 +519,9 @@ impl ModelBuilder {
                 let model_location = block_model_info.get_resource_path();
 
                 println!("looking for model: {model_location}");
-                let block_model = resources.get_block_model(model_location)?;
+                let block_model = resources
+                    .get_block_model(model_location)
+                    .ok_or(ModelLoadingError::ModelNotFound(model_location.to_string()))?;
                 println!("got block model");
 
                 let finalized_model = Self::try_finalize_block_model(block_model, resources)?;
@@ -537,7 +548,7 @@ impl ModelBuilder {
                 Some(index)
             }
 
-            ModelResult::Multipart(model_infos) => {
+            BlockstateType::Multipart(model_infos) => {
                 let first_entries = model_infos
                     .iter()
                     .map(|slice_of_models| {

@@ -10,7 +10,6 @@ stb_image = "0.3.0"
 spider_eye = { path = "../mc_utils" }
 glam = { version = "0.30.5", features = ["bytemuck"] }
 bitflags = "2.9.1"
-anyhow = "1.0.95"
 num-traits = "0.2.19"
 dashmap = "6.1.0"
 fxhash = "0.2.1"
@@ -28,6 +27,8 @@ egui-wgpu = "0.31.1"
 rand_distr = "0.5.1"
 parking_lot = "0.12.4"
 rfd = "0.15.3"
+tracing = "0.1.41"
+thiserror = "2.0.17"
 
 
 [profile.release-with-debug]

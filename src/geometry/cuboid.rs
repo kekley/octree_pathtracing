@@ -30,7 +30,7 @@ impl Face {
 }
 
 impl TryFrom<u32> for Face {
-    type Error = anyhow::Error;
+    type Error = ();
 
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         match value {
@@ -40,7 +40,7 @@ impl TryFrom<u32> for Face {
             3 => Ok(Face::Top),
             4 => Ok(Face::North),
             5 => Ok(Face::South),
-            _ => Err(anyhow::Error::msg(value)),
+            _ => Err(()),
         }
     }
 }
