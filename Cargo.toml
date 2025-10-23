@@ -7,7 +7,7 @@ rust-version = "1.88.0"
 [dependencies]
 rayon = "1.10.0"
 stb_image = "0.3.0"
-spider_eye = { path = "../spider_eye" }
+spider_eye = { path = "../mc_utils" }
 glam = { version = "0.30.5", features = ["bytemuck"] }
 bitflags = "2.9.1"
 anyhow = "1.0.95"
