@@ -6,13 +6,13 @@ use std::{
 
 use aovec::Aovec;
 use glam::I64Vec3;
-use rayon::iter::ParallelIterator;
-use spider_eye::{
+use mc_utils::{
     chunk::Chunk,
     coords::{block::BlockCoords, chunk::ChunkCoords, region::RegionCoords},
     loaded_world::World,
     region::LazyRegion,
 };
+use rayon::iter::ParallelIterator;
 
 use std::{fmt::Debug, hash::Hash};
 

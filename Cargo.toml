@@ -1,13 +1,12 @@
 [package]
-name = "ray_tracing"
+name = "octree_pathtracing"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.88.0"
 
 [dependencies]
 rayon = "1.10.0"
 stb_image = "0.3.0"
-spider_eye = { path = "../spider_eye" }
+mc_utils = { path = "../mc_utils" }
 glam = { version = "0.30.5", features = ["bytemuck"] }
 bitflags = "2.9.1"
 anyhow = "1.0.95"

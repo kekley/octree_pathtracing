@@ -8,7 +8,7 @@ use std::{hash::Hash, sync::Arc, u16};
 use glam::Mat4;
 use glam::{Quat, Vec2, Vec3A};
 use hashbrown::HashMap;
-use spider_eye::{
+use mc_utils::{
     block_model::borrow::BlockModel,
     block_state::{
         borrow::{BlockModelInfo, ModelResult},

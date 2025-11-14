@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use eframe::egui::{self, Button, DragValue, Label, Slider, Window};
-use spider_eye::coords::block::BlockCoords;
+use mc_utils::coords::block::BlockCoords;
 
 use crate::renderer::renderer_trait::RenderingBackend;
 

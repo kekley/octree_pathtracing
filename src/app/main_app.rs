@@ -3,7 +3,7 @@ use eframe::egui::{
     RadioButton, TextureHandle, TextureOptions, Ui, load::SizedTexture,
 };
 use log::info;
-use spider_eye::coords::block::BlockCoords;
+use mc_utils::coords::block::BlockCoords;
 
 use crate::{
     colors::U8Color,
