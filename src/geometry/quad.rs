@@ -1,5 +1,5 @@
 use glam::{Affine3A, Vec2, Vec3A};
-use spider_eye::face::common::face_name::FaceName;
+use mc_utils::face::common::face_name::FaceName;
 
 use crate::{ray::Ray, scene::resource_manager::MaterialID};
 

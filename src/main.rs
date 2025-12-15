@@ -1,15 +1,14 @@
-extern crate ray_tracing;
+extern crate octree_pathtracing;
 
 use eframe::wgpu::{
     self, BackendOptions, Backends, DeviceDescriptor, Features, InstanceDescriptor, InstanceFlags,
     RequestAdapterOptions,
 };
 use egui_wgpu::WgpuSetupExisting;
-use ray_tracing::main_app::Application;
+use octree_pathtracing::main_app::Application;
 pub const ASPECT_RATIO: f32 = 1.5;
 
 fn main() -> Result<(), ()> {
-    //face_id_test();
     ui().unwrap();
     Ok(())
 }

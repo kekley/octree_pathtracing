@@ -393,7 +393,7 @@ impl Sun {
         if a >= 0.0 && a < width2 {
             let b = PI / 2.0 - direction.dot(self.sv).acos() + width;
             if b >= 0.0 && b < width2 {
-                ray.hit.color = self.texture.value(a / width2, b / width2, &Vec3A::ZERO);
+                ray.hit.color = self.texture.value(a / width2, b / width2);
                 ray.hit.color.x *= self.apparent_texture_brightness.x * 10.0;
                 ray.hit.color.y *= self.apparent_texture_brightness.y * 10.0;
                 ray.hit.color.z *= self.apparent_texture_brightness.z * 10.0;
@@ -415,7 +415,7 @@ impl Sun {
         if a >= 0.0 && a < width2 {
             let b = PI / 2.0 - direction.dot(self.sv).acos() + width;
             if b >= 0.0 && b < width2 {
-                ray.hit.color = self.texture.value(a / width2, b / width2, &Vec3A::ZERO);
+                ray.hit.color = self.texture.value(a / width2, b / width2);
                 ray.hit.color.x *= self.color.x * 10.0;
                 ray.hit.color.y *= self.color.y * 10.0;
                 ray.hit.color.z *= self.color.z * 10.0;

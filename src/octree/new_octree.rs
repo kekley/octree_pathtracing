@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::{fmt::Debug, sync::Arc, time::Instant};
 
-use spider_eye::{
+use mc_utils::{
     borrow::nbt_compound::RootNBTCompound, chunk::borrow::Chunk, coords::block::BlockCoords,
     owned::nbt_string::NBTString, region::borrow::Region, section::borrow::Section,
 };
@@ -292,7 +292,7 @@ pub fn construct_all() {
 
     let region = Region::from_bytes(
         &bytes,
-        spider_eye::coords::region::RegionCoords { x: 1, z: 0 },
+        mc_utils::coords::region::RegionCoords { x: 1, z: 0 },
     );
 
     let blockstate_map = Arc::new(Mutex::new(HashMap::new()));

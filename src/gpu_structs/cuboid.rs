@@ -1,6 +1,6 @@
 use bitflags::bitflags;
 use bytemuck::{Pod, Zeroable};
-use spider_eye::face::common::face_name::FaceName;
+use mc_utils::face::common::face_name::FaceName;
 
 #[derive(Debug)]
 pub struct CuboidFlags(u32);

@@ -72,7 +72,7 @@ impl Cuboid {
 
     pub fn intersect_texture(ray: &mut Ray, texture: &Texture) -> bool {
         //dbg!(material);
-        let color = texture.value(ray.hit.u.abs(), ray.hit.v.abs(), &ray.at(ray.hit.t));
+        let color = texture.value(ray.hit.u.abs(), ray.hit.v.abs());
         //println!("u:{} ,v: {}", ray.hit.u, ray.hit.v);
         if color.w > Ray::EPSILON {
             ray.hit.color = color;
@@ -92,7 +92,7 @@ impl Cuboid {
     #[inline]
     pub fn intersect_texture_not_transparent(ray: &mut Ray, texture: &Texture) -> bool {
         //dbg!(material);
-        let color = texture.value(ray.hit.u.abs(), ray.hit.v.abs(), &ray.at(ray.hit.t));
+        let color = texture.value(ray.hit.u.abs(), ray.hit.v.abs());
         //println!("u:{} ,v: {}", ray.hit.u, ray.hit.v);
         ray.hit.color = color;
         ray.hit.color.w = 1.0;

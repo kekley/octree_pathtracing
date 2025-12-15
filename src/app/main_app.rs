@@ -3,7 +3,11 @@ use eframe::egui::{
     RadioButton, TextureHandle, TextureOptions, Ui, load::SizedTexture,
 };
 use log::info;
-use spider_eye::coords::block::BlockCoords;
+use mc_utils::{
+    coords::{block::BlockCoords, region::RegionCoords},
+    resource_loader::ResourceLoadError,
+    world::World,
+};
 
 use crate::{
     colors::U8Color,
@@ -23,44 +27,29 @@ use super::{
 pub struct Application {
     status: RendererStatus,
     settings: RenderSettingsWindow,
+    resources: ResourceLoadError,
     world_loading_dialog: WorldLoadingDialog,
     renderer: Box<dyn RenderingBackend>,
     frame_in_flight: Option<Box<dyn FrameInFlight>>,
     render_texture: Option<TextureHandle>,
 }
-/* pub fn load_world() -> (ModelManager, Scene) {
-    let model_manager = ModelManager::new();
-    let minecraft_loader = &model_manager.resource_loader;
-    let world = minecraft_loader
-        .open_world("./assets/worlds/test_world")
-        .unwrap();
 
-    let f = |position: UVec3| -> Option<ResourceModel> {
-        let UVec3 { x, y, z } = position;
-        //println!("position: {}", position);
-        let block = world.get_block(&WorldCoords {
-            x: (x as i64),
-            y: (y as i64 - 30),
-            z: (z as i64),
-        });
-        if let Some(block) = block {
-            let model = model_manager.load_resource(&block);
-            if let Some(model) = model {
-                return Some(model);
-            } else {
-                return None;
-            }
-        } else {
-            None
-        }
-    };
-    let tree: Octree<ResourceModel> = Octree::construct_parallel(8, &f);
-    dbg!(tree.octants.len());
-    let scene = model_manager.build(tree);
-    //println!("{:?}", tree);
-    (model_manager, scene)
-} */
+/*
+ * notes:
+ * avoid loading too many chunks at once
+ *
+ * start at `depth`, iterate each node, recurse until we can start loading regions into octrees
+ * merge those octrees, move to next node...
+ *
+ * */
 pub fn load_world_2(path: &str, origin: &BlockCoords, depth: u8) -> Scene {
+    let world = World::new(path).unwrap();
+    let origin_region = RegionCoords::from(*origin);
+    let world_size = 2_u64.pow(depth as u32);
+    let world_extent = world_size / 2;
+
+    loop {}
+
     todo!()
 }
 impl Default for Application {
@@ -72,6 +61,7 @@ impl Default for Application {
             frame_in_flight: None,
             settings: Default::default(),
             world_loading_dialog: Default::default(),
+            resources: todo!(),
         }
     }
 }

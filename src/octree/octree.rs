@@ -1,13 +1,13 @@
 use std::{array, fmt::Debug, hash::Hash, mem};
 
 use glam::{I64Vec3, UVec3};
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use spider_eye::{
+use mc_utils::{
     chunk::Chunk,
     coords::{block::BlockCoords, chunk::ChunkCoords, region::RegionCoords},
     loaded_world::World,
     region::LazyRegion,
 };
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::scene::resource_manager::{ModelManager, ResourceModel};
 
