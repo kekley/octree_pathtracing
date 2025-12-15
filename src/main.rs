@@ -8,7 +8,7 @@ use egui_wgpu::WgpuSetupExisting;
 use ray_tracing::main_app::Application;
 pub const ASPECT_RATIO: f32 = 1.5;
 
-fn main() -> Result<(), anyhow::Error> {
+fn main() -> Result<(), ()> {
     //face_id_test();
     ui().unwrap();
     Ok(())

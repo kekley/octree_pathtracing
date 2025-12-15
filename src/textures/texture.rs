@@ -61,7 +61,7 @@ impl Texture {
         lut
     }
 
-    pub fn value(&self, u: f32, v: f32, point: &Vec3A) -> Vec4 {
+    pub fn value(&self, u: f32, v: f32) -> Vec4 {
         match self {
             Texture::Color(color) => {
                 let color = F32Color::from(color);

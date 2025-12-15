@@ -3,7 +3,7 @@ use crate::gpu_structs::{
     gpu_material::GPUMaterial,
     model::{Model, ModelFlags},
 };
-use std::{hash::Hash, sync::Arc, u16};
+use std::{hash::Hash, sync::Arc};
 
 use glam::Mat4;
 use glam::{Quat, Vec2, Vec3A};
@@ -19,13 +19,18 @@ use spider_eye::{
     resource_loader::{BlockstateLookupError, ResourceLoader},
 };
 use thiserror::Error;
+use tracing::{Level, event, instrument};
 
 #[derive(Debug, Error)]
 pub enum ModelLoadingError {
     #[error("Error when looking up blockstate: {0}")]
     BlockStateLookupError(#[from] BlockstateLookupError),
-    #[error("Model fetch returned None. Location:{0}")]
+    #[error("Model fetch returned None. Location: {0}")]
     ModelNotFound(String),
+    #[error("Final model did not have any elements model:{0}")]
+    NoElements(String),
+    #[error("Variant data was not valid")]
+    InvalidVariant(String),
 }
 
 ///Struct for getting around the fact that floats do not implement ``Hash`` or ``Eq``
@@ -105,6 +110,7 @@ pub struct BuiltModels {
     textures: Vec<Texture>,
 }
 
+#[derive(Debug)]
 pub struct ModelBuilder {
     model_data: Vec<ModelData>,
     textures: HashMap<String, Texture>,
@@ -128,21 +134,25 @@ impl ModelBuilder {
         mapped_state_str: &str,
     ) -> Result<ModelHandle, ModelLoadingError> {
         self.load_model_for_mapped_state(mapped_state_str)
-            .map(ModelHandle)
     }
 
     pub fn get_intermediate_model_data(&self, handle: ModelHandle) -> &ModelData {
-        self.model_data.get(handle.0).unwrap()
+        self.model_data
+            .get(handle.0)
+            .expect("Model handle should have come from this builder and therefore be valid")
     }
 
     pub fn build(&self) -> BuiltModels {
+        //Create hashmaps to avoid duplicating matrix and material data
         let mut unique_matrices: HashMap<Mat4Wrapper, u32> =
             HashMap::with_capacity(self.model_data.len());
-        let mut cuboids = Vec::with_capacity(self.model_data.len());
         let mut unique_materials: HashMap<GPUMaterial, u32> =
             HashMap::with_capacity(self.model_data.len());
+
+        let mut cuboids = Vec::with_capacity(self.model_data.len());
         let mut models = Vec::with_capacity(self.model_data.len());
 
+        //Give each unique texture currently loaded an index
         let num_textures = self.textures.len();
         let texture_index_map = self
             .textures
@@ -151,10 +161,16 @@ impl ModelBuilder {
             .zip(0..num_textures)
             .collect::<HashMap<Texture, usize>>();
 
+        //Take all our model data and process it into a  ``Cuboid``
         self.model_data
             .iter()
             .for_each(|model_data| match model_data {
                 ModelData::SimpleAABB { uvs, materials } => {
+                    //Model is a single axis aligned cuboid, therefore we only need to store the
+                    //texture uvs and material data for each face
+
+                    //Get (or insert) the indices of our materials and create an array with those
+                    //indices
                     let material_ids = materials
                         .iter()
                         .map(|mat| {
@@ -168,6 +184,7 @@ impl ModelBuilder {
                                 texture,
                                 tint_index,
                             } = mat;
+
                             let texture_index = *texture_index_map
                                 .get(texture)
                                 .expect("Texture hash lookup failed")
@@ -194,6 +211,7 @@ impl ModelBuilder {
                         .try_into()
                         .unwrap();
 
+                    //Our AABB model is a single cuboid with no rotation/scaling matrix
                     let cuboid = Cuboid {
                         flags: CuboidFlags::ALL_FACES.bits(),
                         matrix_id: 0,
@@ -214,6 +232,8 @@ impl ModelBuilder {
 
                     models.push(model);
                 }
+
+                //Model cannot be represented by a single AABB, we need matrices
                 ModelData::Cuboids(cuboid_datas) => {
                     let cuboid_start_index = cuboids.len() as u32;
                     let cuboid_len = cuboid_datas.len() as u32;
@@ -257,7 +277,7 @@ impl ModelBuilder {
                             })
                             .collect::<Vec<_>>()
                             .try_into()
-                            .unwrap();
+                            .expect("Materials array should always be of size 6");
 
                         let CuboidData {
                             matrix,
@@ -265,6 +285,7 @@ impl ModelBuilder {
                             uvs,
                             materials,
                         } = cuboid;
+
                         let matrix_id = if let Some(matrix) = matrix {
                             let matrix_len = unique_matrices.len();
 
@@ -403,7 +424,7 @@ impl ModelBuilder {
                     None
                 }
             }
-            .unwrap();
+            .expect("A face should always have a pair of UVs");
 
             // This logic is derived from observing Minecraft's behavior for all combinations
             // of X and Y rotation on `uvlock`ed blocks like Observers and Dispensers.
@@ -463,7 +484,6 @@ impl ModelBuilder {
         } else {
             Some(model.get_elements())
         };
-        println!("elements: {elements:?}");
         let mut final_texture_map = current_model.get_textures().clone();
 
         let finalized_model: FinalizedBlockModel;
@@ -489,54 +509,66 @@ impl ModelBuilder {
             } else {
                 finalized_model = FinalizedBlockModel {
                     textures: final_texture_map,
-                    elements: elements?.to_vec(),
+                    elements: elements
+                        .ok_or(ModelLoadingError::NoElements(
+                            model.get_parent().unwrap_or("No parent").to_string(),
+                        ))?
+                        .to_vec(),
                 };
                 break;
             };
         }
-        Some(finalized_model)
+        Ok(finalized_model)
     }
 
+    #[instrument]
     fn load_model_for_mapped_state(
         &mut self,
         mapped_state_str: &str,
-    ) -> Result<usize, ModelLoadingError> {
+    ) -> Result<ModelHandle, ModelLoadingError> {
         let resources = &self.resources;
         let blockstate_type = resources.get_blockstates_for_mapped_state(mapped_state_str)?;
 
-        println!("variant found");
-
+        event!(Level::INFO, "Variant found");
         match blockstate_type {
             BlockstateType::SingleModel(items) => {
-                println!("single model");
+                event!(Level::INFO, "Single Model");
                 //TODO this would be a random model every instance of the block. might not
                 //implement this
 
-                let block_model_info = items
-                    .first()
-                    .expect("There should always be at least one model");
+                let Some(block_model_info) = items.first() else {
+                    event!(Level::ERROR, "Blockstate had no models");
+                    return Err(ModelLoadingError::InvalidVariant(
+                        mapped_state_str.to_string(),
+                    ));
+                };
 
                 let model_location = block_model_info.get_resource_path();
 
-                println!("looking for model: {model_location}");
+                event!(Level::DEBUG, "Looking for model: {model_location}");
+
                 let block_model = resources
                     .get_block_model(model_location)
                     .ok_or(ModelLoadingError::ModelNotFound(model_location.to_string()))?;
-                println!("got block model");
+
+                event!(Level::DEBUG, "Found model. Finalizing");
 
                 let finalized_model = Self::try_finalize_block_model(block_model, resources)?;
 
-                println!("got finalized model: {finalized_model:?}");
+                event!(Level::DEBUG, "Finalized model: {finalized_model:?}");
 
                 let elements = finalized_model.get_elements();
 
-                assert!(!elements.is_empty());
+                if elements.is_empty() {
+                    event!(Level::WARN, "No elements in model");
+                    return Err(ModelLoadingError::NoElements(mapped_state_str.to_string()));
+                }
 
                 let mut model_data = Self::finalized_block_model_to_model_data(
                     &finalized_model,
                     &mut self.textures,
                     resources,
-                )?;
+                );
 
                 Self::apply_uv_lock(&mut model_data, block_model_info);
 
@@ -544,18 +576,21 @@ impl ModelBuilder {
 
                 let index = self.model_data.len();
                 self.model_data.push(model_data);
-                println!("returning from model loading!");
-                Some(index)
+                event!(Level::INFO, "Model loaded successfully");
+                Ok(ModelHandle(index))
             }
 
             BlockstateType::Multipart(model_infos) => {
                 let first_entries = model_infos
                     .iter()
                     .map(|slice_of_models| {
-                        slice_of_models
-                            .first()
-                            .expect("The should always be at least one model here")
+                        let first_model = slice_of_models.first() else {
+                            event!(Level::WARN, "Multipart contained no models");
+                            return None;
+                        };
+                        first_model
                     })
+                    .flatten()
                     .collect::<Vec<_>>();
                 let cuboids = first_entries
                     .into_iter()
@@ -564,11 +599,18 @@ impl ModelBuilder {
 
                         let block_model = resources.get_block_model(model_location)?;
 
-                        let finalized_model =
-                            Self::try_finalize_block_model(block_model, resources)?;
+                        let Ok(finalized_model) =
+                            Self::try_finalize_block_model(block_model, resources)
+                        else {
+                            event!(Level::WARN, "Could not finalize model");
+                            return None;
+                        };
                         let elements = finalized_model.get_elements();
 
-                        assert!(!elements.is_empty());
+                        if elements.is_empty() {
+                            event!(Level::WARN, "No elements in model");
+                            return None;
+                        }
 
                         let cuboids = Self::finalized_model_to_cuboids_only(
                             &finalized_model,
@@ -593,7 +635,7 @@ impl ModelBuilder {
 
                 let index = self.model_data.len();
                 self.model_data.push(ModelData::Cuboids(cuboids));
-                Some(index)
+                Ok(ModelHandle(index))
             }
         }
     }
@@ -745,7 +787,7 @@ impl ModelBuilder {
         model: &FinalizedBlockModel,
         loaded_textures: &mut HashMap<String, Texture>,
         resources: &ResourceLoader,
-    ) -> Option<ModelData> {
+    ) -> ModelData {
         let FinalizedBlockModel {
             textures: texture_map,
             elements,
@@ -766,11 +808,11 @@ impl ModelBuilder {
                     Self::block_element_to_cuboid(element, texture_map, loaded_textures, resources)
                 })
                 .collect::<Vec<_>>();
-            Some(ModelData::Cuboids(cuboids))
+            ModelData::Cuboids(cuboids)
         } else {
             let element = &elements[0];
 
-            Some(ModelData::SimpleAABB {
+            ModelData::SimpleAABB {
                 uvs: Self::get_uvs_from_element(element),
                 materials: Self::get_materials_from_element(
                     element,
@@ -779,7 +821,7 @@ impl ModelBuilder {
                     resources,
                 )
                 .into(),
-            })
+            }
         }
     }
 
@@ -941,7 +983,7 @@ pub enum ModelData {
 }
 
 #[derive(Debug)]
-struct CuboidData {
+pub struct CuboidData {
     matrix: Option<Mat4>,
     flags: CuboidFlags,
     uvs: [Vec2; 12],
