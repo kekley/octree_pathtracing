@@ -2,6 +2,7 @@ use eframe::egui::{
     self, Button, Color32, ColorImage, DragValue, Image, ImageData, ImageSource, Label,
     RadioButton, TextureHandle, TextureOptions, Ui, load::SizedTexture,
 };
+use glam::IVec3;
 use log::info;
 use mc_utils::{
     coords::{block::BlockCoords, region::RegionCoords},
@@ -11,6 +12,7 @@ use mc_utils::{
 
 use crate::{
     colors::U8Color,
+    octree::world::Octree,
     renderer::{
         gpu_renderer::GPURenderer,
         renderer_trait::{FrameInFlight, FrameInFlightPoll, RenderingBackend},
@@ -45,13 +47,43 @@ pub struct Application {
 pub fn load_world_2(path: &str, origin: &BlockCoords, depth: u8) -> Scene {
     let world = World::new(path).unwrap();
     let origin_region = RegionCoords::from(*origin);
-    let world_size = 2_u64.pow(depth as u32);
+    let world_size = 2_i64.pow(depth as u32);
     let world_extent = world_size / 2;
 
-    loop {}
+    const LOWEST_Y: i64 = -64;
 
     todo!()
 }
+
+fn recurse(octree: &mut Octree, pos: BlockCoords, depth: u8) -> Option<u32> {
+    let new_parent: Option<u32> = None;
+    let size = 2_i64.pow(depth as u32);
+    (0..8u8).for_each(|child_idx| {
+        let x_offset = size * ((child_idx as i64) & 1);
+
+        let y_offset = size * ((child_idx as i64 >> 1) & 1);
+
+        let z_offset = size * ((child_idx as i64 >> 2) & 1);
+
+        let child_pos = pos.offset(x_offset, y_offset, z_offset);
+
+        match depth as usize {
+            0..9 => {
+                todo!();
+            }
+            9 => {
+                todo!();
+            }
+            _ => {
+                let child_index = recurse(child_pos, depth - 1);
+                let Some(child) = child_index else {
+                    return;
+                };
+            }
+        }
+    });
+}
+
 impl Default for Application {
     fn default() -> Self {
         Self {

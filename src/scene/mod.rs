@@ -133,7 +133,7 @@ use glam::{Vec3, Vec3A, Vec3Swizzles, Vec4, Vec4Swizzles};
 use crate::{
     colors::U8Color,
     geometry::{aabb::UP, quad::Quad},
-    octree::new_octree::Octree,
+    octree::world::Octree,
     random_float,
     ray::{
         Ray,
