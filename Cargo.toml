@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 rayon = "1.10.0"
-stb_image = "0.3.0"
 mc_utils = { path = "../mc_utils" }
 glam = { version = "0.32.1", features = ["bytemuck"] }
 bitflags = "2.9.1"
@@ -28,6 +27,7 @@ parking_lot = "0.12.4"
 rfd = "0.17.2"
 tracing = "0.1.41"
 thiserror = "2.0.17"
+image = "0.25.10"
 
 
 [profile.release-with-debug]

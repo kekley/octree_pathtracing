@@ -79,7 +79,7 @@ impl Hash for Mat4Wrapper {
     }
 }
 
-use crate::textures::{material::Material, rtw_image::RTWImage, texture::Texture};
+use crate::textures::{material::Material, rtw_image::RgbaImage, texture::Texture};
 
 pub type TextureID = u32;
 pub type CuboidID = u32;
@@ -521,7 +521,6 @@ impl ModelBuilder {
         Ok(finalized_model)
     }
 
-    #[instrument]
     fn load_model_for_mapped_state(
         &mut self,
         mapped_state_str: &str,
@@ -871,7 +870,7 @@ impl ModelBuilder {
                     .get_texture_data(texture_path)
                     .expect("Texture data not found");
                 let image = Arc::new(
-                    RTWImage::load_from_memory(texture_data).expect("Faild to create RTWImage"),
+                    RgbaImage::load_from_memory(texture_data).expect("Faild to create RTWImage"),
                 );
                 Texture::Image(image)
             });

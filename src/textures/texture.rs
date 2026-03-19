@@ -9,12 +9,12 @@ use lazy_static::lazy_static;
 
 use crate::colors::{F32Color, U8Color};
 
-use super::rtw_image::RTWImage;
+use super::rtw_image::RgbaImage;
 
 #[derive(Debug, Clone)]
 pub enum Texture {
     Color(U8Color),
-    Image(Arc<RTWImage>),
+    Image(Arc<RgbaImage>),
 }
 
 impl std::hash::Hash for Texture {
