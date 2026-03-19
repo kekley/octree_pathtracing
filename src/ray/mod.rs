@@ -2,7 +2,7 @@ pub mod path_tracer;
 
 use std::f32::consts::PI;
 
-use rand::rngs::StdRng;
+use rand::rngs::ThreadRng;
 
 use glam::{Mat3A, Vec3A, Vec4};
 
@@ -110,7 +110,7 @@ impl Ray {
         self.direction = direction;
         self.inv_dir = inv_dir;
     }
-    pub fn specular_reflection(&self, roughness: f32, rng: &mut StdRng) -> Self {
+    pub fn specular_reflection(&self, roughness: f32, rng: &mut ThreadRng) -> Self {
         let mut tmp = Ray {
             origin: self.origin,
             direction: self.direction,
@@ -183,7 +183,7 @@ impl Ray {
         tmp
     }
 
-    pub fn scatter_normal(&mut self, rng: &mut StdRng) {
+    pub fn scatter_normal(&mut self, rng: &mut ThreadRng) {
         let x1 = random_float(rng);
         let x2 = random_float(rng);
 
@@ -208,7 +208,7 @@ impl Ray {
         self.origin = self.at(Ray::OFFSET);
     }
 
-    pub fn diffuse_reflection(&mut self, ray: &mut Ray, rng: &mut StdRng, scene: &Scene) {
+    pub fn diffuse_reflection(&mut self, ray: &mut Ray, rng: &mut ThreadRng, scene: &Scene) {
         *self = ray.new_from_self();
 
         let normal = self.hit.normal;

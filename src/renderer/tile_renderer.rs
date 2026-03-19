@@ -6,7 +6,7 @@ use std::time::Instant;
 
 use rand::rngs::StdRng;
 
-use rand::{Rng, SeedableRng};
+use rand::{Rng, RngExt as _, SeedableRng};
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 use crate::colors::{F32Color, PixelColor as _, U8Color};
@@ -645,7 +645,7 @@ impl TileRenderer {
     }
 
     pub fn render_tile_replace(tile: &mut Tile, camera: &Camera, scene: &Scene) {
-        let mut rng = StdRng::from_os_rng();
+        let mut rng = rand::rng();
         for y in tile.y0..tile.y1 {
             for x in tile.x0..tile.x1 {
                 let x_normalized =
@@ -689,7 +689,7 @@ impl TileRenderer {
         branch_count: u32,
     ) {
         let time = current_spp as f32 / 100.0;
-        let mut rng = StdRng::from_os_rng();
+        let mut rng = rand::rng();
         for y in tile.y0..tile.y1 {
             for x in tile.x0..tile.x1 {
                 let x_normalized =

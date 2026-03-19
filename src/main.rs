@@ -1,8 +1,8 @@
 extern crate octree_pathtracing;
 
 use eframe::wgpu::{
-    self, BackendOptions, Backends, DeviceDescriptor, Features, InstanceDescriptor, InstanceFlags,
-    RequestAdapterOptions,
+    self, BackendOptions, Backends, DeviceDescriptor, ExperimentalFeatures, Features,
+    InstanceDescriptor, InstanceFlags, RequestAdapterOptions,
 };
 use egui_wgpu::WgpuSetupExisting;
 use octree_pathtracing::main_app::Application;
@@ -22,6 +22,7 @@ fn ui() -> eframe::Result {
             | Backends::SECONDARY,
         flags: InstanceFlags::default(),
         backend_options: BackendOptions::default(),
+        ..Default::default()
     });
 
     let future = instance.request_adapter(&RequestAdapterOptions {
@@ -42,10 +43,11 @@ fn ui() -> eframe::Result {
             | Features::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING,
         required_limits: limits,
         memory_hints: wgpu::MemoryHints::Performance,
+        experimental_features: ExperimentalFeatures::disabled(),
+        trace: wgpu::Trace::Off,
     };
 
-    let future = adapter.request_device(&device_descriptor, None);
-    let (device, queue): (wgpu::Device, wgpu::Queue) = pollster::block_on(future).unwrap();
+    let (device, queue) = pollster::block_on(adapter.request_device(&device_descriptor)).unwrap();
     let options = eframe::NativeOptions {
         renderer: eframe::Renderer::Wgpu,
         viewport: eframe::egui::ViewportBuilder::default().with_inner_size([1280.0, 720.0]),

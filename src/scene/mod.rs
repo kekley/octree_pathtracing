@@ -126,7 +126,7 @@ impl SunSamplingStrategy {
     };
 }
 
-use rand::rngs::StdRng;
+use rand::rngs::{ThreadRng};
 
 use glam::{Vec3, Vec3A, Vec3Swizzles, Vec4, Vec4Swizzles};
 
@@ -201,12 +201,12 @@ impl Scene {
         false
     }
 
-    pub fn get_preview_color(&self, mut ray: Ray, x: f32, y: f32, rng: &mut StdRng) -> Vec3 {
+    pub fn get_preview_color(&self, mut ray: Ray, x: f32, y: f32, rng: &mut ThreadRng) -> Vec3 {
         let mut attenuation = Vec4::ZERO;
         preview_render(rng, self, &mut ray, &mut attenuation);
         ray.hit.color.xyz()
     }
-    pub fn get_color(&self, mut ray: Ray, rng: &mut StdRng, current_spp: u32) -> Vec3 {
+    pub fn get_color(&self, mut ray: Ray, rng: &mut ThreadRng, current_spp: u32) -> Vec3 {
         let mut attenuation = Vec4::ZERO;
         path_trace(rng, self, &mut ray, true, &mut attenuation, current_spp);
         //Vec3::new(ray.hit.normal.x, ray.hit.normal.y, ray.hit.normal.z)
@@ -424,7 +424,7 @@ impl Sun {
         }
         false
     }
-    pub fn get_random_sun_direction(&self, reflected: &mut Ray, rng: &mut StdRng) {
+    pub fn get_random_sun_direction(&self, reflected: &mut Ray, rng: &mut ThreadRng) {
         let x1 = random_float(rng);
         let x2 = random_float(rng);
         let cos_a = 1.0 - x1 + x1 * self.radius_cos;

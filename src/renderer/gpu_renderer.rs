@@ -1,9 +1,7 @@
 use crate::{
     colors::PixelColor as _,
     gpu_structs::{
-        gpu_camera::CameraUniform,
-        gpu_material::GPUMaterial,
-        gpu_octree::octree_to_gpu_data,
+        gpu_camera::CameraUniform, gpu_material::GPUMaterial, gpu_octree::octree_to_gpu_data,
         gpu_quad::GPUQuad,
     },
     scene::Scene,
@@ -22,8 +20,8 @@ use eframe::{
         self, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout,
         BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType, Buffer,
         BufferBindingType, BufferUsages, CommandEncoderDescriptor, ComputePassDescriptor,
-        ComputePipeline, ComputePipelineDescriptor, Device, Extent3d, MaintainBase, Origin3d,
-        PipelineLayout, PipelineLayoutDescriptor, Queue, SamplerDescriptor, ShaderModule,
+        ComputePipeline, ComputePipelineDescriptor, Device, Extent3d, Origin3d, PipelineLayout,
+        PipelineLayoutDescriptor, PollType, Queue, SamplerDescriptor, ShaderModule,
         ShaderModuleDescriptor, ShaderSource, ShaderStages, StorageTextureAccess, SubmissionIndex,
         TexelCopyTextureInfo, Texture, TextureDescriptor, TextureDimension, TextureFormat,
         TextureUsages, TextureView, TextureViewDescriptor, TextureViewDimension,
@@ -167,19 +165,29 @@ pub struct GPUFrameInFlight {
 
 impl FrameInFlight for GPUFrameInFlight {
     fn poll(self: Box<GPUFrameInFlight>) -> FrameInFlightPoll {
-        let result = &self.device.poll(MaintainBase::Poll);
+        let result = self.device.poll(wgpu::wgt::PollType::Poll);
         match result {
-            wgpu::MaintainResult::SubmissionQueueEmpty => FrameInFlightPoll::Ready(self.texture),
-            wgpu::MaintainResult::Ok => FrameInFlightPoll::NotReady(self),
+            Ok(status) => match status {
+                wgpu::PollStatus::QueueEmpty => FrameInFlightPoll::Ready(self.texture),
+                wgpu::PollStatus::WaitSucceeded => FrameInFlightPoll::Ready(self.texture),
+                wgpu::PollStatus::Poll => FrameInFlightPoll::NotReady(self),
+            },
+            Err(_err) => FrameInFlightPoll::Cancelled,
         }
     }
     fn wait_for(self: Box<GPUFrameInFlight>) -> Result<TextureHandle, TextureHandle> {
-        let a = self.device.poll(wgpu::MaintainBase::WaitForSubmissionIndex(
-            self.submission_index,
-        ));
-        match a {
-            wgpu::MaintainResult::SubmissionQueueEmpty => Err(self.texture),
-            wgpu::MaintainResult::Ok => Ok(self.texture),
+        let result = self.device.poll(PollType::Wait {
+            submission_index: Some(self.submission_index),
+            timeout: None,
+        });
+
+        match result {
+            Ok(status) => Ok(match status {
+                wgpu::PollStatus::QueueEmpty => self.texture,
+                wgpu::PollStatus::WaitSucceeded => self.texture,
+                wgpu::PollStatus::Poll => unreachable!(),
+            }),
+            Err(_) => Err(self.texture),
         }
     }
 }
@@ -644,7 +652,10 @@ impl RenderingBackend for GPURenderer {
 
         let index = queue.submit(Some(command_encoder.finish()));
         let start = Instant::now();
-        device.poll(MaintainBase::Wait);
+        device.poll(PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
         let time = Instant::now().duration_since(start);
         info!("Took {time:?} to render on GPU");
         Ok(Box::new(GPUFrameInFlight {

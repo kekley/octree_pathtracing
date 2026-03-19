@@ -35,7 +35,9 @@ pub fn octree_to_gpu_data(tree: &Octree) -> (GPUOctreeUniform, Vec<GPUOctreeNode
             octant
                 .iter_children()
                 .enumerate()
-                .for_each(|(index, child)| todo!());
+                .for_each(|(index, child)| {
+                    std::hint::black_box(());
+                });
 
             //verify
             octant

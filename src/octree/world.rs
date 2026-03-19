@@ -51,7 +51,7 @@ impl Octree {
 
     fn expand_by(&mut self, depth: u8) {
         for _ in 0..depth {
-            let new_root_id = self.new_octant();
+            let new_root_id = self.new_octant(None);
 
             if let Some(root_id) = self.root {
                 self.octants[new_root_id as usize].set_child(ChildType::Octant, root_id, 0);

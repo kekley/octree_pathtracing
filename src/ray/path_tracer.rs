@@ -1,7 +1,7 @@
 use core::f32;
 use std::hint::black_box;
 
-use rand::rngs::StdRng;
+use rand::rngs::{ThreadRng};
 
 use glam::{Vec3A, Vec4, Vec4Swizzles};
 
@@ -13,7 +13,7 @@ use crate::{
 };
 
 pub fn path_trace(
-    rng: &mut StdRng,
+    rng: &mut ThreadRng,
     scene: &Scene,
     ray: &mut Ray,
     first_reflection: bool,
@@ -134,7 +134,7 @@ pub fn path_trace(
     hit
 }
 
-pub fn preview_render(rng: &mut StdRng, scene: &Scene, ray: &mut Ray, attenuation: &mut Vec4) {
+pub fn preview_render(rng: &mut ThreadRng, scene: &Scene, ray: &mut Ray, attenuation: &mut Vec4) {
     ray.hit.current_material = 0;
     loop {
         if !next_intersection_preview(scene, ray) {
@@ -162,7 +162,7 @@ pub fn do_specular_reflection(
     next: &mut Ray,
     cumulative_color: &mut Vec4,
     do_metal: bool,
-    rng: &mut StdRng,
+    rng: &mut ThreadRng,
     scene: &Scene,
     attenuation: &mut Vec4,
     current_spp: u32,
@@ -192,7 +192,7 @@ pub fn do_diffuse_reflection(
     next: &mut Ray,
     cumulative_color: &mut Vec4,
     material: &Material,
-    rng: &mut StdRng,
+    rng: &mut ThreadRng,
     scene: &Scene,
     attenuation: &mut Vec4,
     branch_count: u32,
@@ -324,7 +324,7 @@ pub fn do_refraction(
     ior1: f32,
     ior2: f32,
     absorption: f32,
-    rng: &mut StdRng,
+    rng: &mut ThreadRng,
     scene: &Scene,
     attenuation: &mut Vec4,
     branch_count: u32,
@@ -407,7 +407,7 @@ pub fn do_transmission(
     absorption: f32,
     scene: &Scene,
     attenuation: &mut Vec4,
-    rng: &mut StdRng,
+    rng: &mut ThreadRng,
     branch_count: u32,
 ) -> bool {
     let mut hit = false;

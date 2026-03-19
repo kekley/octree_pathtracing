@@ -75,13 +75,14 @@ fn recurse(octree: &mut Octree, pos: BlockCoords, depth: u8) -> Option<u32> {
                 todo!();
             }
             _ => {
-                let child_index = recurse(child_pos, depth - 1);
+                let child_index = recurse(octree, child_pos, depth - 1);
                 let Some(child) = child_index else {
                     return;
                 };
             }
         }
     });
+    new_parent
 }
 
 impl Default for Application {
@@ -231,7 +232,7 @@ impl eframe::App for Application {
         }
         if self.render_texture.is_none() {
             info!("Creating Render Texture");
-            let image = ImageData::Color(ColorImage::new([1280, 720], Color32::GRAY).into());
+            let image = ImageData::Color(ColorImage::filled([1280, 720], Color32::GRAY).into());
             let texture_handle =
                 ctx.load_texture("render target", image, TextureOptions::default());
 
