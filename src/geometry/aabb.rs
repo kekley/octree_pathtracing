@@ -1,8 +1,11 @@
-use core::f32;
+use glam::{Vec2, Vec3A, Vec3Swizzles as _};
 
-use glam::Vec3A;
-
-use crate::ray::Ray;
+use crate::{
+    geometry::axis::Axis,
+    mix_vec2,
+    path_tracing::{Intersect, hit_record::HitRecord, ray::Ray},
+    step_vec3,
+};
 
 use super::interval::Interval;
 
@@ -13,42 +16,6 @@ pub const DOWN: Vec3A = Vec3A::new(0.0, -1.0, 0.0);
 pub const FORWARD: Vec3A = Vec3A::new(0.0, 0.0, 1.0);
 pub const BACK: Vec3A = Vec3A::new(0.0, 0.0, -1.0);
 
-#[derive(Debug, Clone, Copy)]
-pub enum Axis {
-    X = 0,
-    Y = 1,
-    Z = 2,
-}
-impl Axis {
-    pub fn iter() -> AxisIter {
-        AxisIter { current: Axis::X }
-    }
-}
-
-impl IntoIterator for Axis {
-    type Item = Axis;
-
-    type IntoIter = AxisIter;
-
-    fn into_iter(self) -> Self::IntoIter {
-        AxisIter { current: self }
-    }
-}
-
-pub struct AxisIter {
-    current: Axis,
-}
-impl Iterator for AxisIter {
-    type Item = Axis;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.current {
-            Axis::X => Some(Axis::Y),
-            Axis::Y => Some(Axis::Z),
-            Axis::Z => None,
-        }
-    }
-}
 #[derive(Debug, Clone)]
 pub struct AABB {
     pub min: Vec3A,
@@ -139,54 +106,58 @@ impl AABB {
             Axis::Z => Interval::new(self.min.z, self.max.z),
         }
     }
+}
 
-    pub fn intersects(&self, ray: &Ray) -> bool {
-        let mut t_min = f32::NEG_INFINITY;
-        let mut t_max = f32::INFINITY;
-        let tmp = Axis::iter();
-        for axis in tmp {
-            let box_axis_min = self.get_interval(axis).min;
-            let box_axis_max = self.get_interval(axis).max;
-            let ray_axis_origin = ray.origin[axis as usize];
-            let ray_axis_dir_inverse = (1.0 / ray.get_direction())[axis as usize];
+impl Intersect for AABB {
+    fn intersect(&self, ray: Ray) -> HitRecord {
+        aabb_ray_interesct(
+            self.min,
+            self.max,
+            ray.origin,
+            *ray.get_direction(),
+            *ray.get_inverse_direction(),
+        )
+    }
+}
 
-            let t0 = (box_axis_min - ray_axis_origin) * ray_axis_dir_inverse;
-            let t1 = (box_axis_max - ray_axis_origin) * ray_axis_dir_inverse;
+fn aabb_ray_interesct(
+    aabb_min: Vec3A,
+    aabb_max: Vec3A,
+    ray_origin: Vec3A,
+    ray_direction: Vec3A,
+    inv_direction: Vec3A,
+) -> HitRecord {
+    let t0 = (aabb_min - ray_origin) * inv_direction;
 
-            if t0 < t1 {
-                t_max = t_max.min(t1);
-                t_min = t_min.max(t0);
-            } else {
-                t_max = t_max.min(t0);
-                t_min = t_min.max(t1);
-            }
-            if t_max <= t_min {
-                dbg!("t_min: {}", t_min);
-                return false;
-            }
-        }
+    let t1 = (aabb_max - ray_origin) * inv_direction;
 
-        true
+    let t_min_vec = t0.min(t1);
+    let t_max_vec = t0.max(t1);
+
+    let t_enter = t_min_vec.max_element();
+    let t_exit = t_max_vec.min_element();
+
+    if !(t_enter <= t_exit && t_exit > 0.0) {
+        //println!("enter: {t_enter}, exit: {t_exit}");
+        return HitRecord::MISS;
     }
 
-    #[inline]
-    pub fn intersects_new(&self, ray: &Ray) -> (f32, f32) {
-        let box_min = self.min;
-        let box_max = self.max;
-        let ray_origin = ray.origin;
-        let t_bot = (box_min - ray_origin) * ray.get_inverse_direction();
-        let t_top = (box_max - ray_origin) * ray.get_inverse_direction();
+    let normal = -ray_direction.signum()
+        * step_vec3(t_min_vec.yzx(), t_min_vec.xyz())
+        * step_vec3(t_min_vec.zxy(), t_min_vec.xyz());
 
-        let mins = t_bot.min(t_top);
-        let maxs = t_bot.max(t_top);
+    let mut face_id = normal.abs().dot(Vec3A::new(1.0, 2.0, 4.0)) as u32;
+    face_id ^= normal.cmpgt(Vec3A::ZERO).any() as u32;
 
-        let mut t0 = mins.max_element();
-        let t1 = maxs.min_element();
+    let uv3 = ray_origin + t_enter * ray_direction;
 
-        if !t0.is_finite() {
-            dbg!("s");
-            t0 = t1;
-        }
-        (t0, t1)
-    }
+    let mut uv2 = 0.5 + mix_vec2(uv3.xy(), uv3.zz(), normal.xy().abs());
+
+    uv2 = mix_vec2(
+        uv2,
+        Vec2::new(1.0 - uv2.x, uv2.y),
+        Vec2::splat(normal.x.max(normal.y.max(-normal.z))),
+    );
+
+    HitRecord::new(t_enter, t_exit, uv2, normal)
 }

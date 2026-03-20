@@ -1,25 +1,17 @@
 use eframe::egui::{self, Context};
 use glam::Vec3A;
 
-use crate::ray::Ray;
+use crate::path_tracing::ray::Ray;
 
 /// A simple thin-lens perspective camera
 #[derive(Clone, Debug, PartialEq)]
 pub struct Camera {
-    /// Location of the camera
     pub eye: Vec3A,
-
-    /// Direction that the camera is facing
     pub direction: Vec3A,
-    /// Direction of "up" for screen, must be orthogonal to `direction`
     pub up: Vec3A,
-    /// Field of view in the longer direction as an angle in radians, in (0, pi)
     pub fov: f32,
-    /// Aperture radius for depth-of-field effects
     pub aperture: f32,
-    /// Focal distance, if aperture radius is nonzero
     pub focal_distance: f32,
-    //sensitivity for mouse movement
     yaw: f32,
     pitch: f32,
 }
@@ -28,7 +20,7 @@ impl Default for Camera {
         Self {
             eye: Vec3A::new(0.0, 0.0, 10.0),
             direction: Vec3A::new(0.0, 0.0, 1.0),
-            up: Vec3A::new(0.0, 1.0, 0.0), // we live in a y-up world...
+            up: Vec3A::new(0.0, 1.0, 0.0),
             fov: 70.0f32.to_radians(),
             aperture: 0.0,
             focal_distance: 0.0,
@@ -42,7 +34,7 @@ impl Camera {
     pub const DEFAULT_CAMERA: Camera = Self {
         eye: Vec3A::new(0.0, 0.0, 0.0),
         direction: Vec3A::new(0.0, 0.0, 1.0),
-        up: Vec3A::new(0.0, 1.0, 0.0), // we live in a y-up world...
+        up: Vec3A::new(0.0, 1.0, 0.0),
         fov: 70.0f32.to_radians(),
         aperture: 0.0,
         focal_distance: 0.0,
@@ -132,8 +124,6 @@ impl Camera {
                 // Assuming the camera looks towards -Z by default:
                 self.direction = Vec3A::new(cp * sy, sp, cp * cy).normalize();
 
-                // For a camera that always remains "upright", you can define the "world up"
-                // as (0, 1, 0) and then compute right and a corrected up vector:
                 let world_up = Vec3A::new(0.0, 1.0, 0.0);
                 let right = self.direction.cross(world_up).normalize();
                 self.up = right.cross(self.direction).normalize();

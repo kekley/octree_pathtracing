@@ -126,7 +126,7 @@ impl SunSamplingStrategy {
     };
 }
 
-use rand::rngs::{ThreadRng};
+use rand::rngs::ThreadRng;
 
 use glam::{Vec3, Vec3A, Vec3Swizzles, Vec4, Vec4Swizzles};
 
@@ -134,11 +134,8 @@ use crate::{
     colors::U8Color,
     geometry::{aabb::UP, quad::Quad},
     octree::world::Octree,
+    path_tracing::{path_trace, preview_render, ray::Ray},
     random_float,
-    ray::{
-        Ray,
-        path_tracer::{path_trace, preview_render},
-    },
     scene::resource_manager::{MaterialID, ModelBuilder},
     textures::{material::Material, texture::Texture},
 };
@@ -204,13 +201,13 @@ impl Scene {
     pub fn get_preview_color(&self, mut ray: Ray, x: f32, y: f32, rng: &mut ThreadRng) -> Vec3 {
         let mut attenuation = Vec4::ZERO;
         preview_render(rng, self, &mut ray, &mut attenuation);
-        ray.hit.color.xyz()
+        todo!();
     }
     pub fn get_color(&self, mut ray: Ray, rng: &mut ThreadRng, current_spp: u32) -> Vec3 {
         let mut attenuation = Vec4::ZERO;
         path_trace(rng, self, &mut ray, true, &mut attenuation, current_spp);
+        todo!();
         //Vec3::new(ray.hit.normal.x, ray.hit.normal.y, ray.hit.normal.z)
-        ray.hit.color.xyz()
     }
 
     pub fn get_sky_color(&self, ray: &mut Ray, draw_sun: bool) {
@@ -219,7 +216,6 @@ impl Scene {
         if draw_sun {
             self.add_sun_color(ray);
         }
-        ray.hit.color.w = 1.0;
     }
 
     pub fn get_sky_color_diffuse_sun(&self, ray: &mut Ray, diffuse_sun: bool) {
@@ -229,42 +225,26 @@ impl Scene {
         if diffuse_sun {
             self.add_sun_color_diffuse_sun(ray);
         }
-        ray.hit.color.w = 1.0
     }
 
     pub fn get_sky_color_inner(&self, ray: &mut Ray) {
-        ray.hit.color = Scene::SKY_COLOR;
+        todo!();
     }
     pub fn get_sky_color_interp(&self, ray: &mut Ray) {
         self.get_sky_color_diffuse_inner(ray);
         // ray color times sky exposure and skylightmodifier
         self.add_sun_color(ray);
-        ray.hit.color.w = 1.0;
+        todo!();
     }
     pub fn add_sun_color(&self, ray: &mut Ray) {
-        let r = ray.hit.color.x;
-        let g = ray.hit.color.y;
-        let b = ray.hit.color.z;
-        if self.sun.intersect(ray) {
-            ray.hit.color.x += r;
-            ray.hit.color.y += g;
-            ray.hit.color.z += b;
-        }
+        todo!();
     }
 
     pub fn add_sun_color_diffuse_sun(&self, ray: &mut Ray) {
-        let r = ray.hit.color.x;
-        let g = ray.hit.color.y;
-        let b = ray.hit.color.z;
-        if self.sun.intersect_diffuse(ray) {
-            let mult = self.sun.luminosity;
-            ray.hit.color.x = ray.hit.color.x * mult + r;
-            ray.hit.color.y = ray.hit.color.y * mult + g;
-            ray.hit.color.z = ray.hit.color.z * mult + b;
-        }
+        todo!();
     }
     pub fn get_sky_color_diffuse_inner(&self, ray: &mut Ray) {
-        ray.hit.color = Scene::SKY_COLOR;
+        todo!();
     }
 }
 
@@ -382,47 +362,11 @@ impl Sun {
         }
     }
     pub fn intersect(&self, ray: &mut Ray) -> bool {
-        let direction = ray.get_direction();
-        if !self.draw_texture || direction.dot(self.sw) < 0.5 {
-            return false;
-        }
-
-        let width = self.radius * 4.0;
-        let width2 = width * 2.0;
-        let a = PI / 2.0 - direction.dot(self.su).acos() + width;
-        if a >= 0.0 && a < width2 {
-            let b = PI / 2.0 - direction.dot(self.sv).acos() + width;
-            if b >= 0.0 && b < width2 {
-                ray.hit.color = self.texture.value(a / width2, b / width2);
-                ray.hit.color.x *= self.apparent_texture_brightness.x * 10.0;
-                ray.hit.color.y *= self.apparent_texture_brightness.y * 10.0;
-                ray.hit.color.z *= self.apparent_texture_brightness.z * 10.0;
-                return true;
-            }
-        }
-
-        false
+        todo!();
     }
-    pub fn intersect_diffuse(&self, ray: &mut Ray) -> bool {
-        let direction = ray.get_direction();
-        if direction.dot(self.sw) < 0.5 {
-            return false;
-        }
-        let width = self.radius * 4.0;
-        let width2 = width * 2.0;
 
-        let a = PI / 2.0 - direction.dot(self.su).acos() + width;
-        if a >= 0.0 && a < width2 {
-            let b = PI / 2.0 - direction.dot(self.sv).acos() + width;
-            if b >= 0.0 && b < width2 {
-                ray.hit.color = self.texture.value(a / width2, b / width2);
-                ray.hit.color.x *= self.color.x * 10.0;
-                ray.hit.color.y *= self.color.y * 10.0;
-                ray.hit.color.z *= self.color.z * 10.0;
-                return true;
-            }
-        }
-        false
+    pub fn intersect_diffuse(&self, ray: &mut Ray) -> bool {
+        todo!();
     }
     pub fn get_random_sun_direction(&self, reflected: &mut Ray, rng: &mut ThreadRng) {
         let x1 = random_float(rng);
@@ -445,9 +389,6 @@ impl Sun {
     }
 
     pub fn flat_shading(&self, ray: &mut Ray) {
-        let n = ray.hit.normal;
-        let mut shading = n.x * self.sw.x + n.y * self.sw.y + n.z * self.sw.z;
-        shading = Sun::AMBIENT.max(shading);
-        ray.hit.color *= self.emmittance * shading;
+        todo!();
     }
 }

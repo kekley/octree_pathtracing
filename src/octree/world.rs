@@ -1,3 +1,4 @@
+#![feature(int_lowest_highest_one)]
 use crate::octree::region::build_region_octree;
 use hashbrown::HashMap;
 use std::marker::PhantomData;

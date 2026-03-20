@@ -1,7 +1,8 @@
+use crate::path_tracing::ray::Ray;
 use glam::{Affine3A, Vec2, Vec3A};
 use mc_utils::face::common::face_name::FaceName;
 
-use crate::{ray::Ray, scene::resource_manager::MaterialID};
+use crate::scene::resource_manager::MaterialID;
 
 #[derive(Debug, Clone, Default)]
 pub struct Quad {
@@ -169,33 +170,4 @@ impl Quad {
         }
         return false;
     } */
-    pub fn hit(&self, ray: &mut Ray, voxel_position: &Vec3A) -> bool {
-        let translated_ray_origin = ray.origin - voxel_position;
-        let denom = ray.get_direction().dot(self.normal);
-        // ray parallel to plane or backside of quad
-        if denom >= -Ray::EPSILON {
-            return false;
-        }
-
-        let t = (self.d - self.normal.dot(translated_ray_origin)) / denom;
-        if t <= 0.0 || t > ray.hit.t_next {
-            return false;
-        }
-        let intersection = translated_ray_origin + ray.get_direction() * t;
-        let planar_hit_point = intersection - self.origin;
-        let alpha = self.w.dot(planar_hit_point.cross(self.v));
-        let beta = self.w.dot(self.u.cross(planar_hit_point));
-
-        if !(0.0..=1.0).contains(&alpha) || !(0.0..=1.0).contains(&beta) {
-            return false;
-        }
-
-        ray.hit.t_next = t;
-        ray.hit.u =
-            self.texture_u_range.x + alpha * (self.texture_u_range.y - self.texture_u_range.x);
-        ray.hit.v =
-            self.texture_v_range.x + beta * (self.texture_v_range.y - self.texture_v_range.x);
-
-        true
-    }
 }
