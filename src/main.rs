@@ -5,7 +5,7 @@ use eframe::wgpu::{
     InstanceDescriptor, InstanceFlags, RequestAdapterOptions,
 };
 use egui_wgpu::WgpuSetupExisting;
-use octree_pathtracing::main_app::Application;
+use octree_pathtracing::main_app::MainApp;
 pub const ASPECT_RATIO: f32 = 1.5;
 
 fn main() -> Result<(), ()> {
@@ -69,7 +69,7 @@ fn ui() -> eframe::Result {
         options,
         Box::new(|cc| {
             egui_extras::install_image_loaders(&cc.egui_ctx);
-            Ok(Box::<Application>::default())
+            Ok(Box::new(MainApp::new()))
         }),
     )
 }

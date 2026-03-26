@@ -1,15 +1,8 @@
-use std::hint::black_box;
-
 use rand::rngs::ThreadRng;
 
-use glam::{Vec3A, Vec4, Vec4Swizzles};
+use glam::Vec4;
 
-use crate::{
-    path_tracing::ray::Ray,
-    random_float,
-    scene::{EmitterSamplingStrategy, Scene},
-    textures::material::{Material, MaterialFlags},
-};
+use crate::{path_tracing::ray::Ray, scene::Scene, textures::material::Material};
 
 pub fn path_trace(
     rng: &mut ThreadRng,

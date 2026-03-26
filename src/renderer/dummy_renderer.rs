@@ -2,13 +2,13 @@ use eframe::egui::TextureHandle;
 
 use crate::scene::Scene;
 
-use super::{camera::Camera, renderer_trait::RenderingBackend, tile_renderer::RendererMode};
+use super::{camera::Camera, renderer_trait::Renderer, tile_renderer::RendererMode};
 static mut DUMMY_CAMERA: Camera = Camera::DEFAULT_CAMERA;
 
 #[derive(Default, Clone, Copy)]
 pub struct DummyRenderer {}
 
-impl RenderingBackend for DummyRenderer {
+impl Renderer for DummyRenderer {
     fn render_frame(
         &self,
         egui_context: &eframe::Frame,

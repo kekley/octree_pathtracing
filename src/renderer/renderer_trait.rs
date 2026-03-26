@@ -16,7 +16,7 @@ impl ColorScalar for f32 {}
 
 impl ColorScalar for u8 {}
 
-pub trait RenderingBackend {
+pub trait Renderer {
     fn get_camera(&self) -> &Camera;
     fn set_camera(&mut self, camera: Camera);
     fn which_backend(&self) -> RendererBackendSetting;
@@ -45,7 +45,7 @@ pub trait FrameInFlight {
     fn wait_for(self: Box<Self>) -> Result<TextureHandle, TextureHandle>;
 }
 
-impl Default for Box<dyn RenderingBackend> {
+impl Default for Box<dyn Renderer> {
     fn default() -> Self {
         Box::new(DummyRenderer {})
     }

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use eframe::egui::{self, Button, DragValue, Label, Slider, Window};
 use mc_utils::coords::block::BlockCoords;
 
-use crate::renderer::renderer_trait::RenderingBackend;
+use crate::renderer::renderer_trait::Renderer;
 
 use super::main_app::load_world_2;
 
@@ -16,7 +16,7 @@ pub struct WorldLoadingDialog {
 }
 
 impl WorldLoadingDialog {
-    pub fn show(&mut self, ctx: &egui::Context, renderer: &mut Box<dyn RenderingBackend>) {
+    pub fn show(&mut self, ctx: &egui::Context, renderer: &mut Box<dyn Renderer>) {
         if Window::new("World Loading")
             .resizable([true, true])
             .open(&mut self.open)

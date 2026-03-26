@@ -1,7 +1,5 @@
 use std::fmt::Debug;
 
-use image::GenericImageView;
-
 #[derive(Clone)]
 pub struct RgbaImage {
     pub raw_data: Box<[u8]>,

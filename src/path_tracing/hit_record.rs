@@ -15,6 +15,9 @@ impl HitRecord {
         normal: Vec3A::Y,
     };
     pub fn new(t_enter: f32, t_exit: f32, uv: Vec2, normal: Vec3A) -> Self {
+        if t_enter > t_exit {
+            panic!("Invalid Hit Record: {t_enter}, {t_exit}");
+        }
         HitRecord {
             t_enter,
             t_exit,

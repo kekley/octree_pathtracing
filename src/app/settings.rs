@@ -1,12 +1,12 @@
 use eframe::egui::{self, DragValue, Label, RadioButton, Window};
 
-use crate::renderer::{gpu_renderer::GPURenderer, renderer_trait::RenderingBackend};
+use crate::renderer::{gpu_renderer::GPURenderer, renderer_trait::Renderer};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum RendererBackendSetting {
     Dummy,
-    CPU,
     #[default]
+    CPU,
     GPU,
 }
 
@@ -31,7 +31,7 @@ impl RenderSettingsWindow {
         &mut self,
         ctx: &egui::Context,
         frame: &eframe::Frame,
-        renderer: &mut Box<dyn RenderingBackend>,
+        renderer: &mut Box<dyn Renderer>,
     ) {
         match Window::new("Render Settings")
             .resizable([true, true])

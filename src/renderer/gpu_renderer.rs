@@ -10,7 +10,7 @@ use std::{fs, num::NonZero, slice, sync::Arc, time::Instant};
 
 use super::{
     camera::Camera,
-    renderer_trait::{FrameInFlight, FrameInFlightPoll, RenderingBackend},
+    renderer_trait::{FrameInFlight, FrameInFlightPoll, Renderer},
     tile_renderer::{RendererMode, RendererStatus},
 };
 use bytemuck::Zeroable;
@@ -565,7 +565,7 @@ impl GPURenderer {
     }
 }
 
-impl RenderingBackend for GPURenderer {
+impl Renderer for GPURenderer {
     fn render_frame(
         &self,
         eframe: &eframe::Frame,

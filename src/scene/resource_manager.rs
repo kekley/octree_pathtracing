@@ -16,7 +16,7 @@ use mc_utils::{
     },
     element::borrow::Element,
     face::common::{face_name::FaceName, rotation::Axis},
-    resource_loader::{BlockstateLookupError, ResourceLoader},
+    resource_loader::{BlockstateLookupError, LoadedResources},
 };
 use thiserror::Error;
 use tracing::{Level, event, instrument};
@@ -114,7 +114,7 @@ pub struct BuiltModels {
 pub struct ModelBuilder {
     model_data: Vec<ModelData>,
     textures: HashMap<String, Texture>,
-    resources: ResourceLoader,
+    resources: LoadedResources,
 }
 
 ///A handle for accessing a model's data before calling .build() on the builder
@@ -122,7 +122,7 @@ pub struct ModelBuilder {
 pub struct ModelHandle(pub(crate) usize);
 
 impl ModelBuilder {
-    pub fn new(resources: ResourceLoader) -> Self {
+    pub fn new(resources: LoadedResources) -> Self {
         Self {
             resources,
             model_data: Default::default(),
@@ -476,7 +476,7 @@ impl ModelBuilder {
 
     fn try_finalize_block_model<'a>(
         model: &'a BlockModel<'a>,
-        resources: &'a ResourceLoader,
+        resources: &'a LoadedResources,
     ) -> Result<FinalizedBlockModel<'a>, ModelLoadingError> {
         let mut current_model = model;
         let mut elements = if model.get_elements().is_empty() {
@@ -582,14 +582,7 @@ impl ModelBuilder {
             BlockstateType::Multipart(model_infos) => {
                 let first_entries = model_infos
                     .iter()
-                    .map(|slice_of_models| {
-                        let first_model = slice_of_models.first() else {
-                            event!(Level::WARN, "Multipart contained no models");
-                            return None;
-                        };
-                        first_model
-                    })
-                    .flatten()
+                    .filter_map(|slice_of_models| slice_of_models.first())
                     .collect::<Vec<_>>();
                 let cuboids = first_entries
                     .into_iter()
@@ -767,7 +760,7 @@ impl ModelBuilder {
     fn finalized_model_to_cuboids_only(
         model: &FinalizedBlockModel,
         loaded_textures: &mut HashMap<String, Texture>,
-        resources: &ResourceLoader,
+        resources: &LoadedResources,
     ) -> Vec<CuboidData> {
         let FinalizedBlockModel {
             textures: texture_map,
@@ -785,7 +778,7 @@ impl ModelBuilder {
     fn finalized_block_model_to_model_data(
         model: &FinalizedBlockModel,
         loaded_textures: &mut HashMap<String, Texture>,
-        resources: &ResourceLoader,
+        resources: &LoadedResources,
     ) -> ModelData {
         let FinalizedBlockModel {
             textures: texture_map,
@@ -853,7 +846,7 @@ impl ModelBuilder {
         element: &Element<'_>,
         texture_map: &HashMap<&str, &str>,
         loaded_textures: &mut HashMap<String, Texture>,
-        resources: &ResourceLoader,
+        resources: &LoadedResources,
     ) -> [Material; 6] {
         let mut materials = [const { Material::AIR }; 6];
 
@@ -930,7 +923,7 @@ impl ModelBuilder {
         element: &Element<'_>,
         texture_map: &HashMap<&str, &str>,
         loaded_textures: &mut HashMap<String, Texture>,
-        resources: &ResourceLoader,
+        resources: &LoadedResources,
     ) -> CuboidData {
         CuboidData {
             matrix: Self::get_matrix_from_element(element),

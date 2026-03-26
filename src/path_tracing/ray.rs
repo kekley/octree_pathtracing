@@ -2,12 +2,8 @@ use std::f32::consts::PI;
 
 use rand::rngs::ThreadRng;
 
-use glam::{Mat3A, Vec3A, Vec4};
+use glam::Vec3A;
 
-use crate::{
-    angle_distance, random_float,
-    scene::{Scene, Sun},
-};
 
 #[derive(Debug, Clone, Default)]
 pub struct Ray {
@@ -26,6 +22,8 @@ impl Ray {
     pub fn new(origin: Vec3A, direction: Vec3A) -> Self {
         const EPSILON: f32 = 1e-6;
         let b_vec = direction.abs().cmplt(Vec3A::splat(EPSILON));
+
+        if direction.abs()
         let mut inv_dir = Vec3A::splat(1.0 / EPSILON);
         // Prevent generation of NANs in inv_dir
         (0..3).for_each(|i: usize| {
