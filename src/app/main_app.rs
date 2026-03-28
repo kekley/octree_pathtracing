@@ -13,7 +13,7 @@ use mc_utils::{
 
 use crate::{
     colors::U8Color,
-    octree::world::Octree,
+    octree::world::WorldOctree,
     renderer::{
         renderer_trait::Renderer,
         tile_renderer::{RendererMode, RendererStatus},
@@ -54,7 +54,7 @@ pub fn load_world_2(path: &str, origin: &BlockCoords, depth: u8) -> Scene {
     todo!()
 }
 
-fn recurse(octree: &mut Octree, pos: BlockCoords, depth: u8) -> Option<u32> {
+fn recurse(octree: &mut WorldOctree, pos: BlockCoords, depth: u8) -> Option<u32> {
     let new_parent: Option<u32> = None;
     let size = 2_i64.pow(depth as u32);
     (0..8u8).for_each(|child_idx| {

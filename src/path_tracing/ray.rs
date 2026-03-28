@@ -4,6 +4,7 @@ use rand::rngs::ThreadRng;
 
 use glam::Vec3A;
 
+use crate::{geometry::axis::Axis, path_tracing::vector_extensions::VectorExtensions as _};
 
 #[derive(Debug, Clone, Default)]
 pub struct Ray {
@@ -13,24 +14,22 @@ pub struct Ray {
 }
 
 impl Ray {
-    pub const EPSILON: f32 = 0.00000005;
-    pub const OFFSET: f32 = 0.000001;
+    pub const EPSILON: f32 = 1e-6;
+    pub const OFFSET: f32 = 1e-8;
 
     pub fn at(&self, t: f32) -> Vec3A {
         self.origin + self.direction * t
     }
     pub fn new(origin: Vec3A, direction: Vec3A) -> Self {
-        const EPSILON: f32 = 1e-6;
-        let b_vec = direction.abs().cmplt(Vec3A::splat(EPSILON));
-
-        if direction.abs()
-        let mut inv_dir = Vec3A::splat(1.0 / EPSILON);
+        let mut inv_dir = Vec3A::splat(1.0 / Self::EPSILON) * direction.signum();
+        let smaller_than_epsilon = direction.abs().cmplt(Vec3A::splat(Self::EPSILON));
         // Prevent generation of NANs in inv_dir
-        (0..3).for_each(|i: usize| {
-            if !b_vec.test(i) {
-                inv_dir[i] = 1.0 / direction[i];
+        for axis in Axis::iter() {
+            let axis_index = axis.into();
+            if !smaller_than_epsilon.test(axis_index) {
+                inv_dir[axis_index] = 1.0 / direction[axis_index];
             }
-        });
+        }
 
         Self {
             origin,
@@ -46,24 +45,15 @@ impl Ray {
         &self.inv_dir
     }
     pub fn set_direction(&mut self, direction: Vec3A) {
-        const EPSILON: f32 = 1e-6;
-        let inv_dir = Vec3A::new(
-            if direction.x.abs() < EPSILON {
-                1.0 / EPSILON
-            } else {
-                1.0 / direction.x
-            },
-            if direction.y.abs() < EPSILON {
-                1.0 / EPSILON
-            } else {
-                1.0 / direction.y
-            },
-            if direction.z.abs() < EPSILON {
-                1.0 / EPSILON
-            } else {
-                1.0 / direction.z
-            },
-        );
+        let mut inv_dir = Vec3A::splat(1.0 / Self::EPSILON) * direction.signum();
+        let smaller_than_epsilon = direction.abs().cmplt(Vec3A::splat(Self::EPSILON));
+        for axis in Axis::iter() {
+            let axis_index = axis.into();
+            if !smaller_than_epsilon.test(axis_index) {
+                inv_dir[axis_index] = 1.0 / direction[axis_index];
+            }
+        }
+
         self.direction = direction;
         self.inv_dir = inv_dir;
     }

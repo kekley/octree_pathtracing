@@ -1,6 +1,6 @@
-use crate::octree::section::SECTION_OCTREE_DEPTH;
-use crate::octree::section::SectionOctantResult;
-use crate::octree::section::section_to_compacted_octree;
+use crate::octree::builders::section::SECTION_OCTREE_DEPTH;
+use crate::octree::builders::section::SectionOctantResult;
+use crate::octree::builders::section::section_to_compacted_octree;
 use crate::octree::world::ChildType;
 use crate::octree::world::Octant;
 use crate::octree::world::OctantId;
@@ -22,7 +22,7 @@ pub fn build_region_octree(
     region: Region,
     blockstate_map: Arc<Mutex<hashbrown::HashMap<NBTString, u32>>>,
 ) -> Option<(Vec<Octant>, u32)> {
-    //TODO maybe redo blockstate hash function
+    //TODO maybe implement custom blockstate hash function
     let start = Instant::now();
     let region_chunk_data = region.load_all_chunk_data();
     let end = Instant::now();
@@ -56,11 +56,11 @@ pub fn build_region_octree(
 
     println!("time parsing chunks: {:?}", end.duration_since(start));
 
-    let coords_and_sections = chunks
+    let chunk_coords_and_sections = chunks
         .iter()
         .enumerate()
         .filter_map(|(i, chunk)| {
-            let (chunk_local_x, chunk_local_z) = chunk_index_to_coordinates(i);
+            let (region_local_x, region_local_z) = chunk_index_to_coordinates(i);
             //println!("x: {local_x} z: {local_z}");
             let chunk = chunk.as_ref()?;
 
@@ -73,10 +73,10 @@ pub fn build_region_octree(
                     //TODO allow non vanilla world heights
                     return None;
                 }
-                let y_pos = y_index + (-LOWEST_SECTION_INDEX);
+                let y_pos = (y_index + (-LOWEST_SECTION_INDEX)) as u64 * 16;
 
                 Some((
-                    (chunk_local_x as u64, y_pos as u64, chunk_local_z as u64),
+                    (region_local_x as u64, y_pos, region_local_z as u64),
                     section,
                 ))
             }))
@@ -86,7 +86,7 @@ pub fn build_region_octree(
 
     let mut blockstate_map = blockstate_map.lock().unwrap();
     let start = Instant::now();
-    let coords_and_sections = coords_and_sections
+    let coords_and_sections = chunk_coords_and_sections
         .into_iter()
         .map(|((x, y, z), section)| {
             let palette = section.get_palette();
@@ -124,7 +124,10 @@ pub fn build_region_octree(
         .collect::<Vec<_>>();
 
     let end = Instant::now();
-    println!("time to build octrees: {:?}", end.duration_since(start));
+    println!(
+        "time to build section octrees: {:?}",
+        end.duration_since(start)
+    );
     sections.sort_unstable_by_key(|octree| octree.0);
 
     println!("number of sections: {count}", count = sections.len());
@@ -207,16 +210,18 @@ impl RegionOctreeBuilder {
         const BITS_PER_DEPTH: usize = 3;
 
         let prefix_shift_amount = new_depth * BITS_PER_DEPTH as u8;
-        let prefix_base = (1 << prefix_shift_amount) - 1; //fills all the bits to the right of
-        //prefix_shift_amount with 1
+
+        //fills all the bits to the right of prefix_shift_amount with 1
+        let prefix_base = (1 << prefix_shift_amount) - 1;
         let mut child_count = 0;
         let mut octant = Octant::default();
+        dbg!(new_depth);
         octant.init_children_with(|child_index| {
             let child_index = child_index as u64;
             let data = data_opt.take().unwrap();
 
             let prefix = (child_index << prefix_shift_amount) | prefix_base;
-
+            println!("{prefix:#064b}");
             if new_depth > 0 {
                 let slice_end_index = data.partition_point(|(value, _)| *value <= prefix);
 
@@ -293,7 +298,7 @@ impl RegionOctreeBuilder {
 }
 
 #[inline]
-fn encode_morton(x: u64, y: u64, z: u64) -> u64 {
+pub fn encode_morton(x: u64, y: u64, z: u64) -> u64 {
     (part_by_2(z) << 2) + (part_by_2(y) << 1) + part_by_2(x)
 }
 
@@ -347,7 +352,7 @@ pub(crate) fn encode_morton_lut(x: u64, y: u64, z: u64) -> u64 {
 }
 
 #[inline]
-fn decode_morton(val: u64) -> (u64, u64, u64) {
+pub fn decode_morton(val: u64) -> (u64, u64, u64) {
     (
         compact_by_2(val),
         (compact_by_2(val >> 1)),

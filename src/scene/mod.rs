@@ -7,7 +7,7 @@ use glam::{Vec3, Vec4};
 
 use crate::{
     geometry::{aabb::UP, quad::Quad},
-    octree::world::Octree,
+    octree::world::WorldOctree,
     path_tracing::{
         path_tracer::{path_trace, preview_render},
         ray::Ray,
@@ -18,7 +18,7 @@ use crate::{
 
 pub struct Scene {
     config: SceneConfig,
-    pub octree: Octree,
+    pub octree: WorldOctree,
     pub quads: Box<[Quad]>,
     pub materials: Box<[Material]>,
 }

@@ -1,5 +1,5 @@
-use crate::octree::region::encode_morton_lut;
-use crate::octree::region::section_index_to_block_coordinates;
+use crate::octree::builders::region::encode_morton_lut;
+use crate::octree::builders::region::section_index_to_block_coordinates;
 use crate::octree::world::ChildType;
 use crate::octree::world::Octant;
 use crate::octree::world::OctantId;
@@ -13,7 +13,7 @@ pub const CHILD_COUNT: usize = 8;
 #[derive(Default, Debug)]
 struct SectionOctantBuilder {
     octants: Vec<Octant>,
-    child_buffers: [Octant; SECTION_OCTREE_DEPTH - 1],
+    octant_building_buffers: [Octant; SECTION_OCTREE_DEPTH - 1],
 }
 
 #[derive(Debug, Default)]
@@ -31,11 +31,13 @@ impl SectionOctantBuilder {
     pub fn new() -> Self {
         Default::default()
     }
-    pub fn section_data_to_octants(
+    pub fn build_section_octant_from_morton_data(
         mut self,
         morton_order_section_data: &[Option<NonZeroU32>; 4096],
     ) -> SectionOctantResult {
+        //Split the array of section data in morton order into chunks of 8 for building our octants
         let (chunks, remainder) = morton_order_section_data.as_chunks::<CHILD_COUNT>();
+
         assert!(remainder.is_empty());
 
         chunks.iter().for_each(|depth_1_octant| {
@@ -43,7 +45,8 @@ impl SectionOctantBuilder {
             self.insert_child_and_compact(child);
         });
 
-        let root_octant = &self.child_buffers[0];
+        let root_octant = &self.octant_building_buffers[0];
+
         if root_octant.is_compactable() {
             let child = root_octant.get_child(0);
             match child.0 {
@@ -52,6 +55,8 @@ impl SectionOctantBuilder {
                 ChildType::Octant => unreachable!(),
             }
         } else {
+            //The resulting tree is in reverse morton order, so reverse the the octants vector and
+            //update indices to match
             let octants_len = self.octants.len();
 
             self.octants.push(root_octant.clone());
@@ -98,26 +103,32 @@ impl SectionOctantBuilder {
             (ChildType::Octant, octant_id)
         }
     }
-
+    //Find the lowest level of the octree we are building we can insert `new_child` at. Handles
     fn insert_child_and_compact(&mut self, mut new_child: (ChildType, u32)) {
-        let mut search_depth = SECTION_OCTREE_DEPTH - 2;
+        let mut compaction_depth = SECTION_OCTREE_DEPTH - 2;
         loop {
-            let current_octant = &mut self.child_buffers[search_depth];
-            if let Some(free_slot_index) = current_octant.free_slot() {
-                current_octant.overwrite_child(new_child.0, new_child.1, free_slot_index);
+            let current_search_octant = &mut self.octant_building_buffers[compaction_depth];
+            if let Some(free_slot_index) = current_search_octant.free_slot() {
+                current_search_octant.overwrite_child(new_child.0, new_child.1, free_slot_index);
                 break;
             } else {
-                let first_child = current_octant.get_child(0);
-                new_child = if current_octant.is_compactable() {
-                    first_child
+                //This octant at this depth is full, compact it and move it up the tree
+
+                //If every child of this octant contains the same leaf data, propogate the leaf
+                //value up
+                new_child = if current_search_octant.is_compactable() {
+                    let ret = current_search_octant.get_child(0);
+                    current_search_octant.clear();
+                    current_search_octant.overwrite_child(new_child.0, new_child.1, 0);
+                    ret
                 } else {
                     let octant_id = self.octants.len();
-
-                    self.octants.push(current_octant.clone());
+                    self.octants.push(current_search_octant.clone());
+                    current_search_octant.clear();
+                    current_search_octant.overwrite_child(new_child.0, new_child.1, 0);
                     (ChildType::Octant, octant_id as u32)
                 };
-                current_octant.clear();
-                search_depth -= 1;
+                compaction_depth -= 1;
             }
         }
     }
@@ -128,23 +139,22 @@ pub(crate) fn section_to_compacted_octree(
     remapped_palette: &[u32],
 ) -> SectionOctantResult {
     if remapped_palette.len() < 2 {
+        // Early return for a palette with only one entry
         return if remapped_palette.is_empty() {
             //this shouldn't happen, but we'll treat the section as full of air
             SectionOctantResult::Empty
         } else {
-            //palette is known to contain one element
-            if let Some(section_fill_block) = remapped_palette.first() {
-                if *section_fill_block == 0 {
-                    //UNWRAP: we've ensured the length is 1
-                    SectionOctantResult::Empty
-                } else {
-                    SectionOctantResult::Lod(*section_fill_block)
-                }
+            //UNWRAP: palette is known to contain only one element
+            let section_fill_block = remapped_palette.first().unwrap();
+            if *section_fill_block == 0 {
+                //UNWRAP: we've ensured the length is 1
+                SectionOctantResult::Empty
             } else {
-                unreachable!()
+                SectionOctantResult::Lod(*section_fill_block)
             }
         };
     }
+
     let mut morton_order_data: [Option<NonZeroU32>; 4096] = [Option::None; 4096];
 
     for (i, palette_index) in section.iter_block_indices().enumerate() {
@@ -160,5 +170,5 @@ pub(crate) fn section_to_compacted_octree(
 
     let builder = SectionOctantBuilder::new();
 
-    builder.section_data_to_octants(&morton_order_data)
+    builder.build_section_octant_from_morton_data(&morton_order_data)
 }

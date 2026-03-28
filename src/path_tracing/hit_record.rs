@@ -25,8 +25,8 @@ impl HitRecord {
             normal,
         }
     }
-    pub fn get_t_enter() -> f32 {
-        todo!();
+    pub fn get_t_enter(&self) -> f32 {
+        self.t_enter
     }
     pub fn get_t_exit() -> f32 {
         todo!();

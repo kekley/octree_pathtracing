@@ -62,15 +62,7 @@ pub fn do_transmission(
     rng: &mut ThreadRng,
     branch_count: u32,
 ) -> bool {
-    let mut hit = false;
-    *next = ray.clone();
-    next.origin = next.at(Ray::OFFSET);
-
-    if path_trace(rng, scene, next, false, attenuation, branch_count) {
-        translucent_ray_color(scene, ray, next, cumulative_color, absorption);
-        hit = true;
-    }
-    hit
+    todo!();
 }
 
 pub fn translucent_ray_color(

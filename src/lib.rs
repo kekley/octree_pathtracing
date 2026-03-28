@@ -4,7 +4,6 @@ pub mod colors;
 pub mod geometry;
 mod gpu_structs;
 pub mod octree;
-mod packed_indices;
 pub mod path_tracing;
 pub mod renderer;
 pub mod scene;

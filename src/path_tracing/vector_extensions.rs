@@ -1,13 +1,12 @@
-use glam::{Vec3A, Vec4};
+use glam::{Vec2, Vec3A, Vec4};
 
-trait VectorExtensions {
+pub trait VectorExtensions {
     type VectorType;
     fn iter(&self) -> impl Iterator<Item = Self::VectorType>;
     fn iter_mut(&mut self) -> impl Iterator<Item = &mut Self::VectorType>;
 }
 macro_rules! vector_ext_impl {
-    ($($vector_type:ty, $inner_type:ty,$vector_iter:ident, $vector_iter_mut:ident, $vector_length:literal),* $(,)?) => {
-        $(
+    {$vector_type:ty, $inner_type:ty,$vector_iter:ident, $vector_iter_mut:ident, $vector_length:literal} => {
         struct $vector_iter<'a> {
             vector: &'a $vector_type,
             index: u8,
@@ -39,7 +38,7 @@ macro_rules! vector_ext_impl {
                 if self.index as usize >= VECTOR_SIZE {
                     return None;
                 } else {
-                    unsafe { std::mem::transmute(Some(&mut self.vector[self.index.into()])) }
+                    unsafe { std::mem::transmute::<Option<&mut f32>, Option<&'a mut f32>>(Some(&mut self.vector[self.index.into()])) }
                 }
             }
         }
@@ -59,24 +58,9 @@ macro_rules! vector_ext_impl {
                 }
             }
         }
-        )*
     };
 }
 
-vector_ext_impl!(
-    Vec3A,
-    f32,
-    Vec3AIter,
-    Vec3AIterMut,
-    3,
-    Vec4,
-    f32,
-    Vec4Iter,
-    Vec4IterMut,
-    4,
-    Vec2,
-    f32,
-    Vec2Iter,
-    Vec2IterMut
-    2
-);
+vector_ext_impl!(Vec3A, f32, Vec3AIter, Vec3AIterMut, 3);
+vector_ext_impl!(Vec4, f32, Vec4Iter, Vec4IterMut, 4);
+vector_ext_impl!(Vec2, f32, Vec2Iter, Vec2IterMut, 2);

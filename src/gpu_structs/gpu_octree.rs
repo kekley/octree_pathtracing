@@ -1,5 +1,5 @@
 use crate::octree::world::ChildType;
-use crate::octree::world::Octree;
+use crate::octree::world::WorldOctree;
 use std::fmt::Debug;
 
 use bytemuck::{Pod, Zeroable};
@@ -26,7 +26,7 @@ const LEAF_BIT: u32 = 0b0000_0000_0000_0000_0000_0000_0000_0001;
 const CHILD_BIT: u32 = 0b0000_0000_0000_0000_0000_0000_0000_0010;
 const LOD_BIT: u32 = 0b0000_0000_0000_0000_0000_0000_0000_0100;
 
-pub fn octree_to_gpu_data(tree: &Octree) -> (GPUOctreeUniform, Vec<GPUOctreeNode>) {
+pub fn octree_to_gpu_data(tree: &WorldOctree) -> (GPUOctreeUniform, Vec<GPUOctreeNode>) {
     let mut octant_data = [0u32; 12];
     let gpu_octants = tree
         .octants_slice()

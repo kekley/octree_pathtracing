@@ -20,6 +20,12 @@ impl IntoIterator for Axis {
     }
 }
 
+impl Into<usize> for Axis {
+    fn into(self) -> usize {
+        self as usize
+    }
+}
+
 pub struct AxisIter {
     current: Axis,
 }
