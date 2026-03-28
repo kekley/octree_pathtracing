@@ -71,11 +71,12 @@ impl WorldOctree {
         &self.octants
     }
 
+    ///The depth of the octree
     pub fn depth(&self) -> u8 {
         self.depth
     }
-
-    pub fn scale(&self) -> f32 {
+    ///The scale of the octree, (2^-depth)
+    pub fn inverse_scale(&self) -> f32 {
         f32::exp2(-(self.depth as f32))
     }
 

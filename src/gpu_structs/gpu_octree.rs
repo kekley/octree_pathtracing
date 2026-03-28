@@ -69,7 +69,7 @@ pub fn octree_to_gpu_data(tree: &WorldOctree) -> (GPUOctreeUniform, Vec<GPUOctre
         .collect::<Vec<_>>();
 
     let uniform = GPUOctreeUniform {
-        octree_scale: tree.scale(),
+        octree_scale: tree.inverse_scale(),
         depth: tree.depth() as u32,
         root: tree.root().unwrap(),
         padding: 0,
