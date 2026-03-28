@@ -4,11 +4,13 @@ use crate::octree::builders::section::section_to_compacted_octree;
 use crate::octree::world::ChildType;
 use crate::octree::world::Octant;
 use crate::octree::world::OctantId;
+use crate::octree::world::WorldOctree;
 use std::{
     sync::{Arc, Mutex},
     time::Instant,
 };
 
+use hashbrown::HashMap;
 use mc_utils::{
     borrow::nbt_compound::RootNBTCompound, chunk::borrow::Chunk, owned::nbt_string::NBTString,
     region::borrow::Region,
@@ -20,8 +22,8 @@ const HIGHEST_SECTION_INDEX: i8 = 19;
 
 pub fn build_region_octree(
     region: Region,
-    blockstate_map: Arc<Mutex<hashbrown::HashMap<NBTString, u32>>>,
-) -> Option<(Vec<Octant>, u32)> {
+    blockstate_map: Arc<Mutex<HashMap<NBTString, u32>>>,
+) -> Option<(WorldOctree, Arc<HashMap<u32, NBTString>>)> {
     //TODO maybe implement custom blockstate hash function
     let start = Instant::now();
     let region_chunk_data = region.load_all_chunk_data();
@@ -73,10 +75,11 @@ pub fn build_region_octree(
                     //TODO allow non vanilla world heights
                     return None;
                 }
-                let y_pos = (y_index + (-LOWEST_SECTION_INDEX)) as u64 * 16;
+                let y_index = (y_index + (-LOWEST_SECTION_INDEX)) as u64;
+                dbg!(y_index);
 
                 Some((
-                    (region_local_x as u64, y_pos, region_local_z as u64),
+                    (region_local_x as u64, y_index, region_local_z as u64),
                     section,
                 ))
             }))
@@ -84,28 +87,29 @@ pub fn build_region_octree(
         .flatten()
         .collect::<Vec<_>>();
 
-    let mut blockstate_map = blockstate_map.lock().unwrap();
     let start = Instant::now();
-    let coords_and_sections = chunk_coords_and_sections
-        .into_iter()
-        .map(|((x, y, z), section)| {
-            let palette = section.get_palette();
-            let mapped_palette: Vec<u32> = palette
-                .iter()
-                .map(|blockstate| {
-                    let mapped_state = blockstate.to_mapped_state();
-                    let current_len = blockstate_map.len() as u32;
-                    let value = blockstate_map
-                        .entry(mapped_state)
-                        .or_insert_with(|| current_len);
-                    *value
-                })
-                .collect::<Vec<_>>();
-            ((x, y, z, section), mapped_palette)
-        })
-        .collect::<Vec<_>>();
-
-    drop(blockstate_map);
+    let section_coords_and_sections = {
+        let mut blockstate_map = blockstate_map.lock().unwrap();
+        chunk_coords_and_sections
+            .into_iter()
+            .map(|((x, y, z), section)| {
+                println!("x: {}, y: {}, z: {}", x, y, z);
+                let palette = section.get_palette();
+                let mapped_palette: Vec<u32> = palette
+                    .iter()
+                    .map(|blockstate| {
+                        let mapped_state = blockstate.to_mapped_state();
+                        let current_len = blockstate_map.len() as u32;
+                        let value = blockstate_map
+                            .entry(mapped_state)
+                            .or_insert_with(|| current_len);
+                        *value
+                    })
+                    .collect::<Vec<_>>();
+                ((x, y, z, section), mapped_palette)
+            })
+            .collect::<Vec<_>>()
+    };
 
     let end = Instant::now();
 
@@ -115,7 +119,7 @@ pub fn build_region_octree(
     );
     let start = Instant::now();
 
-    let mut sections = coords_and_sections
+    let mut section_mortons_and_sections = section_coords_and_sections
         .into_iter()
         .map(|((x, y, z, section), palette)| {
             let morton_code = encode_morton_lut(x, y, z);
@@ -128,19 +132,33 @@ pub fn build_region_octree(
         "time to build section octrees: {:?}",
         end.duration_since(start)
     );
-    sections.sort_unstable_by_key(|octree| octree.0);
 
-    println!("number of sections: {count}", count = sections.len());
+    section_mortons_and_sections.sort_unstable_by_key(|(morton, _)| *morton);
+
+    println!(
+        "number of sections: {count}",
+        count = section_mortons_and_sections.len()
+    );
 
     let builder = RegionOctreeBuilder::new();
     let start = Instant::now();
-    let tree = builder.build(sections);
+    let (octants, root) = builder.build(section_mortons_and_sections).unwrap();
 
     let end = Instant::now();
 
     println!("time to build region tree:{:?}", end.duration_since(start));
 
-    tree
+    let blockstate_map: HashMap<u32, NBTString> = blockstate_map
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|(str, id)| (*id, str.clone()))
+        .collect();
+
+    Some((
+        WorldOctree::from_octants_root_depth(octants, root, 9),
+        Arc::new(blockstate_map),
+    ))
 }
 
 fn chunk_index_to_coordinates(i: usize) -> (u8, u8) {
@@ -171,11 +189,9 @@ impl RegionOctreeBuilder {
         mut self,
         mut morton_codes_and_sections: Vec<(u64, SectionOctantResult)>,
     ) -> Option<(Vec<Octant>, u32)> {
-        let tree_depth = REGION_OCTREE_DEPTH - SECTION_OCTREE_DEPTH; //we are using local
-        //coordinates and a region
-        //is 32x32 on the x and z
-        //axes, so depth is 5
+        //we are using local coordinates and a region is 32x32 on the x and z axes, so depth is 5
 
+        let tree_depth = REGION_OCTREE_DEPTH - SECTION_OCTREE_DEPTH;
         let result =
             self.recursive_build(tree_depth as u8, morton_codes_and_sections.as_mut_slice());
 
@@ -215,13 +231,11 @@ impl RegionOctreeBuilder {
         let prefix_base = (1 << prefix_shift_amount) - 1;
         let mut child_count = 0;
         let mut octant = Octant::default();
-        dbg!(new_depth);
         octant.init_children_with(|child_index| {
             let child_index = child_index as u64;
             let data = data_opt.take().unwrap();
 
             let prefix = (child_index << prefix_shift_amount) | prefix_base;
-            println!("{prefix:#064b}");
             if new_depth > 0 {
                 let slice_end_index = data.partition_point(|(value, _)| *value <= prefix);
 
@@ -402,15 +416,6 @@ mod test {
 
     use super::*;
 
-    #[test]
-    pub fn sizes() {
-        println!("size of Octant: {size}", size = size_of::<Octant>());
-    }
-
-    #[test]
-    pub fn section_test() {
-        crate::octree::world::construct_all();
-    }
     #[test]
     pub fn morton_code_bit_pattern() {
         let coord = (1, 0, 1);

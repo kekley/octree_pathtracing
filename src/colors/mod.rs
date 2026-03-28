@@ -145,6 +145,14 @@ impl U8Color {
     pub const fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
         Self { data: [r, g, b, a] }
     }
+    pub fn to_byte_slice(color_slice: &[U8Color]) -> &[u8] {
+        let ptr = color_slice.as_ptr();
+        let u8_ptr: *const u8 = ptr.cast();
+
+        // SAFETY: Alignment of a u8 slice is always valid, `U8Color` is repr(C) and 4 bytes per
+        // element
+        unsafe { std::slice::from_raw_parts(u8_ptr, color_slice.len() * size_of::<U8Color>()) }
+    }
 }
 
 impl PixelColor<u8> for U8Color {

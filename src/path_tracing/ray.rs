@@ -25,9 +25,9 @@ impl Ray {
         let smaller_than_epsilon = direction.abs().cmplt(Vec3A::splat(Self::EPSILON));
         // Prevent generation of NANs in inv_dir
         for axis in Axis::iter() {
-            let axis_index = axis.into();
-            if !smaller_than_epsilon.test(axis_index) {
-                inv_dir[axis_index] = 1.0 / direction[axis_index];
+            let axis = axis.into();
+            if !smaller_than_epsilon.test(axis) {
+                inv_dir[axis] = 1.0 / direction[axis];
             }
         }
 

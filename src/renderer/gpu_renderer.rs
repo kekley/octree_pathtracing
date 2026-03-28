@@ -566,117 +566,13 @@ impl GPURenderer {
 }
 
 impl Renderer for GPURenderer {
-    fn render_frame(
-        &self,
-        eframe: &eframe::Frame,
-        texture: TextureHandle,
-    ) -> Result<Box<dyn super::renderer_trait::FrameInFlight>, TextureHandle> {
-        let svo_pipeline = match &self.pipeline {
-            Some(pipeline) => pipeline,
-            None => return Err(texture),
-        };
-        let scene = match &self.scene {
-            Some(scene) => scene.read(),
-            None => return Err(texture),
-        };
-        let render_state = eframe.wgpu_render_state().unwrap().renderer.read();
-        let inner_texture = match render_state.texture(&texture.id()) {
-            Some(texture) => texture,
-            None => return Err(texture),
-        };
-        let ray = self.camera.get_ray(0.0, 0.0);
-        let aspect_ratio = self.render_size.0 as f32 / self.render_size.1 as f32;
-        let (traversal_start_index, scale, index_stack, time_stack) = todo!();
-        let device = &self.device;
-        let queue = &self.queue;
-        let d_factor = 1.0 / (self.camera.fov / 2.0).tan();
-        let view_up_ortho = (self.camera.up
-            - self.camera.up.dot(self.camera.direction) * self.camera.direction)
-            .normalize();
-        let view_right = self.camera.direction.cross(view_up_ortho);
-
-        let uniform_data = CameraUniform {
-            camera_scaled_view_dir: (self.camera.direction * d_factor).to_array(),
-            traversal_start_idx: traversal_start_index,
-            camera_scaled_view_right: (aspect_ratio * view_right).to_array(),
-            scale,
-            camera_view_up_ortho: view_up_ortho.to_array(),
-            inv_image_size_x: 1.0 / self.render_size.0 as f32,
-            camera_world_position: self.camera.eye.to_array(),
-            inv_image_size_y: 1.0 / self.render_size.1 as f32,
-        };
-        let render_data = create_render_data(
-            device,
-            &svo_pipeline.render_bind_group_layout,
-            &uniform_data,
-            &index_stack,
-            &time_stack,
-        );
-        let pipeline = &svo_pipeline.compute_pipeline;
-        let octree_bind_group = &svo_pipeline.octree_bind_group;
-        let render_bind_group = &render_data.render_bind_group;
-        let mut command_encoder =
-            device.create_command_encoder(&CommandEncoderDescriptor { label: None });
-
-        {
-            let mut compute_pass = command_encoder.begin_compute_pass(&ComputePassDescriptor {
-                label: None,
-                timestamp_writes: None,
-            });
-
-            compute_pass.set_pipeline(pipeline);
-            compute_pass.set_bind_group(1, octree_bind_group, &[]);
-            compute_pass.set_bind_group(0, render_bind_group, &[]);
-            compute_pass.dispatch_workgroups(1280, 720, 1);
-        }
-
-        command_encoder.copy_texture_to_texture(
-            TexelCopyTextureInfo {
-                texture: &svo_pipeline.output_texture,
-                mip_level: 0,
-                origin: Origin3d::ZERO,
-                aspect: eframe::wgpu::TextureAspect::All,
-            },
-            TexelCopyTextureInfo {
-                texture: inner_texture.texture.as_ref().unwrap(),
-                mip_level: 0,
-                origin: Origin3d::ZERO,
-                aspect: eframe::wgpu::TextureAspect::All,
-            },
-            Extent3d {
-                width: 1280,
-                height: 720,
-                depth_or_array_layers: 1,
-            },
-        );
-
-        let index = queue.submit(Some(command_encoder.finish()));
-        let start = Instant::now();
-        device.poll(PollType::Wait {
-            submission_index: None,
-            timeout: None,
-        });
-        let time = Instant::now().duration_since(start);
-        info!("Took {time:?} to render on GPU");
-        Ok(Box::new(GPUFrameInFlight {
-            device: self.device.clone(),
-            submission_index: index,
-            texture,
-        }))
+    fn render_frame_to_texture(&self, texture: TextureHandle) {
+        todo!();
     }
 
     fn update_scene(&mut self, ctx: &eframe::egui::Context) {
         self.camera.move_with_keyboard_input(ctx);
         self.camera.rotate(ctx);
-    }
-
-    fn set_scene(&mut self, scene: &std::sync::Arc<parking_lot::RwLock<Scene>>) {
-        self.scene = Some(scene.clone());
-        let scene = scene.read();
-        if self.pipeline.is_some() {
-        } else {
-            self.pipeline = Some(Self::create_pipeline(&self.device, &self.queue, &scene));
-        }
     }
 
     fn get_mode(&self) -> RendererMode {
@@ -699,8 +595,8 @@ impl Renderer for GPURenderer {
         self.mode = mode;
     }
 
-    fn which_backend(&self) -> crate::settings::RendererBackendSetting {
-        crate::settings::RendererBackendSetting::GPU
+    fn get_backend_type(&self) -> crate::settings::BackendType {
+        crate::settings::BackendType::GPU
     }
 
     fn get_camera(&self) -> &Camera {
@@ -709,5 +605,9 @@ impl Renderer for GPURenderer {
 
     fn set_camera(&mut self, camera: Camera) {
         self.camera = camera;
+    }
+
+    fn update(&mut self, tree: &crate::octree::world::WorldOctree) {
+        todo!()
     }
 }

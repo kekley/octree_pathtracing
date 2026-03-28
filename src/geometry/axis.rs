@@ -6,7 +6,9 @@ pub enum Axis {
 }
 impl Axis {
     pub fn iter() -> AxisIter {
-        AxisIter { current: Axis::X }
+        AxisIter {
+            axis: Some(Axis::X),
+        }
     }
 }
 
@@ -16,7 +18,7 @@ impl IntoIterator for Axis {
     type IntoIter = AxisIter;
 
     fn into_iter(self) -> Self::IntoIter {
-        AxisIter { current: self }
+        AxisIter { axis: Some(self) }
     }
 }
 
@@ -27,16 +29,19 @@ impl Into<usize> for Axis {
 }
 
 pub struct AxisIter {
-    current: Axis,
+    axis: Option<Axis>,
 }
 impl Iterator for AxisIter {
     type Item = Axis;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.current {
+        let ret_val = self.axis;
+        self.axis = match self.axis? {
             Axis::X => Some(Axis::Y),
             Axis::Y => Some(Axis::Z),
             Axis::Z => None,
-        }
+        };
+
+        ret_val
     }
 }

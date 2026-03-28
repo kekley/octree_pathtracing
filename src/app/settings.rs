@@ -3,26 +3,26 @@ use eframe::egui::{self, DragValue, Label, RadioButton, Window};
 use crate::renderer::{gpu_renderer::GPURenderer, renderer_trait::Renderer};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub enum RendererBackendSetting {
+pub enum BackendType {
     Dummy,
     #[default]
     CPU,
     GPU,
 }
 
-impl RendererBackendSetting {
+impl BackendType {
     pub fn to_str(&self) -> &'static str {
         match self {
-            RendererBackendSetting::Dummy => "Dummy",
-            RendererBackendSetting::CPU => "CPU",
-            RendererBackendSetting::GPU => "GPU",
+            BackendType::Dummy => "Dummy",
+            BackendType::CPU => "CPU",
+            BackendType::GPU => "GPU",
         }
     }
 }
 #[derive(Default)]
 pub struct RenderSettingsWindow {
     pub open: bool,
-    backend: RendererBackendSetting,
+    backend: BackendType,
     resolution: (u32, u32),
 }
 
@@ -41,22 +41,16 @@ impl RenderSettingsWindow {
                 ui.add(Label::new("Backend"));
                 ui.horizontal(|ui| {
                     if ui
-                        .add(RadioButton::new(
-                            self.backend == RendererBackendSetting::CPU,
-                            "CPU",
-                        ))
+                        .add(RadioButton::new(self.backend == BackendType::CPU, "CPU"))
                         .clicked()
                     {
-                        self.backend = RendererBackendSetting::CPU;
+                        self.backend = BackendType::CPU;
                     };
                     if ui
-                        .add(RadioButton::new(
-                            self.backend == RendererBackendSetting::GPU,
-                            "GPU",
-                        ))
+                        .add(RadioButton::new(self.backend == BackendType::GPU, "GPU"))
                         .clicked()
                     {
-                        self.backend = RendererBackendSetting::GPU;
+                        self.backend = BackendType::GPU;
                     };
                 });
                 ui.separator();
@@ -74,13 +68,13 @@ impl RenderSettingsWindow {
                     if renderer.get_resolution() != self.resolution {
                         renderer.as_mut().set_resolution(self.resolution);
                     }
-                    if renderer.which_backend() != self.backend {
+                    if renderer.get_backend_type() != self.backend {
                         let render_state = frame.wgpu_render_state().unwrap();
 
                         let old_backend = match self.backend {
-                            RendererBackendSetting::Dummy => panic!(),
-                            RendererBackendSetting::CPU => unimplemented!(),
-                            RendererBackendSetting::GPU => std::mem::replace(
+                            BackendType::Dummy => panic!(),
+                            BackendType::CPU => unimplemented!(),
+                            BackendType::GPU => std::mem::replace(
                                 renderer,
                                 Box::new(GPURenderer::new(
                                     &render_state.device,

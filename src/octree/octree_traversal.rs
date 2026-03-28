@@ -149,7 +149,7 @@ impl Octree<ResourceModel> {
                     let mut unmirrored_pos = pos;
                     (0..3).for_each(|i: usize| {
                         if mirror_mask & 1 << i != 0 {
-                            unmirrored_pos[i] = 3.0 - scale_exp2 - unmirrored_pos[i]
+                            unmirrored_pos[i] = 3.0 - scale_exp2 - unmirrored_pos[i];
                         }
                     });
 

@@ -9,17 +9,9 @@ static mut DUMMY_CAMERA: Camera = Camera::DEFAULT_CAMERA;
 pub struct DummyRenderer {}
 
 impl Renderer for DummyRenderer {
-    fn render_frame(
-        &self,
-        egui_context: &eframe::Frame,
-        texture: TextureHandle,
-    ) -> Result<Box<dyn super::renderer_trait::FrameInFlight>, TextureHandle> {
-        Err(texture)
-    }
+    fn render_frame_to_texture(&self, texture: TextureHandle) {}
 
     fn update_scene(&mut self, ctx: &eframe::egui::Context) {}
-
-    fn set_scene(&mut self, scene: &std::sync::Arc<parking_lot::RwLock<Scene>>) {}
 
     fn get_mode(&self) -> super::tile_renderer::RendererMode {
         super::tile_renderer::RendererMode::Preview
@@ -37,8 +29,8 @@ impl Renderer for DummyRenderer {
 
     fn set_mode(&mut self, mode: RendererMode) {}
 
-    fn which_backend(&self) -> crate::settings::RendererBackendSetting {
-        crate::settings::RendererBackendSetting::Dummy
+    fn get_backend_type(&self) -> crate::settings::BackendType {
+        crate::settings::BackendType::Dummy
     }
 
     fn get_camera(&self) -> &super::camera::Camera {
@@ -46,4 +38,6 @@ impl Renderer for DummyRenderer {
     }
 
     fn set_camera(&mut self, camera: super::camera::Camera) {}
+
+    fn update(&mut self, tree: &crate::octree::world::WorldOctree) {}
 }

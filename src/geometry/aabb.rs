@@ -3,7 +3,7 @@ use glam::{Vec2, Vec3A, Vec3Swizzles as _};
 use crate::{
     geometry::axis::Axis,
     mix_vec2,
-    path_tracing::{Intersect, hit_record::HitRecord, ray::Ray},
+    path_tracing::{Intersect, hit_record::AABBHitRecord, ray::Ray},
     step_vec3,
 };
 
@@ -109,7 +109,8 @@ impl AABB {
 }
 
 impl Intersect for AABB {
-    fn intersect(&self, ray: Ray) -> HitRecord {
+    type HitRecord = AABBHitRecord;
+    fn intersect(&self, ray: &Ray) -> Option<AABBHitRecord> {
         aabb_ray_interesct(
             self.min,
             self.max,
@@ -126,7 +127,7 @@ fn aabb_ray_interesct(
     ray_origin: Vec3A,
     ray_direction: Vec3A,
     inv_direction: Vec3A,
-) -> HitRecord {
+) -> Option<AABBHitRecord> {
     let t0 = (aabb_min - ray_origin) * inv_direction;
 
     let t1 = (aabb_max - ray_origin) * inv_direction;
@@ -139,7 +140,7 @@ fn aabb_ray_interesct(
 
     if !(t_enter <= t_exit && t_exit > 0.0) {
         //println!("enter: {t_enter}, exit: {t_exit}");
-        return HitRecord::MISS;
+        return None;
     }
 
     let normal = -ray_direction.signum()
@@ -159,5 +160,11 @@ fn aabb_ray_interesct(
         Vec2::splat(normal.x.max(normal.y.max(-normal.z))),
     );
 
-    HitRecord::new(t_enter, t_exit, uv2, normal)
+    Some(AABBHitRecord {
+        t_enter,
+        t_exit,
+        uv: uv2,
+        normal,
+        face_id,
+    })
 }

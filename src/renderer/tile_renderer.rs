@@ -4,9 +4,7 @@ use std::sync::{self, Arc, Mutex, RwLock};
 use std::thread::{JoinHandle, spawn};
 use std::time::Instant;
 
-use rand::rngs::StdRng;
-
-use rand::{Rng, RngExt as _, SeedableRng};
+use rand::RngExt as _;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 use crate::colors::{F32Color, PixelColor as _, U8Color};

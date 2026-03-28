@@ -62,6 +62,13 @@ impl WorldOctree {
         self.octants.push(Default::default());
         new_octant_id as OctantId
     }
+    pub fn from_octants_root_depth(octants: Vec<Octant>, root: OctantId, depth: u8) -> Self {
+        Self {
+            root: Some(root),
+            octants,
+            depth,
+        }
+    }
 
     pub fn root(&self) -> Option<OctantId> {
         self.root
@@ -138,7 +145,6 @@ impl WorldOctree {
         let morton = position.to_morton();
         while depth > 0 {
             let child_index = extract_index_for_depth_from_morton(morton, depth);
-            dbg!(child_index);
 
             let (child_type, data) = self.octants[current_octant as usize].get_child(child_index);
 
@@ -180,10 +186,19 @@ impl WorldOctree {
 
 pub type OctantId = u32;
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Clone)]
 pub struct Octant {
     pub(crate) child_mask: u16,
     pub(crate) children: [u32; 8],
+}
+
+impl Debug for Octant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Octant")
+            .field("child_mask", &format!("{:#018b}", self.child_mask))
+            .field("children", &self.children)
+            .finish()
+    }
 }
 
 pub struct OctantChildIterator<'a> {
@@ -394,7 +409,7 @@ pub struct LeafId {
 ///to the index for an octant at that depth
 fn extract_index_for_depth_from_morton(morton: u64, depth: u8) -> u8 {
     //        println!("Required Depth: {depth}");
-    //        println!("morton: {morton:#064b}");
+    //    println!("morton: {morton:#066b}");
     let shift_amt = (depth - 1) * 3;
     let mask: u64 = 0b111 << shift_amt;
     //            println!("mask: {mask:#064b}");
@@ -402,28 +417,8 @@ fn extract_index_for_depth_from_morton(morton: u64, depth: u8) -> u8 {
         .try_into()
         .expect("Child index should be between 0-7");
 
-    //            println!("idx: {child_index:#064b}");
+    //    println!("idx: {child_index:#010b}");
     child_index
-}
-
-#[test]
-pub fn construct_all() {
-    let path = PathBuf::from("./assets/test_worlds/region/r.1.0.mca");
-
-    let bytes = std::fs::read(&path).unwrap();
-
-    let region = Region::from_bytes(&bytes, RegionCoords { x: 1, z: 0 });
-
-    let blockstate_map = Arc::new(Mutex::new(HashMap::new()));
-
-    let air = NBTString::new_from_str("minecraft:air#normal");
-    blockstate_map.lock().unwrap().insert(air, 0);
-
-    let start = Instant::now();
-    let _two = build_region_octree(region, blockstate_map);
-    let end = Instant::now();
-
-    println!("total time: {:?}", end.duration_since(start));
 }
 
 #[test]

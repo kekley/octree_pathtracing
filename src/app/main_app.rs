@@ -1,20 +1,33 @@
+use std::{
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
+
 use eframe::{
-    Frame,
+    CreationContext, Frame,
     egui::{
-        Button, CentralPanel, Color32, Context, DragValue, Image, ImageSource, Label, RadioButton,
-        TextureHandle, Ui, Visuals, load::SizedTexture,
+        Button, CentralPanel, Color32, ColorImage, Context, DragValue, Image, ImageSource, Label,
+        RadioButton, TextureFilter, TextureHandle, TextureOptions, TextureWrapMode, Ui, Visuals,
+        load::SizedTexture,
     },
 };
+use glam::Vec3A;
+use hashbrown::HashMap;
 use mc_utils::{
     coords::{block::BlockCoords, region::RegionCoords},
+    owned::nbt_string::NBTString,
+    region::borrow::Region,
     resource_loader::LoadedResources,
     world::World,
 };
 
 use crate::{
     colors::U8Color,
-    octree::world::WorldOctree,
+    octree::{builders::region::build_region_octree, world::WorldOctree},
     renderer::{
+        camera::Camera,
+        cpu_renderer::CpuRenderer,
+        dummy_renderer::DummyRenderer,
         renderer_trait::Renderer,
         tile_renderer::{RendererMode, RendererStatus},
     },
@@ -22,112 +35,73 @@ use crate::{
 };
 
 use super::{
-    settings::{RenderSettingsWindow, RendererBackendSetting},
+    settings::{BackendType, RenderSettingsWindow},
     world_loading::WorldLoadingDialog,
 };
 
 pub struct MainApp {
     settings_window: RenderSettingsWindow,
     world_loading_window: WorldLoadingDialog,
-    status: RendererStatus,
+    tree: WorldOctree,
     resources: Option<LoadedResources>,
     renderer: Box<dyn Renderer>,
     render_texture: Option<TextureHandle>,
 }
 
-/*
- * notes:
- * avoid loading too many chunks at once
- *
- * start at `depth`, iterate each node, recurse until we can start loading regions into octrees
- * merge those octrees, move to next node...
- *
- * */
-pub fn load_world_2(path: &str, origin: &BlockCoords, depth: u8) -> Scene {
-    let world = World::new(path).unwrap();
-    let origin_region = RegionCoords::from(*origin);
-    let world_size = 2_i64.pow(depth as u32);
-    let world_extent = world_size / 2;
-
-    const LOWEST_Y: i64 = -64;
-
-    todo!()
-}
-
-fn recurse(octree: &mut WorldOctree, pos: BlockCoords, depth: u8) -> Option<u32> {
-    let new_parent: Option<u32> = None;
-    let size = 2_i64.pow(depth as u32);
-    (0..8u8).for_each(|child_idx| {
-        let x_offset = size * ((child_idx as i64) & 1);
-
-        let y_offset = size * ((child_idx as i64 >> 1) & 1);
-
-        let z_offset = size * ((child_idx as i64 >> 2) & 1);
-
-        let child_pos = pos.offset(x_offset, y_offset, z_offset);
-
-        match depth as usize {
-            0..9 => {
-                todo!();
-            }
-            9 => {
-                todo!();
-            }
-            _ => {
-                let child_index = recurse(octree, child_pos, depth - 1);
-                let Some(child) = child_index else {
-                    return;
-                };
-            }
-        }
-    });
-    new_parent
-}
-
-//TODO move this to colors module
-fn pixel_slice_to_u8_slice(slice: &[U8Color]) -> &[u8] {
-    let ptr = slice.as_ptr();
-    let len = std::mem::size_of_val(slice);
-    unsafe { std::slice::from_raw_parts(ptr.cast(), len) }
-}
-
 impl MainApp {
     pub fn new() -> Self {
+        let camera = Camera::look_at(
+            Vec3A::new(0.0, 135.0, 0.0),
+            Vec3A::new(12.0, 130.0, 12.0),
+            Vec3A::Y,
+            70.0f32.to_radians(),
+        );
+        let cpu_renderer = CpuRenderer::builder().with_camera(camera).build();
+        let path = PathBuf::from("./assets/test_worlds/region/r.1.0.mca");
+
+        let bytes = std::fs::read(&path).unwrap();
+
+        let region = Region::from_bytes(&bytes, RegionCoords { x: 1, z: 0 });
+
+        let blockstate_map = Arc::new(Mutex::new(HashMap::new()));
+
+        let air = NBTString::new_from_str("minecraft:air#normal");
+        blockstate_map.lock().unwrap().insert(air, 0);
+
+        let (tree, map) = build_region_octree(region, blockstate_map).unwrap();
+
         Self {
-            status: RendererStatus::Stopped,
             settings_window: RenderSettingsWindow::default(),
             resources: None,
-            world_loading_window: todo!(),
-            renderer: todo!(),
-            render_texture: todo!(),
+            world_loading_window: WorldLoadingDialog::default(),
+            renderer: Box::new(cpu_renderer),
+            render_texture: None,
+            tree,
         }
     }
+
     pub fn draw_start_stop_button(
         &mut self,
         _ctx: &Context,
-        frame: &mut eframe::Frame,
+        _frame: &mut eframe::Frame,
         ui: &mut Ui,
     ) {
-        let text = match self.status {
+        let text = match self.renderer.get_status() {
             RendererStatus::Running => "Pause",
             RendererStatus::Paused => "Resume",
             RendererStatus::Stopped => "Start",
         };
-        let status_text = format!("Renderer Status: {}", self.status.to_str());
+        let status_text = format!("Renderer Status: {text}");
 
         ui.add(Label::new(status_text));
         if ui.add_enabled(true, Button::new(text)).clicked() {
-            match self.status {
-                RendererStatus::Running => self.status = RendererStatus::Paused,
-                RendererStatus::Paused => self.status = RendererStatus::Running,
-                RendererStatus::Stopped => self.status = RendererStatus::Running,
-            }
+            todo!();
         };
     }
     pub fn draw_mode_switch_radio_buttons(
         &mut self,
         _ctx: &Context,
-        frame: &mut Frame,
+        _frame: &mut Frame,
         ui: &mut Ui,
     ) {
         ui.add_enabled(
@@ -156,15 +130,17 @@ impl MainApp {
         }
         self.settings_window.show(ctx, frame, &mut self.renderer);
     }
+
     pub fn draw_load_world_button(&mut self, ctx: &Context, ui: &mut Ui) {
         if ui.add_enabled(true, Button::new("Load World")).clicked() {
             self.world_loading_window.open = true;
         }
         self.world_loading_window.show(ctx, &mut self.renderer);
     }
-    pub fn draw_camera_coordinates(&mut self, ctx: &Context, ui: &mut Ui) {
+
+    pub fn draw_camera_coordinates(&mut self, _ctx: &Context, ui: &mut Ui) {
         ui.add_enabled(
-            self.renderer.which_backend() != RendererBackendSetting::Dummy,
+            self.renderer.get_backend_type() != BackendType::Dummy,
             move |ui: &mut Ui| {
                 ui.vertical(|ui| {
                     ui.label("Camera Coordinates");
@@ -183,14 +159,21 @@ impl MainApp {
             },
         );
     }
-    pub fn draw_backend_label(&mut self, ctx: &Context, ui: &mut Ui) {
+
+    pub fn draw_backend_label(&mut self, _ctx: &Context, ui: &mut Ui) {
         let string = format!(
             "Current Backend: {}",
-            self.renderer.which_backend().to_str()
+            self.renderer.get_backend_type().to_str()
         );
         ui.add(Label::new(&string));
     }
-    pub fn draw_ui(&mut self, ctx: &Context, frame: &mut eframe::Frame, texture: &TextureHandle) {
+
+    pub fn draw_ui(
+        &mut self,
+        ctx: &Context,
+        frame: &mut eframe::Frame,
+        texture: Option<TextureHandle>,
+    ) {
         CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
                 self.draw_start_stop_button(ctx, frame, ui);
@@ -200,21 +183,47 @@ impl MainApp {
                 self.draw_backend_label(ctx, ui);
                 self.draw_camera_coordinates(ctx, ui);
             });
-            ui.add(
-                Image::new(ImageSource::Texture(SizedTexture {
-                    id: texture.id(),
-                    size: texture.size_vec2(),
-                }))
-                .shrink_to_fit(),
-            )
+
+            if let Some(texture) = texture {
+                ui.add(
+                    Image::new(ImageSource::Texture(SizedTexture {
+                        id: texture.id(),
+                        size: texture.size_vec2(),
+                    }))
+                    .shrink_to_fit(),
+                );
+            } else {
+                ui.spinner();
+            }
         });
     }
 }
 impl eframe::App for MainApp {
     fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
-        let texture = self.render_texture.as_ref().cloned().unwrap();
+        self.renderer.update(&self.tree);
+        let texture = if let Some(texture) = self.render_texture.clone() {
+            texture.clone()
+        } else {
+            let resolution = self.renderer.get_resolution();
+            let gray_iter = std::iter::repeat_n(100, (resolution.0 * resolution.1) as usize);
+            let image = ColorImage::from_gray_iter(
+                [resolution.0 as usize, resolution.1 as usize],
+                gray_iter,
+            );
+            ctx.load_texture(
+                "RenderTexture",
+                image,
+                TextureOptions {
+                    magnification: TextureFilter::Nearest,
+                    minification: TextureFilter::Linear,
+                    wrap_mode: TextureWrapMode::ClampToEdge,
+                    mipmap_mode: None,
+                },
+            )
+        };
 
-        self.draw_ui(ctx, frame, &texture);
+        self.renderer.render_frame_to_texture(texture.clone());
+        self.draw_ui(ctx, frame, Some(texture));
 
         ctx.request_repaint();
     }
